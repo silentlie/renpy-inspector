@@ -67,7 +67,15 @@ label start:
     return
 ```
 
-Confirm visibility, scrolling, polling on/off, no duplicate timer, save/load/rollback, clean uninstall and whether F8 interferes with game input. Track test results against [PLAN.md](PLAN.md) before publishing a release.
+Confirm visibility, scrolling, polling on/off, no duplicate timer, save/load/rollback, clean uninstall and whether F8 interferes with game input. Track test results against [PLAN.md](PLAN.md) before declaring a stable or engine-verified release.
+
+## Automated GitHub releases
+
+Every merge into `main` triggers [Release drop-in mod](.github/workflows/release.yml) (a direct push to `main` also triggers it). The workflow runs the Python unit tests, builds a deterministic `renpy-inspector-v0.1.N.zip` containing only the installable `game/` sources, and attaches the ZIP plus a SHA-256 checksum to a new GitHub prerelease. `N` is the GitHub Actions run number, so release tags increase automatically without manually editing version files. The release is published only if the tests and packaging succeed.
+
+Find generated ZIPs under [GitHub Releases](https://github.com/silentlie/renpy-inspector/releases). Extract the ZIP into the game's **installation root**, which contains its `game/` directory. Alternatively, copy the ZIP's `game/` contents into that directory. Verify the checksum with `sha256sum -c renpy-inspector-v0.1.N.zip.sha256` (substituting the release number).
+
+Re-running a successful release job re-uploads the assets to the same tag. The workflow requires the repository's GitHub Actions `GITHUB_TOKEN` to have permission to write repository contents (granted in the workflow and subject to repository/organisation policy). **These are prereleases because Ren'Py engine smoke testing and save/rollback compatibility validation are still outstanding.** Do not treat an automated release as engine certification.
 
 ## Architecture
 
