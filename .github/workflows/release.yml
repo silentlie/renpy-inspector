@@ -1,6 +1,6 @@
 name: Release drop-in mod
 
-# A merge to main creates a push event. Direct pushes to main also publish.
+# Merging a PR pushes to main. A direct push is also a release candidate.
 on:
   push:
     branches: [main]
@@ -8,7 +8,6 @@ on:
 permissions:
   contents: write
 
-# Publish merges in order; never cancel a release that may be uploading assets.
 concurrency:
   group: release-main
   cancel-in-progress: false
@@ -19,30 +18,59 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: Verify unit tests and release packaging
+      - name: Run tests
         run: python -m unittest discover -s tests -v
+
+      - name: Choose next v0.2.x tag (stable across retries)
+        id: release_tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # If this commit has already been released, reuse that tag on rerun.
+          existing="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" \
+            --jq '.[] | select(.target_commitish == env.GITHUB_SHA) | select(.tag_name | test("^v0[.]2[.][0-9]+$")) | .tag_name' | head -n 1)"
+          if [[ -n "$existing" ]]; then
+            tag="$existing"
+          else
+            max_patch=-1
+            git fetch --tags --force
+            for candidate in $(git tag --list 'v0.2.*'); do
+              if [[ "$candidate" =~ ^v0\.2\.([0-9]+)$ ]]; then
+                patch="${BASH_REMATCH[1]}"
+                if (( 10#$patch > max_patch )); then
+                  max_patch=$((10#$patch))
+                fi
+              fi
+            done
+            tag="v0.2.$((max_patch + 1))"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Build installable ZIP and checksum
         env:
-          RELEASE_TAG: v0.1.${{ github.run_number }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         run: python scripts/build_release.py "$RELEASE_TAG"
 
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: v0.1.${{ github.run_number }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
           archive="dist/renpy-inspector-${RELEASE_TAG}.zip"
           checksum="${archive}.sha256"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            # A retry should repair incomplete asset uploads, not create a second tag.
             gh release upload "$RELEASE_TAG" "$archive" "$checksum" --clobber
           else
             gh release create "$RELEASE_TAG" "$archive" "$checksum" \

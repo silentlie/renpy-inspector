@@ -1,4 +1,4 @@
-name: Python inspection core
+name: Python core and Ren'Py SDK lint
 on:
   push:
   pull_request:
@@ -14,3 +14,32 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m unittest discover -s tests -v
+
+  renpy-sdk-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        renpy-version: ['8.4.1', '8.5.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Assemble isolated Ren'Py project
+        run: python scripts/prepare_fixture.py "$RUNNER_TEMP/inspector-fixture"
+      - name: Download official Ren'Py SDK and lint fixture
+        env:
+          RENPY_VERSION: ${{ matrix.renpy-version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fLSs --retry 3 --retry-delay 3 \
+            -o renpy-sdk.tar.bz2 \
+            "https://www.renpy.org/dl/${RENPY_VERSION}/renpy-${RENPY_VERSION}-sdk.tar.bz2"
+          tar -xjf renpy-sdk.tar.bz2
+          sdk_script="$(find "$RUNNER_TEMP" -mindepth 2 -maxdepth 3 -name renpy.sh -type f -print -quit)"
+          test -n "$sdk_script"
+          bash "$sdk_script" "$RUNNER_TEMP/inspector-fixture" lint --error-code
