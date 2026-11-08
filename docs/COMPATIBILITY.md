@@ -21,7 +21,7 @@ Use `python scripts/prepare_fixture.py /tmp/renpy-inspector-fixture` to construc
 
 | Ren'Py version | Python unit suite | SDK lint | Interactive/save-load test |
 |---|---|---|---|
-| 8.4.1 | Independent of SDK | CI configured, result not yet recorded | Not yet verified |
-| 8.5.3 | Independent of SDK | CI configured, result not yet recorded | Not yet verified |
+| 8.4.1 | 42 tests (Python 3.9/3.13) | Passed in PR #2 GitHub Actions | Not yet verified |
+| 8.5.3 | 42 tests (Python 3.9/3.13) | Passed in PR #2 GitHub Actions | Not yet verified |
 
 **Do not claim engine compatibility or stable release until interactive checks above are recorded.**
