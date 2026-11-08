@@ -30,7 +30,7 @@ class ReleaseBuilderTests(unittest.TestCase):
         (self.root / "game" / "renpy_inspector_screens.rpyc").write_bytes(b"compiled")
         (self.root / "game" / "unrelated_story.rpy").write_text("# not ours\n")
 
-        archive, checksum = build_release("v0.1.12", self.out, self.root)
+        archive, checksum = build_release("v0.2.0", self.out, self.root)
         with ZipFile(archive) as zf:
             self.assertIsNone(zf.testzip())
             self.assertEqual(
@@ -44,20 +44,20 @@ class ReleaseBuilderTests(unittest.TestCase):
         )
 
     def test_reproducible_zip(self):
-        a, _ = build_release("v0.1.1", self.out, self.root)
+        a, _ = build_release("v0.2.0", self.out, self.root)
         original = a.read_bytes()
-        b, _ = build_release("v0.1.1", self.out, self.root)
+        b, _ = build_release("v0.2.0", self.out, self.root)
         self.assertEqual(original, b.read_bytes())
 
     def test_rejects_invalid_versions(self):
-        for version in ["v0.1", "v0.1.1-dev", "../oops", "v0.1.1/other", ""]:
+        for version in ["v0.2", "v0.2.0-dev", "../oops", "v0.2.0/other", ""]:
             with self.subTest(version=version), self.assertRaises(ValueError):
                 build_release(version, self.out, self.root)
 
     def test_required_sources_must_exist(self):
         (self.root / REQUIRED_FILES[0]).unlink()
         with self.assertRaisesRegex(ValueError, "Missing required inspector source"):
-            build_release("v0.1.1", self.out, self.root)
+            build_release("v0.2.0", self.out, self.root)
 
 
 if __name__ == "__main__":

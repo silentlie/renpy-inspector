@@ -16,6 +16,8 @@ REQUIRED_FILES = (
     "game/renpy_inspector/__init__.py",
     "game/renpy_inspector/controller.py",
     "game/renpy_inspector/inspection.py",
+    "game/renpy_inspector/favorites.py",
+    "game/renpy_inspector/settings.py",
 )
 VERSION_PATTERN = re.compile(r"v\d+\.\d+\.\d+\Z")
 
@@ -66,7 +68,7 @@ def build_release(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version", help="Release tag, e.g. v0.1.1")
+    parser.add_argument("version", help="Release tag, e.g. v0.2.0")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "dist")
     arguments = parser.parse_args()
     archive, checksum = build_release(arguments.version, arguments.output_dir)

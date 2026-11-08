@@ -1,5 +1,5 @@
 # Ren'Py Inspector: drop-in read-only overlay for Ren'Py 8.x desktop.
-# Do not use `default` or `define` for inspector state: it is not game state.
+# Python package state is separate from Ren'Py's rollback-aware gameplay stores.
 init -100 python:
     import renpy_inspector
 
@@ -13,4 +13,5 @@ init -100 python:
         lambda: renpy.store,
         lambda: renpy.store.persistent,
         renpy.restart_interaction,
+        getattr(config, "savedir", None),
     )
