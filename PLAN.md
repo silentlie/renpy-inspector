@@ -1,0 +1,571 @@
+# Ren'Py Inspector: Complete Development Plan
+
+> **Status:** Proposed architecture and implementation plan. No mod has been implemented yet.
+>
+> **Reference project:** [SugarCube Inspector](https://github.com/silentlie/sugarcube-inspector)
+>
+> **Target repository:** `silentlie/renpy-inspector` (public)
+
+## Project summary
+
+Build a standalone, drop-in Ren'Py mod that provides live inspection of game state through a native in-game drawer. Reuse the *design principles*, not the browser-specific implementation, of SugarCube Inspector: lazy expansion, path-based locations, scoped subscriptions, stable tree nodes, explicit favourites, and low-overhead refresh.
+
+### Agreed decisions
+
+| Decision | Approach |
+| --- | --- |
+| Platform | Existing Ren'Py desktop games |
+| Packaging | Drop-in `.rpy` files plus a pure-Python package inside `game/` |
+| UI | Native Ren'Py Screen Language |
+| Architecture | Inspection core separate from UI and Ren'Py integration |
+| Access | Direct in-process Python inspection; no RPC or external application |
+| Scheduler | One native screen timer for all active subscriptions |
+| Refresh interval | User-configurable, 250 ms default |
+| Polling disabled | `0` means manual refresh only |
+| Tree | Lazy expansion, structural snapshots, stable-node reconciliation |
+| Rendering | Fixed-height rows using native `vpgrid`, subject to benchmarking |
+| Favourites | Root-relative paths, independently watched while inspector is open |
+| Configuration | Separate user settings, not gameplay save variables |
+| Initial feature scope | Read-only |
+| Initial compatibility target | Ren'Py 8.x desktop; test 8.4 and 8.5 first |
+| Deferred compatibility | Ren'Py 7.x, mobile, heavily customised or locked-down runtimes |
+
+**Assumptions and verification:** Compatibility targets, update performance, save isolation, and `vpgrid` scalability are design hypotheses until exercised against real game fixtures. A mod that works on stock Ren'Py cannot automatically be guaranteed to work with every shipped game.
+
+## 1. Goals and non-goals
+
+### Goals
+
+1. Install in a supported existing desktop game without editing its original story scripts.
+2. Inspect live Python store values and persistent data directly.
+3. Browse nested values with lazy tree expansion and meaningful type/value previews.
+4. Follow changes to displayed values and expanded structures with one shared, configurable polling system.
+5. Maintain favourites that survive object replacement and missing paths.
+6. Keep UI and runtime overhead low enough not to interfere materially with gameplay.
+7. Treat save, load, and rollback compatibility as primary correctness requirements.
+8. Keep the inspection core independently testable outside the Ren'Py renderer.
+
+### Non-goals for the first release
+
+- Mutating game variables, evaluating arbitrary Python code, or offering a cheat console.
+- Debugger-level stepping, breakpoints, or arbitrary source navigation.
+- A separate React or desktop client, network bridge, or process injection.
+- Guaranteed support for every existing Ren'Py game and every engine fork.
+- Ren'Py 7.x / Python 2, mobile builds, and games that reject modified content.
+- Per-variable refresh schedules, adaptive polling, or background worker threads.
+
+## 2. Feature priorities
+
+| Feature | Priority | Milestone |
+| --- | --- | --- |
+| Drop-in mod installation | P0 | 1 |
+| Native open/close drawer | P0 | 1 |
+| Default Python store inspection | P0 | 1–2 |
+| Persistent-variable inspection | P0 | 2 |
+| Nested Python values | P0 | 2 |
+| Lazy child discovery and cycle prevention | P0 | 2 |
+| Live value and structural updates | P0 | 3 |
+| Custom refresh interval and manual refresh | P0 | 3 |
+| Scrollable and efficient tree | P0 | 4 |
+| Error isolation and save/load/rollback safety | P0 | 2–6 |
+| Favourites and explicit watches | P1 | 5 |
+| Search and filtering | P1 | 5 |
+| Configurable drawer width and appearance | P1 | 4–5 |
+| Configured named stores, then discovery | P1 | 5 |
+| Overview and script/context panel | P1 | 5 |
+| Screen-local variable inspection | P2 | Later |
+| Variable editing | P2 | Later |
+| Snapshot export, change history | P2 | Later |
+
+**Release interpretation:** P0 is the minimum useful read-only inspector. P1 completes the planned first read-only release. P2 follows only after the core design is validated.
+
+## 3. Architecture
+
+```text
+Ren'Py Inspector UI
+  ├─ Drawer / tabs / variable tree
+  ├─ Favourites / Overview / Scripts / Settings
+  └─ User interactions
+               │
+               ▼
+Inspector Controller
+  ├─ Drawer lifecycle and active scope
+  ├─ Expanded nodes and visible rows
+  └─ UI invalidation / refresh requests
+               │
+               ▼
+Inspection Core (pure Python where practical)
+  ├─ Locations and path resolution
+  ├─ Safe reads, snapshots, formatting
+  ├─ Child discovery and node reconciliation
+  ├─ Scoped subscriptions and watcher
+  ├─ Favourites
+  └─ Configuration
+               │
+               ▼
+Ren'Py Runtime Adapter
+  ├─ Default / named stores
+  ├─ persistent
+  ├─ game lifecycle hooks
+  └─ Ren'Py interaction/timer integration
+```
+
+### Separation of responsibilities
+
+- **Runtime adapter:** Obtains trusted root objects and responds to Ren'Py lifecycle events. Does not render the interface.
+- **Inspection core:** Reads and compares Python objects. Does not depend on drawer layout or screen widgets.
+- **Controller:** Owns selected scope, expansion state, active subscriptions, and one-time UI invalidation after a changed polling cycle.
+- **UI:** Displays snapshots and invokes controller methods; it does not recursively inspect arbitrary game objects while rendering.
+
+### Repository layout
+
+```text
+renpy-inspector/
+├── PLAN.md
+├── README.md
+├── game/
+│   ├── renpy_inspector.rpy
+│   ├── renpy_inspector_screens.rpy
+│   ├── renpy_inspector_styles.rpy
+│   └── renpy_inspector/
+│       ├── __init__.py
+│       ├── config.py
+│       ├── controller.py
+│       ├── location.py
+│       ├── inspection.py
+│       ├── structure.py
+│       ├── nodes.py
+│       ├── watcher.py
+│       ├── favorites.py
+│       └── formatting.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   ├── fixtures/
+│   └── benchmarks/
+├── scripts/
+└── docs/
+```
+
+This is a proposed layout, not an instruction to create empty modules in advance. Add each module when its responsibilities are implemented.
+
+### Save/rollback isolation principle
+
+Keep inspector-owned caches and watchers outside gameplay store state whenever practical, using an imported Python package. Never store live Python game-object references in persisted inspector settings. Avoid accidentally putting mutable inspector bookkeeping into rollback-aware gameplay variables.
+
+**Caution:** Being read-only is necessary but not sufficient for safe installation and removal. Load/save tests must verify that the mod does not introduce unwanted serialised references or alter normal rollback behaviour.
+
+## 4. Scope and location model
+
+### 4.1 Root scopes
+
+| Scope | Purpose | Default behaviour |
+| --- | --- | --- |
+| **Store** | Default `store` namespace and game variables | Filter Ren'Py internals by default, with an option to reveal them |
+| **Persistent** | Variables on `persistent` | Separate tab, read-only |
+| **Named stores** | Other game namespaces such as `store.characters` | Support configured roots first, then safe discovery |
+| **Favourites** | Explicitly pinned root-relative locations | Watch across scope changes while drawer remains open |
+
+Screen-local variables are deferred: a selected screen's variables may be readable through supported Ren'Py APIs, but enumerating every local across every screen is not assumed to be available.
+
+### 4.2 Location representation
+
+Represent a location as a trusted root plus typed path segments. Suggested segments include:
+
+- Object attribute name.
+- Dictionary key (with type and identity considerations).
+- Sequence index.
+- Set member (inspection-only for the initial implementation).
+
+There are two relevant lifetimes:
+
+- **Tree locations:** May retain a current owner for efficient direct reads while the node is live.
+- **Favourite locations:** Always store a root-relative path and re-resolve it against the current game state after replacements and load/rollback.
+
+A missing path remains a valid subscribed location and is displayed as *missing*, rather than silently deleted.
+
+### 4.3 Snapshot model
+
+Use a discriminated read result:
+
+```python
+# Conceptual model, not implementation code.
+VariableRead = Value(value) | Accessor(kind) | Missing() | Error(details)
+VariableSnapshot = VariableRead + stable type/preview metadata
+```
+
+Compare value identity and captured previews separately from structural information. This is important for Python lists, dictionaries and custom objects that can mutate in place without changing identity.
+
+A snapshot should carry only the information required for display and comparison. Do not deep-clone entire game objects merely to check whether one field changed.
+
+## 5. Python value support and safe inspection
+
+| Python value | Behaviour |
+| --- | --- |
+| `None`, `bool`, integers, floats | Leaf with typed preview |
+| `str`, `bytes` | Escaped, length-limited preview |
+| `list`, `tuple` | Children by index |
+| `dict` | Entries by key; handle non-string/object keys carefully |
+| `set`, `frozenset` | Members inspectable, initially non-favouritable |
+| Instances | Inspect ordinary instance attributes where available |
+| Functions/classes/modules | Limited metadata, avoid uncontrolled expansion |
+| `property` and descriptors | Show accessor marker without invoking arbitrary getter |
+| Cyclic references | Mark and stop descending the ancestor cycle |
+| Unsupported/problematic objects | Error state or conservative preview |
+
+### Required safeguards
+
+- Do not call arbitrary `repr()`, `str()`, properties, or custom getters during routine polling.
+- Prefer `vars()` / `__dict__` and static attribute inspection where applicable, with explicit handling of `__slots__` and descriptors.
+- Do not assume introspection itself is side-effect free; isolate errors per location.
+- Cap preview lengths and enumeration work per expansion to avoid freezing the game on hostile or huge collections.
+- Escape values for Ren'Py's text markup before displaying them.
+- Avoid introspecting most engine/internal objects by default, but allow users to reveal filtered variables.
+- Support Ren'Py rollback-aware list/dictionary/set variants where practical.
+
+### Lazy expansion and reconciliation
+
+1. Render a node without recursively constructing all descendants.
+2. When expanded, read the current value and enumerate only immediate children.
+3. Match new child locations against existing children using stable, typed identities.
+4. Reuse unchanged child nodes and arrays; replace only changed branches.
+5. Retain expanded-node structural watches even if the corresponding rows are scrolled offscreen.
+6. Mark ancestor references so cycles cannot trigger unbounded traversal.
+7. Re-resolve root-relative paths after replacement, load, and rollback.
+
+For dictionary keys or set members that are arbitrary objects, the initial solution may use inspection-only identities rather than promise stable, persisted paths. Define and test these semantics instead of hiding the ambiguity.
+
+## 6. Shared polling and subscriptions
+
+### 6.1 Behaviour
+
+Use **one** active timer, never one timer per variable. The timer exists only while the inspector is open, an active subscription requires checking, and the interval is greater than zero.
+
+The scheduler checks watched value snapshots and expanded structural snapshots, compares them, reconciles changed nodes, and requests **one** UI refresh if displayed data changed.
+
+Ren'Py can refresh screens during user interactions, but it does not give the inspector a general notification whenever an arbitrary nested Python value changes. Polling is therefore appropriate for reliable live updates.
+
+### 6.2 Configuration
+
+Use milliseconds in settings and seconds for Ren'Py's timer API.
+
+```json
+{
+  "refresh_interval_ms": 250,
+  "poll_when_hidden": false,
+  "show_private_variables": false,
+  "drawer_width": 440
+}
+```
+
+| Setting | Proposed semantics |
+| --- | --- |
+| `refresh_interval_ms: 0` | Manual refresh only; no recurring timer |
+| `100` | Nominal 10 polls/sec |
+| `250` | Default, nominal 4 polls/sec |
+| `500` | Nominal 2 polls/sec |
+| `1000` | Nominal 1 poll/sec |
+| Any supported custom interval | Applied immediately after validation |
+
+Recommended validation: integer milliseconds, with 0 as the sole disabled value and a practical minimum of **50 ms** for positive values. Keep this minimum configurable in the implementation if benchmarks justify a different bound.
+
+Intervals are scheduling targets, not hard real-time deadlines. A busy game/render thread can delay checks.
+
+### 6.3 Integration sketch
+
+```renpy
+# Illustration only; final definitions will depend on the integration layer.
+screen renpy_inspector_drawer():
+    if inspector.is_open and inspector.interval > 0:
+        timer inspector.interval repeat True action Function(
+            inspector.tick,
+            _update_screens=False
+        )
+```
+
+`inspector.tick()` should return `None`, perform all inspections on the Ren'Py/game thread, suppress routine errors per subscription, and invoke `renpy.restart_interaction()` only if a visible result changed. Explicit manual refresh should use the same check/reconcile code path. Guard against duplicate polling caused by interaction restarts or stale timer instances.
+
+### 6.4 Lifecycle table
+
+| Event | Watcher action |
+| --- | --- |
+| Drawer opens | Activate the selected scope and catch up immediately |
+| Drawer closes | Suspend timer and release inactive subscriptions |
+| Scope changes | Deactivate old scope; activate and immediately refresh new scope |
+| Node expands | Discover immediate children; add structural subscription |
+| Node collapses | Release descendant subscriptions |
+| Expanded node scrolls offscreen | Retain structural watch for logical tree correctness |
+| Favourite is offscreen | Continue its explicit value watch while drawer is open |
+| Refresh interval changes | Replace/update the one active timer |
+| Interval becomes 0 | Stop periodic timer; keep manual refresh |
+| Save/load/rollback/new game | Re-resolve current state, invalidate stale cache as necessary |
+
+### 6.5 Scope rules
+
+Keep one shared scheduler with scope groups such as `store`, `persistent`, `named:<name>`, `favorites`, and `favorites-tree`. Only the selected main variable scope is active; favourites are independent explicit subscriptions while the drawer is open. Disable descendant/tree polling when the corresponding favourites tree is not displayed unless those descendants are required elsewhere.
+
+This intentionally follows the working SugarCube Inspector subscription design without bringing over its JavaScript scheduler.
+
+## 7. Native user interface
+
+### 7.1 Layout
+
+A right-edge drawer with tabs: **Overview**, **Variables**, **Scripts**, and **Settings**. Under Variables: **Store**, **Persistent**, **Named Stores** and **Favourites** as applicable.
+
+Conceptual text mockup:
+
+```text
+┌──────────────────────────────────────────┐
+│ ▣ Ren'Py Inspector                 [ × ] │
+├──────────────────────────────────────────┤
+│ Overview   Variables   Scripts  Settings │
+│ [Store]  Persistent  Favourites          │
+├──────────────────────────────────────────┤
+│ ▾ player: object                        ☆ │
+│   name: str                       "Alice" │
+│   health: int                        100 │
+│   ▾ inventory: list               3 items │
+│     0                             "Sword" │
+│     1                            "Potion" │
+│     2                               "Key" │
+├──────────────────────────────────────────┤
+│ ↻ Refresh: 250 ms             Read-only   │
+└──────────────────────────────────────────┘
+```
+
+### 7.2 Interaction behaviour
+
+- Open and close via an unobtrusive right-edge tab and configurable keyboard shortcut.
+- Implement click-to-toggle first. Add hover-to-open and a draggable tab only after the core UI is stable.
+- Support adjustable width, constrained to the game viewport.
+- Row title and chevron both expand or collapse a container.
+- Type appears next to the key; value is right-aligned when space permits.
+- Use connectors/indentation to convey tree hierarchy.
+- Support mouse wheel and keyboard navigation; test input capture against the game's keymaps.
+- Keep settings and controls visually scoped so they do not disturb the host game's layout.
+
+### 7.3 Tree performance
+
+Flatten *expanded logical nodes* into a row sequence and display fixed-height rows through Ren'Py's `vpgrid`, which supports viewport-based rendering under its sizing constraints.
+
+Do not assume this makes every stage cheap: benchmark child displayable construction, text rendering, scroll performance, and any Ren'Py layout work. If a 10,000-row logical tree is still expensive, build a custom windowed adapter only after measuring the bottleneck.
+
+### 7.4 Predictable rendering
+
+Do not perform mutation, polling, user-defined attribute access, or tree reconciliation directly in screen expressions. Screens may be evaluated more than once for reasons unrelated to a user-visible refresh. Keep expensive and effectful work in the controller/watcher and render cached snapshots.
+
+## 8. Favourites and explicit watches
+
+Examples of intended user-facing paths:
+
+```python
+store.player.health
+store.inventory["weapon"]
+persistent.unlocked_gallery
+```
+
+A favourite stores a canonical, root-relative path, not a long-lived reference to the currently held game object. It should:
+
+1. Continue to exist when a path becomes temporarily missing.
+2. Reconnect when the path becomes valid again.
+3. Follow replacement of ancestor objects at the same path.
+4. Update its displayed snapshot while the drawer is open, even when another scope tab is selected.
+5. Persist its serialisable path definition in inspector settings.
+
+Initially permit favourites for named attributes, stable string/int dictionary keys and sequence indices. Document that an index follows the *position*, not the original list element. Defer persistence for object-valued dictionary keys and set members until a safe, deterministic model exists.
+
+## 9. Save, load, rollback and installation safety
+
+### Invariants
+
+- Never mutate inspected gameplay values in read-only mode.
+- Do not serialize inspector-owned caches, live object references, watcher callbacks, or UI state into gameplay saves.
+- After loading, discard stale snapshots and resolve paths against the newly loaded state.
+- After rollback, display the restored state rather than previous cached values.
+- When a new game starts, clear session-specific tree/cache state but preserve user settings.
+- Removal should leave original game scripts unchanged; save compatibility must be tested rather than assumed.
+
+### Lifecycle integration
+
+Use documented Ren'Py lifecycle hooks where appropriate (for example, after-load callbacks) for invalidation. Do not rely exclusively on a callback for rollback; path-based reads and explicit UI refresh are also required.
+
+Run dedicated regression scenarios: save with inspector closed, save with drawer open, load after changing variables, rollback nested mutations, save/load with favourites, new game, and load after mod removal. On reload, old direct-owner tree locations must be invalidated even when root-relative favourites survive.
+
+**Risk:** Some games customise save screens, overlays, keymaps or startup behaviour; the mod must fail safely, not break gameplay when an integration hook is unavailable.
+
+## 10. Error handling and security boundaries
+
+- Handle inspection errors per node/subscription and continue checking independent watches.
+- Distinguish missing values from exceptions and unsupported/unsafe values.
+- Do not silently swallow a persistent failure: surface an unobtrusive error marker and optionally diagnostic details.
+- Bound work per tick and per expansion. Avoid unbounded recursion and enormous previews.
+- Do not execute arbitrary expressions or custom getters merely to inspect them.
+- Render escaped text and cap display lengths.
+- Run locally; no telemetry, network connectivity, debugger attachment, or external communication.
+- Ensure inspectable game objects cannot force inspector crashes via malicious `repr`, `str`, iteration or descriptor behaviour where avoidable.
+
+## 11. Overview and script/context panels
+
+### Overview
+
+Show game title when available, Ren'Py version, selected inspection scope, active favourites, configured polling interval, and optional watcher diagnostics (number of active subscriptions, most recent poll duration, and whether a change was observed).
+
+### Scripts
+
+Show currently available script location and execution/return context using documented Ren'Py APIs where supported. This is contextual read-only information, **not** a complete debugger. Source browsing, jumping, stepping, breakpoints, and arbitrary evaluation are deferred.
+
+## 12. Development milestones
+
+### Phase 1: Runtime integration proof of concept
+
+**Work:** Create drop-in files, register the overlay screen, add a stable open/close interaction, read a few simple default-store values.
+
+**Exit criteria:** Installs in a clean fixture game without changing original scripts; does not prevent normal game input.
+
+### Phase 2: Inspection core
+
+**Work:** Implement typed locations, safe snapshots, Python collection support, lazy child discovery, cycles, node IDs/reconciliation and isolated errors.
+
+**Exit criteria:** Unit tests cover nested objects, replacement, in-place mutations, missing locations, descriptor safety, and unsupported values.
+
+### Phase 3: Watcher and custom polling
+
+**Work:** Implement shared subscriptions, structural/value comparisons, timer integration, active scopes, immediate catch-up, manual refresh, and settings persistence.
+
+**Exit criteria:** Values and structural changes refresh at configured intervals; no hidden polling; disabled mode works; switching scopes produces no stale state.
+
+### Phase 4: Native variable tree and drawer
+
+**Work:** Implement row rendering, expand/collapse, scrolling, type syntax styling, width controls, input handling, and initial viewport performance measurements.
+
+**Exit criteria:** Large nested collections remain navigable; no eager deep recursion; UI remains usable on supported game resolutions.
+
+### Phase 5: Favourites and supporting panels
+
+**Work:** Add path favourites, independent subscriptions, settings, search/filtering, named-store support, Overview and minimal Scripts panel.
+
+**Exit criteria:** Favourites survive restart, missing paths, and ancestor replacement; other panels do not introduce unnecessary polling.
+
+### Phase 6: Correctness, compatibility and performance
+
+**Work:** Save/load/rollback regression tests, malformed-object tests, UI conflict tests, multiple engine versions and benchmark suites.
+
+**Exit criteria:** Release compatibility matrix passes, known limitations are documented, and measured overhead is acceptable.
+
+### Phase 7: Release and documentation
+
+**Work:** Produce versioned release ZIP, installation/uninstallation instructions, configuration docs, examples, troubleshooting and known-compatibility notes.
+
+**Exit criteria:** A supported user can copy the provided files into a game's `game/` directory and use the inspector without installing developer tools.
+
+## 13. Test plan and benchmarks
+
+### Functional tests
+
+| Scenario | Expected result |
+| --- | --- |
+| Scalar value changes | Preview updates at the next supported check |
+| Parent object replaced | Watched root-relative paths resolve the new object |
+| List append/remove | Child structure updates without rebuilding unrelated branches |
+| Dictionary key add/remove | Added/removed nodes reconcile correctly |
+| Nested in-place mutation | Relevant value or structure watcher detects it |
+| Cyclic object graph | Expansion stops at ancestor cycle |
+| Getter with side effects | Not invoked during inspection |
+| Object's `repr()` raises | Inspector continues, shows safe fallback |
+| Favourite path disappears | Still pinned and reports missing |
+| Favourite path reappears | Automatically reconnects |
+| Hidden drawer | No recurring polling |
+| Poll interval changed | Updated interval applies without duplicate timers |
+| Interval 0 | Only explicit/manual and relevant interaction refreshes occur |
+| Save/load/rollback | Correct restored state, no stale references |
+| Mod removed | Original scripts unchanged; tested save compatibility |
+| Large tree (1k+/10k entries) | Usable expansion and scrolling within measured limits |
+
+### Benchmark matrix
+
+Measure at least four states:
+
+1. Game without mod.
+2. Mod installed, drawer closed.
+3. Drawer open, values idle.
+4. Drawer open, multiple values/structures actively changing.
+
+Vary:
+
+- 100 / 1,000 / 10,000 discovered logical entries.
+- Few vs many active subscriptions.
+- 100 ms / 250 ms / 500 ms intervals (plus disabled mode).
+- Shallow objects vs deeply nested / cyclic collections.
+
+Record poll duration, reconciliation duration, UI refresh time, frame-time distribution, memory footprint and perceived scroll responsiveness. Distinguish time spent in our inspection core from Ren'Py layout/rendering work. Define measurable release thresholds **after baseline runs**, not by guessing an FPS number beforehand.
+
+### Benchmark-driven simplification rule
+
+Do not add adaptive polling, worker threads, per-variable timers, speculative caches or custom tree virtualization unless profiling identifies a problem and an alternative demonstrably improves results. Preserve the simplest measured-correct design.
+
+## 14. Distribution and compatibility
+
+### Packaging
+
+Ship a versioned ZIP whose contents can be copied directly into the supported game's `game/` directory. Include the `.rpy` entrypoints and the Python package. Do not overwrite or patch the game's existing story files.
+
+### Documentation
+
+Provide:
+
+- Install and uninstall instructions.
+- Supported Ren'Py versions/platforms and compatibility limitations.
+- Keyboard shortcut and drawer controls.
+- Configuration syntax and interval semantics.
+- Favourites and path identity limitations.
+- Save/load/rollback caveats and troubleshooting.
+- A read-only disclaimer and security/inspection limitations.
+
+### Version and compatibility policy
+
+Start with Ren'Py 8.x desktop support and test designated minor releases before claiming compatibility. Treat Ren'Py 7.x as separate due to Python runtime differences. Mobile and aggressively customised games remain unverified until tested.
+
+## 15. First-release definition of done
+
+- [ ] Works as a drop-in mod on the supported compatibility matrix.
+- [ ] Opens/closes a native drawer without breaking normal game input.
+- [ ] Displays default store, persistent and configured named stores.
+- [ ] Inspects nested Python structures safely and lazily.
+- [ ] Updates values and structures after mutation or object replacement.
+- [ ] Retains active watches for expanded offscreen branches.
+- [ ] Has one configurable shared refresh timer; supports arbitrary valid intervals and `0`.
+- [ ] Provides a manual refresh path and immediate catch-up on scope activation.
+- [ ] Allows favourites with safe, persisted root-relative paths.
+- [ ] Remains correct after save/load/rollback and new-game transitions.
+- [ ] Isolates problematic objects and errors rather than terminating gameplay.
+- [ ] Has benchmark evidence against an unmodified baseline.
+- [ ] Has an installable release ZIP and complete setup/troubleshooting documentation.
+
+## 16. Implementation order and decisions to validate
+
+**Recommended starting order:** Runtime integration proof of concept → pure-Python inspection core → shared watcher and configurable timer → UI tree → favourites → compatibility/performance → release. The early integration proof should establish that overlay input and screen timers work in a real Ren'Py game without affecting gameplay.
+
+Design questions to settle through prototypes and tests, not assumptions:
+
+1. Which exact Ren'Py 8.x versions and released games are included in the support matrix?
+2. Can native `vpgrid` meet frame-time and scrolling goals without a custom windowing layer?
+3. Which Python/Ren'Py collection types need specialised structural comparison?
+4. How should favourite paths behave with non-primitive dictionary keys and set members?
+5. Where can user JSON settings safely persist across all supported desktop platforms?
+6. What lifecycle hooks and invalidation rules are necessary for load, rollback, and mod removal?
+7. What performance threshold is appropriate relative to an unmodified fixture game?
+
+The core design intentionally remains read-only. Variable editing and arbitrary code execution should only be considered as separate features with explicit semantics for Ren'Py rollback and persistent state.
+
+---
+
+### Reference documentation to consult during implementation
+
+- [Ren'Py documentation](https://www.renpy.org/doc/html/)
+- [Ren'Py Screens and Screen Actions](https://www.renpy.org/doc/html/screens.html)
+- [Ren'Py Screen Language](https://www.renpy.org/doc/html/screen_language.html)
+- [Ren'Py Python Statements and Modules](https://www.renpy.org/doc/html/python.html)
+- [Ren'Py Save, Load, and Rollback](https://www.renpy.org/doc/html/save_load_rollback.html)
+- [SugarCube Inspector reference implementation](https://github.com/silentlie/sugarcube-inspector)
+
+> Documentation links above are implementation references. Before release, validate behaviours against the exact Ren'Py engine versions supported by the mod.
