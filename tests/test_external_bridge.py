@@ -62,6 +62,35 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotEqual(before['scopes']['store'], after['scopes']['store'])
 
 
+class BridgeAssetDiscoveryTests(unittest.TestCase):
+    def test_explicit_game_folder_overrides_import_path(self):
+        with tempfile.TemporaryDirectory() as root:
+            ui = Path(root, 'game', 'renpy_inspector_web')
+            ui.mkdir(parents=True)
+            (ui / 'index.html').write_text('<html>working</html>', encoding='utf-8')
+            ins = Inspector()
+            ins.bind(lambda: {}, lambda: {})
+            bridge = InspectorBridge(ins, ui_dir=str(Path(root, 'wrong')))
+            bridge.configure_game_directory(str(Path(root, 'game')))
+            self.assertEqual(Path(bridge.ui_dir), ui)
+            bridge.start()
+            try:
+                self.assertTrue(bridge.running, bridge.error)
+            finally:
+                bridge.stop()
+
+    def test_missing_ui_explains_correct_nested_zip_installation(self):
+        with tempfile.TemporaryDirectory() as root:
+            ins = Inspector()
+            ins.bind(lambda: {}, lambda: {})
+            bridge = InspectorBridge(ins, ui_dir=str(Path(root, 'missing')))
+            bridge.start()
+            self.assertFalse(bridge.running)
+            self.assertIn('game/renpy_inspector_web/index.html', bridge.error)
+            self.assertIn('inner', bridge.error)
+            self.assertIn('installation root', bridge.error)
+
+
 class HttpBridgeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
