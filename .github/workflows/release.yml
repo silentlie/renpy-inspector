@@ -27,7 +27,7 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
-      - name: Choose next v0.2.x tag (stable across retries)
+      - name: Choose next v0.3.x tag (stable across retries)
         id: release_tag
         shell: bash
         env:
@@ -37,21 +37,21 @@ jobs:
           set -euo pipefail
           # If this commit has already been released, reuse that tag on rerun.
           existing="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" \
-            --jq '.[] | select(.target_commitish == env.GITHUB_SHA) | select(.tag_name | test("^v0[.]2[.][0-9]+$")) | .tag_name' | head -n 1)"
+            --jq '.[] | select(.target_commitish == env.GITHUB_SHA) | select(.tag_name | test("^v0[.]3[.][0-9]+$")) | .tag_name' | head -n 1)"
           if [[ -n "$existing" ]]; then
             tag="$existing"
           else
             max_patch=-1
             git fetch --tags --force
-            for candidate in $(git tag --list 'v0.2.*'); do
-              if [[ "$candidate" =~ ^v0\.2\.([0-9]+)$ ]]; then
+            for candidate in $(git tag --list 'v0.3.*'); do
+              if [[ "$candidate" =~ ^v0\.3\.([0-9]+)$ ]]; then
                 patch="${BASH_REMATCH[1]}"
                 if (( 10#$patch > max_patch )); then
                   max_patch=$((10#$patch))
                 fi
               fi
             done
-            tag="v0.2.$((max_patch + 1))"
+            tag="v0.3.$((max_patch + 1))"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 

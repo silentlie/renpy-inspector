@@ -10,6 +10,19 @@ MAX_STRING = 256
 ROOTS = ('store', 'persistent')
 
 
+def valid_scope(scope):
+    """Named roots use a strict identifier, never a Python expression."""
+    if scope in ROOTS or scope == 'favorites':
+        return True
+    if type(scope) is not str or not scope.startswith('named:'):
+        return False
+    import re
+    return (len(scope) <= 70 and re.fullmatch(
+        r'named:[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*', scope
+    ) is not None)
+
+
+
 def _encode_key(value):
     if value is None:
         return {'type': 'none', 'value': None}
@@ -24,7 +37,7 @@ def _encode_key(value):
 
 def encode_location(scope, path):
     """Validate and convert a root + path to a JSON-safe object."""
-    if scope not in ROOTS or not isinstance(path, (tuple, list)) or not 1 <= len(path) <= MAX_SEGMENTS:
+    if not valid_scope(scope) or scope == 'favorites' or not isinstance(path, (tuple, list)) or not 1 <= len(path) <= MAX_SEGMENTS:
         raise ValueError('invalid favourite root or path length')
     parts = []
     for segment in path:
@@ -48,7 +61,7 @@ def decode_location(data):
         raise ValueError('location must be an object')
     scope = data.get('root')
     parts = data.get('segments')
-    if scope not in ROOTS or not isinstance(parts, list) or not 1 <= len(parts) <= MAX_SEGMENTS:
+    if not valid_scope(scope) or scope == 'favorites' or not isinstance(parts, list) or not 1 <= len(parts) <= MAX_SEGMENTS:
         raise ValueError('invalid location')
     path = []
     for part in parts:
@@ -86,7 +99,7 @@ def decode_location(data):
 
 def format_location(scope, path):
     """Create a human-readable path, leaving Ren'Py escaping to the renderer."""
-    text = scope
+    text = "store." + scope[6:] if scope.startswith("named:") else scope
     for kind, value in path:
         if kind == 'attribute':
             text += '.' + value

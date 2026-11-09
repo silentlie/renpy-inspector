@@ -3,8 +3,12 @@ default player_stats = {"hp": 10, "items": ["key"]}
 
 default persistent.inspector_test_flag = False
 
+# Named-store fixture for v0.3 search and discovery.
+default characters.affection = {"alice": 7}
+
 label start:
-    "Press F8 to open the inspector. Pin player_stats['hp']."
+    "Press F8 to open the inspector. Try Find: hp and the Overview/Scripts tabs."
+    "Use Named to inspect characters.affection and pin the alice entry."
     $ player_stats["hp"] = 8
     "The pinned health value should change to 8."
     $ player_stats["items"].append("map")
