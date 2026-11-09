@@ -7,8 +7,20 @@
 Open [PR #7](https://github.com/silentlie/renpy-inspector/pull/7), select its
 **Checks** tab, open the completed **Dual-engine compatibility** workflow,
 and download the artifact named `renpy-inspector-v0.6.0-preview`.
-Extract the **Ren'Py 7** or **Ren'Py 8** ZIP inside that artifact, then install
-the engine-matching package into your game's root directory. CI generates these
+The downloaded GitHub artifact is an **outer ZIP** containing two engine
+installers. Extract the outer archive first, then extract **only** the matching
+`renpy-inspector-v0.6.0-renpy7.zip` or `-renpy8.zip` into your game's
+**installation root** (the directory that already contains `game/`).
+Do not copy the entire outer ZIP into the game or extract the inner ZIP into
+`game/` itself. Confirm the following path exists before launching:
+
+```
+<game installation>/game/renpy_inspector_web/index.html
+<game installation>/game/renpy_inspector_web/assets/index-*.js
+<game installation>/game/renpy_inspector_web/assets/index-*.css
+```
+
+CI generates these
 preview packages only after Python tests, Ant Design build and four SDK lint jobs
 pass. Preview builds are not official releases.
 
