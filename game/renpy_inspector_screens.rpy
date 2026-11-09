@@ -276,6 +276,9 @@ screen renpy_inspector_drawer():
                             text "Opt-in local browser UI. The native inspector remains available.":
                                 style "renpy_inspector_hint"
                                 xmaximum row_width
+                            text "Browser UI files: game/renpy_inspector_web/":
+                                style "renpy_inspector_hint"
+                                xmaximum row_width
                             if renpy_inspector.bridge.running:
                                 text ("Serving at 127.0.0.1:{}".format(renpy_inspector.bridge.server.server_port)):
                                     style "renpy_inspector_hint"
