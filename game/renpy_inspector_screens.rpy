@@ -91,7 +91,6 @@ screen renpy_inspector_drawer():
                             value FieldInputValue(inspector, "search_query")
                             length 80
                             pixel_width max(120, row_width - 105)
-                            action Function(inspector.run_search)
                         textbutton "Find":
                             action Function(inspector.run_search)
                         if inspector.applied_search:

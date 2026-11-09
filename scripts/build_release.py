@@ -1,4 +1,4 @@
-"""Build a deterministic, drop-in Ren'Py Inspector release ZIP."""
+"""Build deterministic, engine-labelled drop-in Ren'Py Inspector release ZIPs."""
 
 from __future__ import annotations
 
@@ -20,18 +20,22 @@ REQUIRED_FILES = (
     "game/renpy_inspector/settings.py",
     "game/renpy_inspector/search.py",
     "game/renpy_inspector/runtime.py",
+    "game/renpy_inspector/compat.py",
 )
+ENGINES = {
+    "renpy7": "Ren'Py 7.4.11 / 7.8.7 (Python 2.7)",
+    "renpy8": "Ren'Py 8.4.1 / 8.5.3 (Python 3)",
+}
 VERSION_PATTERN = re.compile(r"v\d+\.\d+\.\d+\Z")
 
 
 def collect_files(project_root: Path) -> list[Path]:
-    """Include only installable source, never compiled files or fixture saves."""
+    """Include only installable source, never bytecode or host-game saves."""
     game = project_root / "game"
     package = game / "renpy_inspector"
     missing = [p for p in REQUIRED_FILES if not (project_root / p).is_file()]
     if missing:
         raise ValueError("Missing required inspector source: " + ", ".join(missing))
-
     files = sorted(
         set(game.glob("renpy_inspector*.rpy")) | set(package.rglob("*.py")),
         key=lambda path: path.relative_to(project_root).as_posix(),
@@ -42,25 +46,40 @@ def collect_files(project_root: Path) -> list[Path]:
     return files
 
 
+def _write_entry(output: ZipFile, name: str, content: bytes) -> None:
+    info = ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+    info.compress_type = ZIP_DEFLATED
+    info.external_attr = 0o100644 << 16
+    output.writestr(info, content, compress_type=ZIP_DEFLATED, compresslevel=9)
+
+
 def build_release(
     version: str,
     output_dir: Path,
     project_root: Path = PROJECT_ROOT,
+    engine: str = "renpy8",
 ) -> tuple[Path, Path]:
-    """Return the ZIP and GNU sha256sum-compatible checksum paths."""
+    """Build one labelled package and matching GNU sha256sum checksum."""
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError("Release version must match vMAJOR.MINOR.PATCH")
+    if engine not in ENGINES:
+        raise ValueError("Unknown Ren'Py engine build: " + engine)
 
     files = collect_files(project_root)
     output_dir.mkdir(parents=True, exist_ok=True)
-    archive = output_dir / f"renpy-inspector-{version}.zip"
-
+    archive = output_dir / f"renpy-inspector-{version}-{engine}.zip"
     with ZipFile(archive, "w", compression=ZIP_DEFLATED, compresslevel=9) as output:
+        # The installable game sources are identical. The root-level note
+        # identifies the separately verified engine target for each artifact.
         for path in files:
-            info = ZipInfo(path.relative_to(project_root).as_posix(), (1980, 1, 1, 0, 0, 0))
-            info.compress_type = ZIP_DEFLATED
-            info.external_attr = 0o100644 << 16
-            output.writestr(info, path.read_bytes(), compress_type=ZIP_DEFLATED, compresslevel=9)
+            _write_entry(output, path.relative_to(project_root).as_posix(), path.read_bytes())
+        note = (
+            f"Ren'Py Inspector {version}\nTarget: {ENGINES[engine]}\n"
+            "Extract this archive into the Ren'Py game installation root.\n"
+            "Only game/ contains installable files. This remains a prerelease;\n"
+            "interactive save/load/rollback and FPS checks are not certified.\n"
+        )
+        _write_entry(output, "COMPATIBILITY.txt", note.encode("utf-8"))
 
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     checksum = output_dir / f"{archive.name}.sha256"
@@ -68,14 +87,20 @@ def build_release(
     return archive, checksum
 
 
+def build_both(version: str, output_dir: Path, project_root: Path = PROJECT_ROOT):
+    return tuple(build_release(version, output_dir, project_root, engine) for engine in ENGINES)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version", help="Release tag, e.g. v0.2.0")
+    parser.add_argument("version", help="Release tag, e.g. v0.4.0")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "dist")
-    arguments = parser.parse_args()
-    archive, checksum = build_release(arguments.version, arguments.output_dir)
-    print(f"Built: {archive}")
-    print(f"SHA-256: {checksum}")
+    parser.add_argument("--engine", choices=("both",) + tuple(ENGINES), default="both")
+    args = parser.parse_args()
+    packages = (build_both(args.version, args.output_dir) if args.engine == "both"
+                else (build_release(args.version, args.output_dir, engine=args.engine),))
+    for archive, checksum in packages:
+        print("Built: {} (checksum: {})".format(archive, checksum))
 
 
 if __name__ == "__main__":

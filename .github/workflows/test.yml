@@ -1,9 +1,10 @@
-name: Python core and Ren'Py SDK lint
+name: Dual-engine compatibility
 on:
-  push:
   pull_request:
+  workflow_call:
+
 jobs:
-  unit-tests:
+  python3-tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -14,14 +15,26 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m unittest discover -s tests -v
+      - run: python -m unittest discover -s tests_py2 -v
+
+  python2-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python 2.7 compilation and compatibility tests
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" -w /work python:2.7.18-buster \
+            sh -ec 'python -m compileall -q game/renpy_inspector && python -m unittest discover -s tests_py2 -v'
 
   renpy-sdk-lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        renpy-version: ['8.4.1', '8.5.3']
+        renpy-version: ['7.4.11', '7.8.7', '8.4.1', '8.5.3']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

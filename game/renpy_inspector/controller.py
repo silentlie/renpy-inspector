@@ -1,9 +1,9 @@
 """Session-only tree, explicit root-relative favourites and one polling controller."""
 
-from __future__ import annotations
+from __future__ import unicode_literals
 
-from dataclasses import dataclass, field
-from time import perf_counter
+from collections import namedtuple
+from .compat import monotonic_time, string_types, integer_types, iter_items
 from types import ModuleType
 
 from .favorites import MAX_FAVORITES, encode_location, format_location, valid_scope
@@ -18,38 +18,24 @@ MAX_NAMED_STORES = 8
 MAX_DISCOVERY_SCAN = 1000
 
 
-@dataclass(frozen=True)
-class Row:
-    path: tuple
-    label: str
-    preview: str
-    type_name: str
-    depth: int
-    expandable: bool
-    expanded: bool
-    state: str
-    favorite: bool = False
-    pinnable: bool = False
+Row = namedtuple('Row',
+    'path label preview type_name depth expandable expanded state favorite pinnable')
+# Older call-sites omit favourite/pinnable flags.
+Row.__new__.__defaults__ = (False, False)
+FavoriteRow = namedtuple('FavoriteRow',
+    'location label preview type_name state')
 
 
-@dataclass(frozen=True)
-class FavoriteRow:
-    location: tuple
-    label: str
-    preview: str
-    type_name: str
-    state: str
+class Node(object):
+    """Mutable tree metadata; never stores inspected values."""
+    def __init__(self, path=(), label='', expanded=False, children=None):
+        self.path = path
+        self.label = label
+        self.expanded = expanded
+        self.children = {} if children is None else children
 
 
-@dataclass
-class Node:
-    path: tuple = ()
-    label: str = ''
-    expanded: bool = False
-    children: dict = field(default_factory=dict)
-
-
-class Inspector:
+class Inspector(object):
     """Owns paths and previews, never long-lived references to game values."""
 
     def __init__(self, on_change=None):
@@ -134,7 +120,7 @@ class Inspector:
 
     def register_named_store(self, name, provider):
         """Register a trusted no-argument provider, normally from game init."""
-        if type(name) is not str or not callable(provider):
+        if not isinstance(name, string_types) or not callable(provider):
             raise ValueError('invalid named store registration')
         scope = 'named:' + name
         if not valid_scope(scope):
@@ -151,10 +137,10 @@ class Inspector:
             if not isinstance(store, ModuleType):
                 return tuple(sorted(names))
             fields = vars(store)
-            for number, (name, member) in enumerate(fields.items()):
+            for number, (name, member) in enumerate(iter_items(fields)):
                 if number >= MAX_DISCOVERY_SCAN or len(names) >= MAX_NAMED_STORES:
                     break
-                if (type(name) is str and isinstance(member, ModuleType) and
+                if (isinstance(name, string_types) and isinstance(member, ModuleType) and
                         member.__name__ == 'store.' + name and
                         valid_scope('named:' + name)):
                     names.add('named:' + name)
@@ -351,7 +337,7 @@ class Inspector:
             return {}
         if not isinstance(data, dict):
             return {}
-        return {key: value for key, value in data.items() if type(key) is str and type(value) in (str, int, float)}
+        return {key: value for key, value in data.items() if isinstance(key, string_types) and type(value) in string_types + integer_types + (float,)}
 
     def _update_search_match(self, match):
         try:
@@ -432,16 +418,16 @@ class Inspector:
                 break
         node.children = new_children
         if truncated and len(rows) < MAX_ROWS:
-            rows.append(Row(node.path + (('truncated',),), '… more entries hidden',
+            rows.append(Row(node.path + (('truncated',),), '\u2026 more entries hidden',
                             'per-node limit {}'.format(MAX_CHILDREN), 'info',
                             depth, False, False, 'info'))
 
     def tick(self):
         """Sole scheduler callback; one invalidation regardless of changed count."""
         if self.is_open and self.interval_ms > 0:
-            start = perf_counter()
+            start = monotonic_time()
             changed = self.refresh()
-            self.last_poll_ms = (perf_counter() - start) * 1000.0
+            self.last_poll_ms = (monotonic_time() - start) * 1000.0
             if changed and self._on_change is not None:
                 self._on_change()
         return None
