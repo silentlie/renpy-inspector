@@ -2,7 +2,7 @@
  * rules previously competed, collapsing the details area into a narrow strip. */
 @media (max-width: 960px) {
   .app-header { height:auto;min-height:76px;padding:12px 16px;gap:10px;flex-wrap:wrap }
-  .workspace-layout { grid-template-columns:minmax(0,1fr) }
+  .workspace-layout { grid-template-columns:minmax(0,1fr);min-height:0;align-items:start;grid-auto-rows:max-content }
   .tree-sider { width:100%;min-width:0;padding:18px 16px 16px;border-right:0;border-bottom:1px solid #283754 }
   .main-content { min-height:560px;min-width:0;width:100% }
   .workspace-tabs { padding:10px 16px 0 }

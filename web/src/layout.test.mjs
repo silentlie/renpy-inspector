@@ -16,6 +16,8 @@ test('desktop columns are bounded and mobile stacks instead of collapsing detail
   assert.match(css, /grid-template-columns:minmax\(300px,420px\) minmax\(0,1fr\)/);
   assert.match(css, /@media \(max-width: 960px\)/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /grid-auto-rows:max-content/);
+  assert.match(css, /min-height:0;align-items:start/);
   assert.match(css, /\.main-content \{ min-height:560px;min-width:0;width:100% \}/);
   assert.doesNotMatch(css, /flex-direction:column!important|flex:auto!important/);
 });
