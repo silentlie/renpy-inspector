@@ -9,6 +9,9 @@ init -100 python:
     if renpy_inspector.inspector.reset not in config.after_load_callbacks:
         config.after_load_callbacks.append(renpy_inspector.inspector.reset)
 
+    if renpy_inspector.bridge.invalidate not in config.after_load_callbacks:
+        config.after_load_callbacks.append(renpy_inspector.bridge.invalidate)
+
     renpy_inspector.install(
         lambda: renpy.store,
         lambda: renpy.store.persistent,

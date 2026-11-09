@@ -29,7 +29,20 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Choose next v0.4.x tag (stable across retries)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build local Ant Design browser assets
+        run: |
+          cd web
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+          mkdir -p ../game/renpy_inspector_web
+          cp -R dist/. ../game/renpy_inspector_web/
+
+      - name: Choose next v0.6.x tag (stable across retries)
         id: release_tag
         shell: bash
         env:
@@ -38,21 +51,21 @@ jobs:
         run: |
           set -euo pipefail
           existing="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" \
-            --jq '.[] | select(.target_commitish == env.GITHUB_SHA) | select(.tag_name | test("^v0[.]4[.][0-9]+$")) | .tag_name' | head -n 1)"
+            --jq '.[] | select(.target_commitish == env.GITHUB_SHA) | select(.tag_name | test("^v0[.]6[.][0-9]+$")) | .tag_name' | head -n 1)"
           if [[ -n "$existing" ]]; then
             tag="$existing"
           else
             max_patch=-1
             git fetch --tags --force
-            for candidate in $(git tag --list 'v0.4.*'); do
-              if [[ "$candidate" =~ ^v0\.4\.([0-9]+)$ ]]; then
+            for candidate in $(git tag --list 'v0.6.*'); do
+              if [[ "$candidate" =~ ^v0\.6\.([0-9]+)$ ]]; then
                 patch="${BASH_REMATCH[1]}"
                 if (( 10#$patch > max_patch )); then
                   max_patch=$((10#$patch))
                 fi
               fi
             done
-            tag="v0.4.$((max_patch + 1))"
+            tag="v0.6.$((max_patch + 1))"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -60,7 +73,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
-          python scripts/build_release.py "$RELEASE_TAG" --engine both
+          python scripts/build_release.py "$RELEASE_TAG" --engine both --require-web
           cd dist
           sha256sum -c *.sha256
 

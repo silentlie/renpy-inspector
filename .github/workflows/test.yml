@@ -56,3 +56,23 @@ jobs:
           sdk_script="$(find "$RUNNER_TEMP" -mindepth 2 -maxdepth 3 -name renpy.sh -type f -print -quit)"
           test -n "$sdk_script"
           bash "$sdk_script" "$RUNNER_TEMP/inspector-fixture" lint --error-code
+
+  ant-design-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install React and Ant Design dependencies
+        run: npm install --no-audit --no-fund
+      - name: Test tree utilities
+        run: npm test
+      - name: Compile browser UI
+        run: npm run build
+      - name: Check compiled HTML and assets
+        run: test -f dist/index.html && test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
