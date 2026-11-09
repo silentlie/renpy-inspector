@@ -21,8 +21,10 @@ class EngineFixtureTests(unittest.TestCase):
     def test_legacy_screen_search_has_find_action_not_input_action(self):
         source = (Path(__file__).resolve().parents[1] / 'game' /
                   'renpy_inspector_screens.rpy').read_text(encoding='utf-8')
-        self.assertIn('textbutton "Find":\n                            action Function(inspector.run_search)', source)
-        between = source.split('                        input:', 1)[1].split('                        textbutton "Find":', 1)[0]
+        self.assertIn('textbutton "Find":', source)
+        find_block = source.split('textbutton "Find":', 1)[1].split('if inspector.applied_search:', 1)[0]
+        self.assertIn('action Function(inspector.run_search)', find_block)
+        between = source.split('input:', 1)[1].split('textbutton "Find":', 1)[0]
         self.assertNotIn('action Function(inspector.run_search)', between)
 
     def test_game_python_is_safe_for_renpy7_unicode_loader(self):
