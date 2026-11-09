@@ -26,3 +26,27 @@ test('invalid favorites are discarded and capped', () => {
   const values = [{ scope: 'store', key: 'b' }, { scope: 'system', key: 'c' }, null];
   assert.deepEqual(safeFavourites(values), [{ scope: 'store', key: 'b' }]);
 });
+
+// A favourites view is a scoped tree, not a second permanent side panel.
+test('favourite scope resolves captured nodes and keeps missing pins', async () => {
+  const { favouriteNodes } = await import('./tree.js');
+  const favs = favouriteNodes({ store: sample, persistent: [] }, [
+    { scope: 'store', key: 'b' }, { scope: 'persistent', key: 'absent' },
+  ]);
+  assert.equal(favs.length, 2);
+  assert.equal(favs[0].name, 'health');
+  assert.equal(favs[0].favouriteScope, 'store');
+  assert.equal(favs[1].state, 'missing');
+  assert.equal(favs[1].favouriteScope, 'persistent');
+});
+
+
+test('favourite render keys stay unique when a pinned child is also inside a pinned parent', async () => {
+  const { favouriteNodes } = await import('./tree.js');
+  const items = favouriteNodes({ store: sample, persistent: [] }, [
+    { scope: 'store', key: 'a' }, { scope: 'store', key: 'b' },
+  ]);
+  assert.notEqual(items[0].children[0].key, items[1].key);
+  assert.equal(items[0].children[0].sourceKey, 'b');
+  assert.equal(items[1].sourceKey, 'b');
+});

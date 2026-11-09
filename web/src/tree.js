@@ -42,3 +42,32 @@ export function safeFavourites(data) {
   return data.filter((x) => x && (x.scope === 'store' || x.scope === 'persistent') &&
     typeof x.key === 'string' && x.key.length < 2048).slice(0, 100);
 }
+
+/** Resolve browser-local favourite paths against the current bounded snapshot.
+ * Ant requires globally unique render keys: a favourite may also appear as a
+ * descendant of another favourite, so render keys are namespaced per root.
+ * sourceKey always identifies the original scope/key for pin and detail actions.
+ */
+export function favouriteNodes(scopes, favourites) {
+  const maps = {
+    store: flatten(scopes?.store ?? []),
+    persistent: flatten(scopes?.persistent ?? []),
+  };
+  const clone = (node, scope, rootKey) => ({
+    ...node,
+    key: JSON.stringify([scope, rootKey, node.key]),
+    sourceKey: node.key,
+    favouriteScope: scope,
+    children: (node.children ?? []).map((child) => clone(child, scope, rootKey)),
+  });
+  return (favourites ?? []).map(({ scope, key }) => {
+    const original = maps[scope]?.get(key);
+    if (original) return clone(original, scope, key);
+    return {
+      key: JSON.stringify([scope, key, key]), sourceKey: key,
+      name: 'Unavailable favourite', path: key, type: 'missing',
+      preview: 'Not present in current bounded snapshot', state: 'missing',
+      favouriteScope: scope, children: [], isLeaf: true,
+    };
+  });
+}
