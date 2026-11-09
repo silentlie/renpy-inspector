@@ -86,6 +86,31 @@ read-only/watch status and a manual Refresh button. In a Ren'Py 7 host game,
 confirm navigation text size, indent guides, row clipping and footer position
 against multiple resolutions; automated SDK lint does not prove visual fidelity.
 
+## Custom renderer prototype (v0.5.0)
+
+The **Variables** tab now defaults to an experimental
+[creator-defined displayable](https://www.renpy.org/doc/html/cdd.html) for the
+main variable tree. It draws a compact, IDE-style list on one render surface,
+with selection, hover, scroll thumb, disclosure arrows, favourite stars and a
+selected-value detail pane. Only the visible row range is rendered. Inspection,
+search, favourites and save-state isolation still use the existing read-only
+controller. **This is native Ren'Py, not a React/MUI runtime.**
+
+To compare or recover from visual/input issues, open **Settings → Tree renderer**
+and switch **Custom** / **Classic**. The choice is session-only and defaults to
+Custom on restart. Search results and Favourites still use classic Ren'Py
+controls in this prototype; the custom renderer is scoped to the Variables
+tree. Mouse wheel scrolls by three rows; clicking the arrow expands/collapses,
+clicking a row displays its path/type/preview, hovering reveals the star, and
+clicking **Load next 200 entries** uses the existing bounded paging method.
+
+The custom displayable stores only drawing geometry and transient interaction
+coordinates. Its selection and scroll state live in the inspector controller
+as paths/numbers, not inspected game objects. It is not a real debugger, has no
+editing/eval/network support, and does not yet offer complete keyboard
+navigation or accessibility support. This prototype is for in-engine visual
+testing on Ren'Py 7 and 8 **before merge**.
+
 ## Limits and caveats
 
 - **Not an engine-verified release.** CI SDK lint checks syntax/init, but actual overlay behaviour, save/rollback compatibility, scrolling, input conflicts, and FPS need validation in real desktop games. See [compatibility checklist](docs/COMPATIBILITY.md).
@@ -153,7 +178,9 @@ Re-running a successful release job re-uploads the assets to the same tag. The w
 - `search.py`: bounded, cycle-safe traversal and immutable result paths.
 - `runtime.py`: conservative Ren'Py script-location and return-stack adapter.
 - `renpy_inspector.rpy`: registration, live roots and after-load cache invalidation.
-- `renpy_inspector_screens.rpy`: cached row rendering via one `vpgrid`, UI actions and one timer.
+- `renpy_inspector_screens.rpy`: native overlay, search, settings, classic fallback and one timer.
+- `renpy_inspector_tree.rpy`: custom virtual tree displayable, hover/click/wheel and direct canvas drawing.
+- `tree_layout.py`: Python 2/3-compatible virtual list coordinates and hit testing.
 - `renpy_inspector_styles.rpy`: style overrides confined to the inspector.
 
 The inspector is strictly read-only with respect to gameplay. It does not mutate game variables or Ren'Py persistent fields; it writes only its own JSON settings. Save/load and in-engine compatibility still need interactive confirmation.

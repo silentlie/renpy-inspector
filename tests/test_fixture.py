@@ -13,6 +13,8 @@ class EngineFixtureTests(unittest.TestCase):
             self.assertTrue((result / 'game' / 'renpy_inspector' / 'favorites.py').is_file())
             self.assertTrue((result / 'game' / 'renpy_inspector' / 'search.py').is_file())
             self.assertTrue((result / 'game' / 'renpy_inspector' / 'runtime.py').is_file())
+            self.assertTrue((result / 'game' / 'renpy_inspector_tree.rpy').is_file())
+            self.assertTrue((result / 'game' / 'renpy_inspector' / 'tree_layout.py').is_file())
             self.assertIn('characters.affection', (result / 'game' / 'script.rpy').read_text())
             self.assertFalse((result / 'game' / 'renpy_inspector' / '__pycache__').exists())
             with self.assertRaises(ValueError):

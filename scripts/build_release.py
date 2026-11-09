@@ -13,6 +13,8 @@ REQUIRED_FILES = (
     "game/renpy_inspector.rpy",
     "game/renpy_inspector_screens.rpy",
     "game/renpy_inspector_styles.rpy",
+    "game/renpy_inspector_tree.rpy",
+    "game/renpy_inspector/tree_layout.py",
     "game/renpy_inspector/__init__.py",
     "game/renpy_inspector/controller.py",
     "game/renpy_inspector/inspection.py",

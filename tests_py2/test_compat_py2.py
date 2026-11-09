@@ -23,6 +23,7 @@ from renpy_inspector.inspection import child_descriptors, MISSING, snapshot, rea
 from renpy_inspector.runtime import collect_context
 from renpy_inspector.search import search_tree
 from renpy_inspector.settings import SettingsStore
+from renpy_inspector.tree_layout import ROW_HEIGHT, geometry, visible_range, clamp_scroll
 
 
 class Guarded(object):
@@ -100,6 +101,14 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(ins.favorite_rows[0].preview, '6')
         ins.close()
         self.assertEqual(ins.rows, ())
+
+    def test_virtual_tree_geometry_is_python2_compatible(self):
+        top, body, detail = geometry(360, 600)
+        self.assertEqual((top, detail), (26, 84))
+        begin, end = visible_range(1200, body, 5400)
+        self.assertLess(end - begin, 25)
+        self.assertEqual(clamp_scroll(-50, 1200, body), 0)
+        self.assertEqual(ROW_HEIGHT, 30)
 
     def test_runtime_context(self):
         class Engine(object):

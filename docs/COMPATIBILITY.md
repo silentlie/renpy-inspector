@@ -24,6 +24,20 @@ SDK lint tests script parsing and initialization, not input or actual gameplay.
 The Python 2.7 regression suite verifies the inspection core and settings on
 that runtime, but it is not embedded in the Ren'Py interpreter or renderer.
 
+## v0.5 custom displayable verification
+
+This experimental renderer requires more than SDK lint. In a Ren'Py 7 host
+game and the Ren'Py 8 fixture, compare **Custom** against **Classic** in
+Settings. Check first render, mouse wheel, scrollbar dragging, hovering/pinning,
+clicking row/arrow, **Load next 200 entries**, selection detail view, and
+scroll-position continuity while polling. Exercise save/load/rollback, F8,
+window resizing, game dialogue and input focus. Confirm the custom render
+never overlays the host game outside the inspector panel.
+
+Also compare 720p/900p/1080p and large-tree FPS/memory. Custom draws visible
+rows only, but font rendering and per-frame redraw may still be expensive.
+No interactive engine certification is claimed yet.
+
 ## Interactive checks still required
 
 Create the fixture with
