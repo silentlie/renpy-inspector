@@ -189,16 +189,21 @@ screen renpy_inspector_drawer():
 
                 elif variables:
                     if inspector.rows:
-                        vpgrid:
-                            cols 1
-                            xfill True
-                            ysize list_height
-                            spacing 1
-                            mousewheel True
-                            draggable True
-                            scrollbars "vertical"
-                            for row in inspector.rows:
-                                use renpy_inspector_tree_row(inspector, row, row_width)
+                        if inspector.tree_mode == "custom":
+                            add InspectorTreeDisplayable(row_width, list_height):
+                                xsize row_width
+                                ysize list_height
+                        else:
+                            vpgrid:
+                                cols 1
+                                xfill True
+                                ysize list_height
+                                spacing 1
+                                mousewheel True
+                                draggable True
+                                scrollbars "vertical"
+                                for row in inspector.rows:
+                                    use renpy_inspector_tree_row(inspector, row, row_width)
                     else:
                         text "No values to display." style "renpy_inspector_hint"
 
@@ -237,6 +242,21 @@ screen renpy_inspector_drawer():
                         mousewheel True
                         vbox:
                             spacing 10
+                            text "Tree renderer (experimental)" style "renpy_inspector_section_title"
+                            text "Custom draws only visible rows. Classic uses Ren'Py widgets.":
+                                style "renpy_inspector_hint"
+                                xmaximum row_width
+                            hbox:
+                                spacing 4
+                                textbutton "Custom":
+                                    style "renpy_inspector_action_button"
+                                    selected inspector.tree_mode == "custom"
+                                    action Function(inspector.set_tree_mode, "custom")
+                                textbutton "Classic":
+                                    style "renpy_inspector_action_button"
+                                    selected inspector.tree_mode == "classic"
+                                    action Function(inspector.set_tree_mode, "classic")
+                            null height 12
                             text "Appearance" style "renpy_inspector_section_title"
                             hbox:
                                 spacing 10

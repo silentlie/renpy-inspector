@@ -54,6 +54,13 @@ class NativeUiLayoutTests(unittest.TestCase):
         self.assertIn('style "renpy_inspector_load_more_button"', SCREEN)
         self.assertIn('style renpy_inspector_load_more_button is button:', STYLES)
 
+    def test_custom_renderer_and_classic_fallback(self):
+        self.assertIn('add InspectorTreeDisplayable(row_width, list_height)', SCREEN)
+        self.assertIn('inspector.tree_mode == "custom"', SCREEN)
+        self.assertIn('inspector.set_tree_mode', SCREEN)
+        self.assertIn('use renpy_inspector_tree_row(inspector, row, row_width)', SCREEN)
+        self.assertIn('text "Polling interval"', SCREEN)
+
     def test_has_uniform_result_rows(self):
         self.assertIn("xysize (row_width, 48)", SCREEN)
         self.assertIn("screen renpy_inspector_match_row(", SCREEN)

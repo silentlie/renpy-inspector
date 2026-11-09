@@ -42,6 +42,9 @@ class Inspector(object):
 
     def __init__(self, on_change=None):
         self.is_open = False
+        self.tree_mode = 'custom'  # Experimental CDD with classic fallback.
+        self.tree_scroll = 0
+        self.tree_selection = None
         self.scope = 'store'
         self.panel = 'variables'
         self.search_query = ''
@@ -95,6 +98,8 @@ class Inspector(object):
 
     def reset(self):
         """Discard cache after load, preserving user preferences and favourite paths."""
+        self.tree_scroll = 0
+        self.tree_selection = None
         self._roots = {}
         self._lookup = {}
         self.rows = ()
@@ -167,6 +172,8 @@ class Inspector(object):
         if scope not in self._providers and scope != 'favorites' and scope not in self.named_scopes():
             raise ValueError('unknown scope: ' + str(scope))
         self.scope = scope
+        self.tree_scroll = 0
+        self.tree_selection = None
         self.search_matches = ()
         self.applied_search = ''
         self._persist()
@@ -184,6 +191,24 @@ class Inspector(object):
         self.panel = panel
         if self.is_open:
             self.refresh()
+
+    def set_tree_mode(self, mode):
+        """Switch between experimental canvas and classic native widget tree."""
+        if mode not in ('custom', 'classic'):
+            raise ValueError('unknown tree renderer')
+        self.tree_mode = mode
+        self.tree_scroll = 0
+        if self.is_open:
+            self.refresh()
+
+    def select_tree_row(self, path):
+        """Selection stores a path only, never the game object it denotes."""
+        if (not self.is_open or self.panel != 'variables' or
+                not isinstance(path, tuple) or
+                not any(row.path == path for row in self.rows)):
+            return False
+        self.tree_selection = path
+        return True
 
     def run_search(self):
         """Search only when submitted; do not traverse game state per keystroke."""
