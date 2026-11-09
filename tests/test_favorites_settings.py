@@ -54,33 +54,33 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(self.settings.load(), {
             'interval_ms': 0, 'drawer_width': 620,
             'favorites': [('store', SCORE_PATH)], 'scope': 'store'})
-        contents = self.settings.path.read_text()
+        contents = Path(self.settings.path).read_text()
         self.assertNotIn('SimpleNamespace', contents)
         self.assertIn('"version":1', contents)
 
     def test_malformed_file_and_invalid_entries(self):
-        self.settings.path.write_text('{oops', encoding='utf-8')
+        Path(self.settings.path).write_text('{oops', encoding='utf-8')
         self.assertEqual(self.settings.load()['favorites'], [])
         payload = {'version': 1, 'interval_ms': True, 'drawer_width': 12000,
                    'favorites': [encode_location('store', SCORE_PATH),
                                  {'root':'other', 'segments':[]} ,
                                  encode_location('store', SCORE_PATH)]}
-        self.settings.path.write_text(json.dumps(payload), encoding='utf-8')
+        Path(self.settings.path).write_text(json.dumps(payload), encoding='utf-8')
         loaded = self.settings.load()
         self.assertEqual(loaded['interval_ms'], 250)
         self.assertEqual(loaded['drawer_width'], 460)
         self.assertEqual(loaded['favorites'], [('store', SCORE_PATH)])
 
     def test_oversize_settings_is_not_loaded(self):
-        self.settings.path.write_text(' ' * (128 * 1024 + 1))
+        Path(self.settings.path).write_text(' ' * (128 * 1024 + 1))
         self.assertEqual(self.settings.load()['favorites'], [])
 
     def test_invalid_save_does_not_corrupt_existing_settings(self):
         self.settings.save(interval_ms=250, drawer_width=460, favorites=[])
-        original = self.settings.path.read_bytes()
+        original = Path(self.settings.path).read_bytes()
         with self.assertRaises(ValueError):
             self.settings.save(interval_ms=True, drawer_width=460, favorites=[])
-        self.assertEqual(self.settings.path.read_bytes(), original)
+        self.assertEqual(Path(self.settings.path).read_bytes(), original)
 
 
 class FavouriteWatchTests(unittest.TestCase):

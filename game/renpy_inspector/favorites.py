@@ -1,8 +1,14 @@
+# -*- coding: utf-8 -*-
 """Serializable, root-relative locations for explicit variable watches.
 
 Never retain inspected objects. Supported keys are string, integer, bool and None;
 all other dictionary keys and set members remain inspection-only.
 """
+
+from __future__ import unicode_literals
+
+import re
+from .compat import integer_types, string_types, to_text
 
 MAX_FAVORITES = 100
 MAX_SEGMENTS = 12
@@ -14,11 +20,10 @@ def valid_scope(scope):
     """Named roots use a strict identifier, never a Python expression."""
     if scope in ROOTS or scope == 'favorites':
         return True
-    if type(scope) is not str or not scope.startswith('named:'):
+    if not isinstance(scope, string_types) or not scope.startswith('named:'):
         return False
-    import re
-    return (len(scope) <= 70 and re.fullmatch(
-        r'named:[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*', scope
+    return (len(scope) <= 70 and re.match(
+        r'\Anamed:[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*\Z', scope
     ) is not None)
 
 
@@ -28,9 +33,9 @@ def _encode_key(value):
         return {'type': 'none', 'value': None}
     if type(value) is bool:
         return {'type': 'bool', 'value': value}
-    if type(value) is int:
+    if type(value) in integer_types:
         return {'type': 'int', 'value': value}
-    if type(value) is str and len(value) <= MAX_STRING:
+    if isinstance(value, string_types) and len(value) <= MAX_STRING:
         return {'type': 'str', 'value': value}
     raise ValueError('unsupported dictionary key')
 
@@ -44,9 +49,9 @@ def encode_location(scope, path):
         if not isinstance(segment, (tuple, list)) or len(segment) != 2:
             raise ValueError('invalid path segment')
         kind, value = segment
-        if kind == 'attribute' and type(value) is str and 0 < len(value) <= MAX_STRING:
+        if kind == 'attribute' and isinstance(value, string_types) and 0 < len(value) <= MAX_STRING:
             parts.append({'kind': 'attribute', 'name': value})
-        elif kind == 'index' and type(value) is int and 0 <= value <= 1000000:
+        elif kind == 'index' and type(value) in integer_types and 0 <= value <= 1000000:
             parts.append({'kind': 'index', 'index': value})
         elif kind == 'key':
             parts.append({'kind': 'key', 'key': _encode_key(value)})
@@ -77,9 +82,9 @@ def decode_location(data):
             if not isinstance(key, dict):
                 raise ValueError('invalid key')
             tag, val = key.get('type'), key.get('value')
-            if tag == 'str' and type(val) is str:
+            if tag == 'str' and isinstance(val, string_types):
                 pass
-            elif tag == 'int' and type(val) is int:
+            elif tag == 'int' and type(val) in integer_types and type(val) is not bool:
                 pass
             elif tag == 'bool' and type(val) is bool:
                 pass
@@ -102,9 +107,9 @@ def format_location(scope, path):
     text = "store." + scope[6:] if scope.startswith("named:") else scope
     for kind, value in path:
         if kind == 'attribute':
-            text += '.' + value
+            text += '.' + to_text(value)
         elif kind == 'index':
             text += '[' + str(value) + ']'
         else:
-            text += '[' + repr(value) + ']'
+            text += '[' + to_text(repr(value)) + ']'
     return text

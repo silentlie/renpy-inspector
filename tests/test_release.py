@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from scripts.build_release import REQUIRED_FILES, build_release
+from scripts.build_release import REQUIRED_FILES, build_release, build_both
 
 
 class ReleaseBuilderTests(unittest.TestCase):
@@ -35,13 +35,25 @@ class ReleaseBuilderTests(unittest.TestCase):
             self.assertIsNone(zf.testzip())
             self.assertEqual(
                 zf.namelist(),
-                sorted([*REQUIRED_FILES, "game/renpy_inspector/extra.py"]),
+                sorted([*REQUIRED_FILES, "game/renpy_inspector/extra.py"]) + ["COMPATIBILITY.txt"],
             )
             self.assertEqual(zf.read(REQUIRED_FILES[0]), f"# {REQUIRED_FILES[0]}\n".encode())
         self.assertEqual(
             checksum.read_text(encoding="ascii"),
             f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n",
         )
+
+    def test_two_engine_packages_have_same_installable_source(self):
+        builds = build_both("v0.4.0", self.out, self.root)
+        self.assertEqual(len(builds), 2)
+        names = [a.name for a, _ in builds]
+        self.assertEqual(names, ["renpy-inspector-v0.4.0-renpy7.zip",
+                                 "renpy-inspector-v0.4.0-renpy8.zip"])
+        with ZipFile(builds[0][0]) as a, ZipFile(builds[1][0]) as b:
+            for path in REQUIRED_FILES:
+                self.assertEqual(a.read(path), b.read(path))
+            self.assertIn(b"Python 2.7", a.read("COMPATIBILITY.txt"))
+            self.assertIn(b"Python 3", b.read("COMPATIBILITY.txt"))
 
     def test_reproducible_zip(self):
         a, _ = build_release("v0.2.0", self.out, self.root)
@@ -53,6 +65,10 @@ class ReleaseBuilderTests(unittest.TestCase):
         for version in ["v0.2", "v0.2.0-dev", "../oops", "v0.2.0/other", ""]:
             with self.subTest(version=version), self.assertRaises(ValueError):
                 build_release(version, self.out, self.root)
+
+    def test_unknown_engine_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_release("v0.4.0", self.out, self.root, engine="mystery")
 
     def test_required_sources_must_exist(self):
         (self.root / REQUIRED_FILES[0]).unlink()

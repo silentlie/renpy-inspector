@@ -2,7 +2,31 @@
 
 An early **read-only, in-game inspector** for existing Ren'Py desktop games.
 
-> **Status: v0.3 read-only MVP, prerelease.** Python unit tests and Ren'Py SDK lint cover core behaviour and script parsing. Actual overlay input, save/load/rollback and performance **still require interactive engine smoke tests** before claiming compatibility. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [PLAN.md](PLAN.md).
+> **Status: v0.4 dual-engine MVP, prerelease.** Python unit tests and Ren'Py SDK lint cover core behaviour and script parsing. Actual overlay input, save/load/rollback and performance **still require interactive engine smoke tests** before claiming compatibility. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [PLAN.md](PLAN.md).
+
+## Ren'Py 7 / 8 compatibility (v0.4.0)
+
+**One repository and one shared codebase.** The inspector's `game/renpy_inspector/`
+modules now run on Python 2.7 and Python 3. Version-dependent operations live in
+`compat.py`: string/integer types, case folding, lazy dictionary keys, timing,
+and atomic replacement of the inspector-only settings JSON.
+
+Releases provide **two engine-labelled ZIPs** from identical installable source:
+
+- `renpy-inspector-v0.4.N-renpy7.zip` for Ren'Py 7.4.11 / 7.8.7 (Python 2.7)
+- `renpy-inspector-v0.4.N-renpy8.zip` for Ren'Py 8.4.1 / 8.5.3 (Python 3)
+
+Each ZIP contains a `COMPATIBILITY.txt` identifying its intended engine, plus the
+same `game/` drop-in files. Extract **one** engine package into the root of your
+game installation (where `game/` already exists). Do not overlay both packages.
+The inspector preferences JSON schema remains version 1 and existing favourites
+are preserved. Switching Python runtime versions may still require a game's
+own Ren'Py upgrade/migration; the inspector does not migrate host game saves.
+
+CI must pass Python 2.7 compilation/tests, Python 3 regression tests, and SDK
+lint on 7.4.11, 7.8.7, 8.4.1 and 8.5.3 before the main-branch automated
+prerelease is published. This **does not** constitute successful interactive
+save/load/rollback or FPS testing on those engines.
 
 ## Install
 
@@ -95,9 +119,9 @@ init 1 python:
 
 ## Automated GitHub releases
 
-Every merge into `main` triggers [Release drop-in mod](.github/workflows/release.yml) (a direct push also triggers it). After unit tests pass, it builds a deterministic ZIP containing only the installable `game/` sources and attaches the ZIP and SHA-256 checksum to a GitHub **prerelease**. The first v0.3 tag is `v0.3.0`, with subsequent merges incrementing the patch number (`v0.3.1`, etc.). Retry of the same commit reuses its tag. SDK lint runs separately in [test.yml](.github/workflows/test.yml), so the release job alone does not establish engine compatibility.
+Every merge into `main` triggers [Release drop-in mod](.github/workflows/release.yml) (a direct push also triggers it). After unit tests pass, it builds a deterministic ZIP containing only the installable `game/` sources and attaches the ZIP and SHA-256 checksum to a GitHub **prerelease**. The first v0.4 tag is `v0.4.0`, with subsequent merges incrementing the patch number (`v0.4.1`, etc.). Retry of the same commit reuses its tag. SDK lint runs separately in [test.yml](.github/workflows/test.yml), so the release job alone does not establish engine compatibility.
 
-Find generated ZIPs under [GitHub Releases](https://github.com/silentlie/renpy-inspector/releases). Extract the ZIP into the game's **installation root**, which contains its `game/` directory. Alternatively, copy the ZIP's `game/` contents into that directory. Verify the checksum with `sha256sum -c renpy-inspector-v0.3.N.zip.sha256` (substituting the release number).
+Find generated ZIPs under [GitHub Releases](https://github.com/silentlie/renpy-inspector/releases). Extract the ZIP into the game's **installation root**, which contains its `game/` directory. Alternatively, copy the ZIP's `game/` contents into that directory. Verify the checksum with `sha256sum -c renpy-inspector-v0.4.N-renpy7.zip.sha256` (or the `renpy8` counterpart)` (substituting the release number).
 
 Re-running a successful release job re-uploads the assets to the same tag. The workflow requires the repository's GitHub Actions `GITHUB_TOKEN` to have permission to write repository contents (granted in the workflow and subject to repository/organisation policy). **These are prereleases because Ren'Py engine smoke testing and save/rollback compatibility validation are still outstanding.** Do not treat an automated release as engine certification.
 
@@ -114,3 +138,10 @@ Re-running a successful release job re-uploads the assets to the same tag. The w
 - `renpy_inspector_styles.rpy`: style overrides confined to the inspector.
 
 The inspector is strictly read-only with respect to gameplay. It does not mutate game variables or Ren'Py persistent fields; it writes only its own JSON settings. Save/load and in-engine compatibility still need interactive confirmation.
+
+### Python 2.7 core checks
+
+Run `python2 -m compileall -q game/renpy_inspector` followed by
+`python2 -m unittest discover -s tests_py2 -v`. On CI the legacy interpreter
+comes from a version-pinned Python 2.7 Docker image. The modern build tool and
+Python 3 test suite need not themselves run under Python 2.7.

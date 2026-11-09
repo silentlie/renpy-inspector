@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Conservative, read-only inspection of game-owned Python values.
 
 This module does not import Ren'Py. It never calls user-defined repr, str,
@@ -5,24 +6,25 @@ iteration, properties, or __getattr__ intentionally. As with all Python
 introspection, hostile extension types cannot be made completely safe.
 """
 
-from __future__ import annotations
+from __future__ import unicode_literals
 
 from itertools import islice
+from .compat import integer_types, string_types, iter_keys, fold_text, to_text
 from types import ModuleType, FunctionType, BuiltinFunctionType, MethodType
 
 
 MISSING = object()
-_SIMPLE_KEYS = (str, int, bool, type(None))
-_SCALARS = (str, bytes, int, float, bool, type(None))
+_SIMPLE_KEYS = string_types + integer_types + (bool, type(None))
+_SCALARS = string_types + integer_types + (float, bool, type(None))
 _NON_EXPANDABLE = (type, FunctionType, BuiltinFunctionType, MethodType, ModuleType)
 
 
-def escape_text(value: str) -> str:
+def escape_text(value):
     """Protect text tags and interpolation in the Ren'Py text renderer."""
     return value.replace("[", "[[").replace("{", "{{").replace("〖", "〖〖")
 
 
-def clipped(value: str, limit: int = 110) -> str:
+def clipped(value, limit=110):
     return value if len(value) <= limit else value[: limit - 1] + "…"
 
 
@@ -44,7 +46,7 @@ def _mapping(value):
     return _instance_dict(value)
 
 
-def _is_expandable(value) -> bool:
+def _is_expandable(value):
     if isinstance(value, (dict, list, tuple)):
         return True
     return _mapping(value) is not None
@@ -71,7 +73,7 @@ def read_child(parent, segment):
     return MISSING
 
 
-def child_descriptors(value, limit: int, is_store_root: bool = False):
+def child_descriptors(value, limit, is_store_root=False):
     """Return (segment, label) pairs, plus a truncation indicator.
 
     Uses at most 4 * limit dictionary keys, and at most limit visible nodes.
@@ -85,7 +87,7 @@ def child_descriptors(value, limit: int, is_store_root: bool = False):
     if isinstance(value, dict):
         size = dict.__len__(value)
         pairs = []
-        for key in islice(dict.keys(value), limit * 4):
+        for key in islice(iter_keys(value), limit * 4):
             if type(key) not in _SIMPLE_KEYS:
                 continue
             label = '[' + clipped(repr(key), 40) + ']'
@@ -100,8 +102,8 @@ def child_descriptors(value, limit: int, is_store_root: bool = False):
     # Key names from __dict__ are Python attributes; filter internal store names.
     names = []
     count = 0
-    for key in islice(dict.keys(fields), limit * 4):
-        if not isinstance(key, str) or key.startswith('_'):
+    for key in islice(iter_keys(fields), limit * 4):
+        if not isinstance(key, string_types) or key.startswith('_'):
             continue
         if is_store_root:
             member = dict.__getitem__(fields, key)
@@ -112,7 +114,7 @@ def child_descriptors(value, limit: int, is_store_root: bool = False):
             names.append((('attribute', key), clipped(key, 60)))
     # Sorting only the bounded prefix is deliberate.  We do not sort an
     # arbitrarily large store on every poll.
-    names.sort(key=lambda item: item[0][1].casefold())
+    names.sort(key=lambda item: fold_text(item[0][1]))
     return names, count > len(names) or dict.__len__(fields) > limit * 4
 
 
@@ -127,11 +129,11 @@ def snapshot(value, *, is_cycle: bool = False):
     name = typ.__name__
     if typ in _SCALARS:
         try:
-            if typ is str or typ is bytes:
+            if typ in string_types:
                 preview = repr(value[:100])
                 if len(value) > 100:
                     preview += '…'
-            elif typ is int:
+            elif typ in integer_types:
                 preview = str(value)
             else:
                 preview = repr(value)

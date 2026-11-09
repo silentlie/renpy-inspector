@@ -1,7 +1,9 @@
+# -*- coding: utf-8 -*-
 """Bounded, read-only path discovery; never retains game values after a search."""
 
 from collections import deque
-from dataclasses import dataclass
+from collections import namedtuple
+from .compat import fold_text, string_types
 
 from .favorites import format_location
 from .inspection import MISSING, child_descriptors, clipped, escape_text, read_child, snapshot
@@ -13,23 +15,10 @@ MAX_SEARCH_DEPTH = 6
 MAX_SEARCH_CHILDREN = 200
 
 
-@dataclass(frozen=True)
-class SearchMatch:
-    scope: str
-    path: tuple
-    label: str
-    preview: str
-    type_name: str
-    state: str
-
-
-@dataclass(frozen=True)
-class SearchResult:
-    matches: tuple
-    visited: int
-    truncated: bool
-    errors: int
-
+SearchMatch = namedtuple('SearchMatch',
+    'scope path label preview type_name state')
+SearchResult = namedtuple('SearchResult',
+    'matches visited truncated errors')
 
 def search_tree(value, scope, query, *, max_visits=MAX_SEARCH_VISITS,
                 max_matches=MAX_SEARCH_MATCHES, max_depth=MAX_SEARCH_DEPTH,
@@ -39,14 +28,14 @@ def search_tree(value, scope, query, *, max_visits=MAX_SEARCH_VISITS,
     The queue holds references transiently during a single explicit search.
     Neither results nor the controller cache retains these references.
     """
-    if type(query) is not str:
+    if not isinstance(query, string_types):
         raise ValueError('search query must be text')
     if not 1 <= len(query.strip()) <= MAX_QUERY:
         return SearchResult((), 0, False, 0)
     if not all(type(x) is int and x > 0 for x in
                (max_visits, max_matches, max_depth, max_children)):
         raise ValueError('invalid search budget')
-    needle = query.strip().casefold()
+    needle = fold_text(query.strip())
     queue = deque([(value, (), frozenset(), 0)])
     results = []
     visited = 0
@@ -79,7 +68,7 @@ def search_tree(value, scope, query, *, max_visits=MAX_SEARCH_VISITS,
             except Exception:
                 errors += 1
                 continue
-            if needle in name.casefold():
+            if needle in fold_text(name):
                 results.append(SearchMatch(scope, child_path, escape_text(clipped(name, 130)),
                                            escape_text(clipped(preview, 100)),
                                            escape_text(clipped(type_name, 50)), state))
