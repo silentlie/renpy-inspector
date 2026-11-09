@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Session-only tree, explicit root-relative favourites and one polling controller."""
 
 from __future__ import unicode_literals
@@ -419,7 +418,7 @@ class Inspector(object):
                 break
         node.children = new_children
         if truncated and len(rows) < MAX_ROWS:
-            rows.append(Row(node.path + (('truncated',),), '… more entries hidden',
+            rows.append(Row(node.path + (('truncated',),), '\u2026 more entries hidden',
                             'per-node limit {}'.format(MAX_CHILDREN), 'info',
                             depth, False, False, 'info'))
 

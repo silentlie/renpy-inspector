@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Small Ren'Py runtime adapter. Never inspect game objects in screens."""
 
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Bounded, read-only path discovery; never retains game values after a search."""
 
 from collections import deque
@@ -20,7 +19,7 @@ SearchMatch = namedtuple('SearchMatch',
 SearchResult = namedtuple('SearchResult',
     'matches visited truncated errors')
 
-def search_tree(value, scope, query, *, max_visits=MAX_SEARCH_VISITS,
+def search_tree(value, scope, query, max_visits=MAX_SEARCH_VISITS,
                 max_matches=MAX_SEARCH_MATCHES, max_depth=MAX_SEARCH_DEPTH,
                 max_children=MAX_SEARCH_CHILDREN):
     """Breadth-first search. Limits count work, not an exhaustive promise.

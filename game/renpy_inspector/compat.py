@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Python 2.7 / 3.x shims shared by both Ren'Py release packages.
 
 Keep all version-specific interpreter work here. This module imports no Ren'Py

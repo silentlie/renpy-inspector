@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Conservative, read-only inspection of game-owned Python values.
 
 This module does not import Ren'Py. It never calls user-defined repr, str,
@@ -21,11 +20,11 @@ _NON_EXPANDABLE = (type, FunctionType, BuiltinFunctionType, MethodType, ModuleTy
 
 def escape_text(value):
     """Protect text tags and interpolation in the Ren'Py text renderer."""
-    return value.replace("[", "[[").replace("{", "{{").replace("〖", "〖〖")
+    return value.replace("[", "[[").replace("{", "{{").replace("\u3016", "\u3016\u3016")
 
 
 def clipped(value, limit=110):
-    return value if len(value) <= limit else value[: limit - 1] + "…"
+    return value if len(value) <= limit else value[: limit - 1] + "\u2026"
 
 
 def _instance_dict(value):
@@ -118,7 +117,7 @@ def child_descriptors(value, limit, is_store_root=False):
     return names, count > len(names) or dict.__len__(fields) > limit * 4
 
 
-def snapshot(value, *, is_cycle: bool = False):
+def snapshot(value, is_cycle=False):
     """Return (state, type_name, preview, expandable, comparison_token)."""
     if value is MISSING:
         return ('missing', 'missing', '<missing>', False, ('missing',))
@@ -132,7 +131,7 @@ def snapshot(value, *, is_cycle: bool = False):
             if typ in string_types:
                 preview = repr(value[:100])
                 if len(value) > 100:
-                    preview += '…'
+                    preview += '\u2026'
             elif typ in integer_types:
                 preview = str(value)
             else:

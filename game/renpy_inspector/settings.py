@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Inspector-only settings, separate from gameplay saves and persistent fields."""
 
 import io
@@ -63,7 +62,7 @@ class SettingsStore:
                     defaults['favorites'].append(location)
         return defaults
 
-    def save(self, *, interval_ms, drawer_width, favorites, scope='store'):
+    def save(self, interval_ms, drawer_width, favorites, scope='store'):
         validate_interval(interval_ms)
         validate_width(drawer_width)
         if not valid_scope(scope):

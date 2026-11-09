@@ -17,3 +17,18 @@ class EngineFixtureTests(unittest.TestCase):
             self.assertFalse((result / 'game' / 'renpy_inspector' / '__pycache__').exists())
             with self.assertRaises(ValueError):
                 prepare_fixture(result)
+
+    def test_legacy_screen_search_has_find_action_not_input_action(self):
+        source = (Path(__file__).resolve().parents[1] / 'game' /
+                  'renpy_inspector_screens.rpy').read_text(encoding='utf-8')
+        self.assertIn('textbutton "Find":\n                            action Function(inspector.run_search)', source)
+        between = source.split('                        input:', 1)[1].split('                        textbutton "Find":', 1)[0]
+        self.assertNotIn('action Function(inspector.run_search)', between)
+
+    def test_game_python_is_safe_for_renpy7_unicode_loader(self):
+        package = Path(__file__).resolve().parents[1] / 'game' / 'renpy_inspector'
+        for path in package.glob('*.py'):
+            with self.subTest(path=path.name):
+                raw = path.read_bytes()
+                self.assertTrue(raw.isascii())
+                self.assertNotIn(b'coding:', raw)

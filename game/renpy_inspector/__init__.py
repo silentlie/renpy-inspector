@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Ren'Py Inspector. Mutable state stays outside rollback-aware game stores."""
 
 from .controller import Inspector

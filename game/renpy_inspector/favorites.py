@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Serializable, root-relative locations for explicit variable watches.
 
 Never retain inspected objects. Supported keys are string, integer, bool and None;
