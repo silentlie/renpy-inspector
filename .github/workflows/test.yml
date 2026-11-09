@@ -100,13 +100,13 @@ jobs:
           path: game/renpy_inspector_web
       - name: Build both installable preview packages
         run: |
-          python scripts/build_release.py v0.6.0 --engine both --require-web
+          python scripts/build_release.py v0.6.1 --engine both --require-web
           cd dist
           sha256sum -c *.sha256
       - name: Upload experimental Ren'Py 7 and 8 ZIPs
         uses: actions/upload-artifact@v4
         with:
-          name: renpy-inspector-v0.6.0-preview
+          name: renpy-inspector-v0.6.1-preview
           path: |
             dist/*.zip
             dist/*.sha256

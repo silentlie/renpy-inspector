@@ -229,7 +229,7 @@ export default function App() {
       <header className="inspector-header">
         <div className="product-brand">
           <ApartmentOutlined className="product-icon" />
-          <span><strong>Ren'Py Inspector</strong><small>External workspace · v0.6 preview</small></span>
+          <span><strong>Ren'Py Inspector</strong><small>External workspace · v0.6.1 preview</small></span>
         </div>
         <div className="connection-status" role="status">
           <Tag color="blue">READ ONLY</Tag>

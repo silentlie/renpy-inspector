@@ -1,5 +1,9 @@
 # External Ant Design interface: SugarCube-inspired PR #8
 
+> **Installable review build:** Pull request #8 CI produces
+> `renpy-inspector-v0.6.1-preview`, containing Ren'Py 7/8 test ZIPs.
+> This is not a public release and does not replace v0.6.0 on `main`.
+
 ## Information architecture
 
 PR #8 reorganizes the external inspector around the navigational pattern of
