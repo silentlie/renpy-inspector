@@ -2,6 +2,16 @@
 
 **Status:** Experimental. This is a separate browser window, not a webview inside Ren'Py. The existing F8 native inspector stays available as a fallback. The external GUI is **read-only** and opt-in.
 
+## Download a PR preview build
+
+Open [PR #7](https://github.com/silentlie/renpy-inspector/pull/7), select its
+**Checks** tab, open the completed **Dual-engine compatibility** workflow,
+and download the artifact named `renpy-inspector-v0.6.0-preview`.
+Extract the **Ren'Py 7** or **Ren'Py 8** ZIP inside that artifact, then install
+the engine-matching package into your game's root directory. CI generates these
+preview packages only after Python tests, Ant Design build and four SDK lint jobs
+pass. Preview builds are not official releases.
+
 ## Install and launch
 
 1. Back up your game's original `game/` directory and saves.

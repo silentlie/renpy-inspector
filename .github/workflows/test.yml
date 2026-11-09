@@ -76,3 +76,39 @@ jobs:
         run: npm run build
       - name: Check compiled HTML and assets
         run: test -f dist/index.html && test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+      - name: Share compiled UI with preview packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: ant-design-dist
+          path: web/dist/
+          if-no-files-found: error
+
+  preview-packages:
+    if: github.event_name == 'pull_request'
+    needs: [python3-tests, python2-tests, renpy-sdk-lint, ant-design-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Unpack compiled Ant Design UI
+        uses: actions/download-artifact@v4
+        with:
+          name: ant-design-dist
+          path: game/renpy_inspector_web
+      - name: Build both installable preview packages
+        run: |
+          python scripts/build_release.py v0.6.0 --engine both --require-web
+          cd dist
+          sha256sum -c *.sha256
+      - name: Upload experimental Ren'Py 7 and 8 ZIPs
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-inspector-v0.6.0-preview
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          compression-level: 0
