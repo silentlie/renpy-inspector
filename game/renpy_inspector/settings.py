@@ -5,7 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from .favorites import MAX_FAVORITES, decode_location, encode_location
+from .favorites import MAX_FAVORITES, decode_location, encode_location, valid_scope
 
 DEFAULT_INTERVAL = 250
 DEFAULT_WIDTH = 460
@@ -33,7 +33,7 @@ class SettingsStore:
         self.path = Path(savedir) / 'renpy-inspector-settings.json'
 
     def load(self):
-        defaults = {'interval_ms': DEFAULT_INTERVAL, 'drawer_width': DEFAULT_WIDTH, 'favorites': []}
+        defaults = {'interval_ms': DEFAULT_INTERVAL, 'drawer_width': DEFAULT_WIDTH, 'favorites': [], 'scope': 'store'}
         try:
             if self.path.stat().st_size > MAX_SETTINGS_BYTES:
                 return defaults
@@ -47,6 +47,8 @@ class SettingsStore:
                 defaults[key] = validator(data.get(key))
             except ValueError:
                 pass
+        if valid_scope(data.get('scope')):
+            defaults['scope'] = data['scope']
         locations = data.get('favorites')
         if isinstance(locations, list):
             for item in locations[:MAX_FAVORITES]:
@@ -58,15 +60,18 @@ class SettingsStore:
                     defaults['favorites'].append(location)
         return defaults
 
-    def save(self, *, interval_ms, drawer_width, favorites):
+    def save(self, *, interval_ms, drawer_width, favorites, scope='store'):
         validate_interval(interval_ms)
         validate_width(drawer_width)
+        if not valid_scope(scope):
+            raise ValueError('invalid selected scope')
         if len(favorites) > MAX_FAVORITES:
             raise ValueError('too many favourites')
         data = {
             'version': 1,
             'interval_ms': interval_ms,
             'drawer_width': drawer_width,
+            'scope': scope,
             'favorites': [encode_location(scope, path) for scope, path in favorites],
         }
         parent = self.path.parent

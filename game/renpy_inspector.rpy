@@ -14,4 +14,5 @@ init -100 python:
         lambda: renpy.store.persistent,
         renpy.restart_interaction,
         getattr(config, "savedir", None),
+        lambda: renpy_inspector.collect_context(renpy, config),
     )

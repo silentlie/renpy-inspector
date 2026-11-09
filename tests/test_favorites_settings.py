@@ -53,7 +53,7 @@ class SettingsTests(unittest.TestCase):
                            favorites=[('store', SCORE_PATH)])
         self.assertEqual(self.settings.load(), {
             'interval_ms': 0, 'drawer_width': 620,
-            'favorites': [('store', SCORE_PATH)]})
+            'favorites': [('store', SCORE_PATH)], 'scope': 'store'})
         contents = self.settings.path.read_text()
         self.assertNotIn('SimpleNamespace', contents)
         self.assertIn('"version":1', contents)

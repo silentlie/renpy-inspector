@@ -18,6 +18,8 @@ REQUIRED_FILES = (
     "game/renpy_inspector/inspection.py",
     "game/renpy_inspector/favorites.py",
     "game/renpy_inspector/settings.py",
+    "game/renpy_inspector/search.py",
+    "game/renpy_inspector/runtime.py",
 )
 VERSION_PATTERN = re.compile(r"v\d+\.\d+\.\d+\Z")
 

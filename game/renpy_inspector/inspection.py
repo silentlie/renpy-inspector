@@ -100,7 +100,7 @@ def child_descriptors(value, limit: int, is_store_root: bool = False):
     # Key names from __dict__ are Python attributes; filter internal store names.
     names = []
     count = 0
-    for key in dict.keys(fields):
+    for key in islice(dict.keys(fields), limit * 4):
         if not isinstance(key, str) or key.startswith('_'):
             continue
         if is_store_root:
@@ -113,7 +113,7 @@ def child_descriptors(value, limit: int, is_store_root: bool = False):
     # Sorting only the bounded prefix is deliberate.  We do not sort an
     # arbitrarily large store on every poll.
     names.sort(key=lambda item: item[0][1].casefold())
-    return names, count > len(names)
+    return names, count > len(names) or dict.__len__(fields) > limit * 4
 
 
 def snapshot(value, *, is_cycle: bool = False):
