@@ -135,6 +135,15 @@ class InspectorBridge(object):
                                              'scopes': {'store': [], 'persistent': []},
                                              'counts': {}, 'truncated': {}, 'game': {}})
 
+    def configure_game_directory(self, directory):
+        """Use Ren'Py's actual game/ location, not an import cache path.
+
+        Loading a Python package from a game archive or alternate sys.path
+        can make __file__ unsuitable for discovering sibling web assets.
+        """
+        if directory:
+            self.ui_dir = os.path.join(directory, 'renpy_inspector_web')
+
     @property
     def running(self):
         return self.server is not None
@@ -150,7 +159,9 @@ class InspectorBridge(object):
         if self.running:
             return
         if not os.path.isfile(os.path.join(self.ui_dir, 'index.html')):
-            self.error = 'Ant Design UI is missing. Install a ZIP with the web assets.'
+            self.error = ('Ant Design files missing: game/renpy_inspector_web/index.html. '
+                          'Extract the inner Ren\'Py 7/8 installer ZIP into the '
+                          'game installation root, not into game/ or the outer CI ZIP.')
             return
         try:
             server = _Server((LOOPBACK, 0), _Handler)
