@@ -7,7 +7,7 @@ from types import ModuleType, SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'game'))
 
-from renpy_inspector.controller import Inspector, MAX_CHILDREN
+from renpy_inspector.controller import Inspector, MAX_CHILDREN, MAX_PAGE_CHILDREN
 from renpy_inspector.inspection import (MISSING, child_descriptors, escape_text,
                                         read_child, snapshot)
 
@@ -204,7 +204,61 @@ class TestController(unittest.TestCase):
         ins.refresh()
         ins.toggle_node((('attribute', 'game'),))
         self.assertEqual(len(ins.rows), MAX_CHILDREN + 2)
+        self.assertEqual(ins.rows[-1].state, 'more')
+
+    def test_load_more_list_pages_preserve_expanded_nodes(self):
+        ins, state, _ = self.make_inspector()
+        state['store'].game = [{'health': i} for i in range(450)]
+        ins.refresh()
+        game_path = (('attribute', 'game'),)
+        ins.toggle_node(game_path)
+        self.assertEqual(len(ins.rows), MAX_CHILDREN + 2)
+        self.assertEqual(ins.rows[-1].state, 'more')
+        first_path = game_path + (('index', 0),)
+        ins.toggle_node(first_path)
+        self.assertIn("[['health']", [row.label for row in ins.rows])
+
+        ins.load_more_node(game_path)
+        self.assertEqual(len([r for r in ins.rows if r.path == first_path]), 1)
+        self.assertTrue(next(r for r in ins.rows if r.path == first_path).expanded)
+        self.assertEqual(len([r for r in ins.rows if r.depth == 1 and r.state == 'value']), 400)
+        self.assertEqual(ins.rows[-1].state, 'more')
+
+        ins.load_more_node(game_path)
+        self.assertEqual(len([r for r in ins.rows if r.depth == 1 and r.state == 'value']), 450)
+        self.assertFalse(any(r.state == 'more' for r in ins.rows))
+
+    def test_load_more_root_and_invalid_requests(self):
+        state = {'root': __import__('types').SimpleNamespace(**{
+            'field{}'.format(i): i for i in range(420)})}
+        ins = Inspector()
+        ins.bind(lambda: state['root'], lambda: {})
+        ins.open()
+        self.assertEqual(sum(r.state == 'value' for r in ins.rows), 200)
+        ins.load_more_node(())
+        self.assertEqual(sum(r.state == 'value' for r in ins.rows), 400)
+        ins.load_more_node((('attribute', 'nonexistent'),))
+        self.assertEqual(sum(r.state == 'value' for r in ins.rows), 400)
+        ins.load_more_node(())
+        self.assertEqual(sum(r.state == 'value' for r in ins.rows), 420)
+        ins.close()
+        ins.load_more_node(())
+        self.assertEqual(ins.rows, ())
+
+    def test_per_branch_paging_is_bounded(self):
+        ins, state, _ = self.make_inspector()
+        state['store'].game = list(range(5000))
+        ins.refresh()
+        game_path = (('attribute', 'game'),)
+        ins.toggle_node(game_path)
+        for _ in range(6):
+            ins.load_more_node(game_path)
+        values = [r for r in ins.rows if r.state == 'value' and r.depth == 1]
+        self.assertEqual(len(values), MAX_PAGE_CHILDREN)
         self.assertEqual(ins.rows[-1].state, 'info')
+        self.assertIn('cap', ins.rows[-1].label.lower())
+        ins.load_more_node(game_path)
+        self.assertEqual(len(ins.rows), MAX_PAGE_CHILDREN + 2)
 
 
 if __name__ == '__main__':

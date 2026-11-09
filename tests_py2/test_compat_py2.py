@@ -122,6 +122,21 @@ class CompatibilityTests(unittest.TestCase):
             pass
         self.assertEqual(store.load()['interval_ms'], 250)
 
+    def test_pagination_works_on_python2(self):
+        root = ModuleType(str('store'))
+        root.items = list(range(410))
+        ins = Inspector()
+        ins.bind(lambda: root, lambda: {})
+        ins.open()
+        path = (('attribute', 'items'),)
+        ins.toggle_node(path)
+        self.assertEqual(ins.rows[-1].state, 'more')
+        ins.load_more_node(path)
+        self.assertEqual(sum(row.depth == 1 and row.state == 'value'
+                             for row in ins.rows), 400)
+        ins.load_more_node(path)
+        self.assertFalse(any(row.state == 'more' for row in ins.rows))
+
 
 if __name__ == '__main__':
     unittest.main()

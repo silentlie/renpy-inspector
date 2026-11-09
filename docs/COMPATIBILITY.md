@@ -31,6 +31,10 @@ Create the fixture with
 in each SDK. Record OS, resolution, test actions, logs and measured FPS.
 
 - F8 and the Inspect tab open/close the overlay without blocking gameplay.
+  Verify footer remains visible at 720p, 900p and 1080p.
+- In Variables, expand a list/dictionary with over 200 entries, use **Load next 200 entries**, and confirm prior expanded branches stay open; repeat until the 1,000-per-branch cap.
+- Verify indentation guides, arrow alignment, compact tabs and readable variable previews on Ren'Py 7 and 8.
+- Verify polling buttons are only under Settings and Refresh remains available in the fixed footer.
   Test Overview, Variables, Scripts and Settings at multiple resolutions.
 - Search for nested variables; click to reveal; expand, pin and track values.
 - Inspect discovered `characters.affection` named store and a registered root.

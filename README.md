@@ -56,7 +56,7 @@ Installing third-party `.rpy` code can be incompatible with modified/locked-down
 - Native right-side drawer with the default `store` and `persistent` namespaces.
 - Expand/collapse built-in dictionaries, lists, tuples and ordinary instance `__dict__` fields, one level at a time.
 - Type names and short previews, a cycle marker and a marker when child enumeration is capped.
-- One shared timer while the drawer is open. Choose manual-only (0), 100, 250 (default), 500 or 1000 ms. The API also accepts arbitrary integers from 50 to 60,000 ms.
+- One shared timer while the drawer is open. Configure polling under **Settings → Polling interval**: Off/manual (0), 100, 250 (default), 500 or 1000 ms. The API also accepts arbitrary integers from 50 to 60,000 ms.
 - Manual refresh and path re-resolution after object replacement or loading a save.
 - Pin any supported row with ☆, view/remove pins on the **Favourites** tab; pinned values remain watched even while viewing a different scope. Missing paths remain pinned and reconnect when values reappear.
 - Persist favourite paths, polling interval and drawer width independently of gameplay state using a small atomic JSON settings file at `config.savedir/renpy-inspector-settings.json`.
@@ -67,11 +67,30 @@ Installing third-party `.rpy` code can be incompatible with modified/locked-down
 - **Scripts:** current script file/line and return-stack count/label names using available Ren'Py APIs. Return destinations are **not** the current label or debugging stack.
 - No arbitrary eval, property calls, game-value writes, telemetry, or network connections. Writes are limited to the inspector's own JSON settings.
 
+## Native tree view UI (v0.4.1)
+
+The drawer uses a native Ren'Py tree with indentation guides, expandable arrows,
+a two-line name/type-and-value layout and a pinned-star control. This is not
+Material UI / React: it imitates the navigation pattern without embedding a
+browser or adding dependencies, so the same files work on Ren'Py 7 and 8.
+
+**To load more variables:** Scroll to the end of a scope or expanded branch and
+select **+ Load next 200 entries**. Keep selecting it to reveal additional
+batches, up to 1,000 entries per branch. This expands only that branch and
+preserves previously expanded children. Collapse other branches if you reach
+the global 1,200-row view limit. Search does **not** scan additional pages:
+search results remain separately bounded to 2,400 visits and 50 matches.
+
+**Polling controls moved to Settings.** The footer remains visible with
+read-only/watch status and a manual Refresh button. In a Ren'Py 7 host game,
+confirm navigation text size, indent guides, row clipping and footer position
+against multiple resolutions; automated SDK lint does not prove visual fidelity.
+
 ## Limits and caveats
 
 - **Not an engine-verified release.** CI SDK lint checks syntax/init, but actual overlay behaviour, save/rollback compatibility, scrolling, input conflicts, and FPS need validation in real desktop games. See [compatibility checklist](docs/COMPATIBILITY.md).
 - Store filtering hides private names and imported modules/classes/functions. Object attributes beginning `_` are hidden. Dictionary keys other than `str`, `int`, `bool` and `None` are not displayed; set entries, slots and custom mapping types are not expanded.
-- Each node shows at most 200 children; a maximum of 1,200 visible rows and 12 levels is enforced to limit frame-time spikes. Large dictionaries sample only a bounded key prefix and may omit relevant later keys.
+- The tree loads up to 200 children initially, with a **Load next 200 entries** control at the end of truncated branches. You can reveal up to 1,000 entries per branch (1,200 rows total, 12 levels). Large dictionaries sample a bounded prefix and may omit later or unsupported keys. Search has separate limits.
 - Collapsed values are not deeply watched. Expand a branch to watch its children; in-place changes to unsupported types may not be detectable.
 - The overlay is hidden whenever Ren'Py suppresses overlays; the shortcut is deliberately unobtrusive and may conflict with a game's existing F8 binding or a custom screen.
 - Favourites are limited to 100 root-relative paths of at most 12 segments. Only ordinary attributes, indices and dictionary keys of type string/int/bool/None can be pinned. Index pins follow positions, not original list elements.

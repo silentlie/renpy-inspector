@@ -12,6 +12,7 @@ from .settings import DEFAULT_WIDTH, validate_interval, validate_width
 from .search import SearchMatch, SearchResult, search_tree, MAX_QUERY
 
 MAX_CHILDREN = 200
+MAX_PAGE_CHILDREN = 1000  # Incremental branch pages, never an unbounded dump.
 MAX_ROWS = 1200
 MAX_DEPTH = 12
 MAX_NAMED_STORES = 8
@@ -32,6 +33,7 @@ class Node(object):
         self.path = path
         self.label = label
         self.expanded = expanded
+        self.visible_limit = MAX_CHILDREN
         self.children = {} if children is None else children
 
 
@@ -276,6 +278,23 @@ class Inspector(object):
             node.children.clear()
         self.refresh()
 
+    def load_more_node(self, path):
+        """Expose one more bounded page for a visible expanded branch.
+
+        Keeps existing child nodes (and their expansion state). Paths are
+        resolved anew during refresh; no game references are retained.
+        """
+        if not self.is_open or self.panel != 'variables' or self.scope == 'favorites':
+            return
+        if not isinstance(path, tuple):
+            return
+        node = (self._roots.get(self.scope) if not path
+                else self._lookup.get(path))
+        if node is None or not node.expanded or node.visible_limit >= MAX_PAGE_CHILDREN:
+            return
+        node.visible_limit = min(MAX_PAGE_CHILDREN, node.visible_limit + MAX_CHILDREN)
+        self.refresh()
+
     def refresh(self):
         """Refresh visible view and independent favourite subscriptions."""
         if not self.is_open:
@@ -390,7 +409,7 @@ class Inspector(object):
         next_ancestors = ancestors | {id(value)}
         try:
             descriptors, truncated = child_descriptors(
-                value, MAX_CHILDREN, is_store_root=is_root and self.scope == 'store')
+                value, node.visible_limit, is_store_root=is_root and self.scope == 'store')
         except Exception as exc:
             if len(rows) < MAX_ROWS:
                 rows.append(Row(node.path + (('error',),), 'Inspection error',
@@ -418,9 +437,13 @@ class Inspector(object):
                 break
         node.children = new_children
         if truncated and len(rows) < MAX_ROWS:
-            rows.append(Row(node.path + (('truncated',),), '\u2026 more entries hidden',
-                            'per-node limit {}'.format(MAX_CHILDREN), 'info',
-                            depth, False, False, 'info'))
+            more = node.visible_limit < MAX_PAGE_CHILDREN
+            label = 'Load next {} entries'.format(MAX_CHILDREN) if more else 'Branch display cap reached'
+            rows.append(Row(node.path + (('truncated',),), label,
+                            '{} entries shown'.format(len(descriptors)),
+                            'more' if more else 'info',
+                            depth + (0 if is_root else 1), False, False,
+                            'more' if more else 'info'))
 
     def tick(self):
         """Sole scheduler callback; one invalidation regardless of changed count."""
