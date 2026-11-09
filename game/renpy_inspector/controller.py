@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 from collections import namedtuple
-from .compat import monotonic_time, string_types, integer_types
+from .compat import monotonic_time, string_types, integer_types, iter_items
 from types import ModuleType
 
 from .favorites import MAX_FAVORITES, encode_location, format_location, valid_scope
@@ -137,7 +137,7 @@ class Inspector(object):
             if not isinstance(store, ModuleType):
                 return tuple(sorted(names))
             fields = vars(store)
-            for number, (name, member) in enumerate(fields.items()):
+            for number, (name, member) in enumerate(iter_items(fields)):
                 if number >= MAX_DISCOVERY_SCAN or len(names) >= MAX_NAMED_STORES:
                     break
                 if (isinstance(name, string_types) and isinstance(member, ModuleType) and

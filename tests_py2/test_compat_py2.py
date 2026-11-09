@@ -16,7 +16,7 @@ from types import ModuleType
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'game'))
 
-from renpy_inspector.compat import iter_keys, fold_text, atomic_replace
+from renpy_inspector.compat import iter_keys, iter_items, fold_text, atomic_replace
 from renpy_inspector.controller import Inspector
 from renpy_inspector.favorites import encode_location, decode_location
 from renpy_inspector.inspection import child_descriptors, MISSING, snapshot, read_child
@@ -48,6 +48,7 @@ class CompatibilityTests(unittest.TestCase):
         # Exercise a large dictionary without materialising 10000 key previews.
         data = dict((i, i) for i in range(10000))
         self.assertEqual(next(iter_keys(data)), 0)
+        self.assertEqual(next(iter_items(data)), (0, 0))
         desc, truncated = child_descriptors(data, 15)
         self.assertEqual(len(desc), 15)
         self.assertTrue(truncated)
@@ -66,7 +67,7 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(snapshot(root)[0], 'value')
 
     def test_search_matches_and_cycles(self):
-        root = ModuleType('store')
+        root = ModuleType(str('store'))
         item = {'health': 3}
         item['self'] = item
         root.player = item
@@ -88,7 +89,7 @@ class CompatibilityTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(store.path))
 
     def test_inspector_polled_favourite_after_object_replacement(self):
-        store = ModuleType('store')
+        store = ModuleType(str('store'))
         store.player = {'health': 3}
         ins = Inspector()
         ins.bind(lambda: store, lambda: {}, SettingsStore(self.tempdir))

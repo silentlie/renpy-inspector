@@ -29,6 +29,11 @@ def iter_keys(mapping):
     return dict.iterkeys(mapping) if PY2 else iter(dict.keys(mapping))
 
 
+def iter_items(mapping):
+    """Bounded module/store scans must not allocate Python 2 items lists."""
+    return dict.iteritems(mapping) if PY2 else iter(dict.items(mapping))
+
+
 def fold_text(value):
     """Unicode-insensitive matching with the best case-fold available."""
     value = to_text(value)

@@ -1,5 +1,6 @@
 """Inspector-only settings, separate from gameplay saves and persistent fields."""
 
+import errno
 import io
 import json
 import os
@@ -99,5 +100,6 @@ class SettingsStore:
             if temporary is not None:
                 try:
                     os.unlink(temporary)
-                except FileNotFoundError:
-                    pass
+                except OSError as exc:
+                    if exc.errno != errno.ENOENT:
+                        raise
