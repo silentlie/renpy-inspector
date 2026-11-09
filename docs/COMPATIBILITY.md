@@ -53,3 +53,12 @@ in each SDK. Record OS, resolution, test actions, logs and measured FPS.
 **Do not claim fully validated game compatibility or stable release until these
 interactive checks are documented.** Standalone benchmarks and SDK lint cannot
 replace engine-level runtime verification.
+
+## Ant Design external window (v0.6 proof of concept)
+
+After installing the compiled web assets, start the local bridge in the native
+inspector's Settings, open the browser window, and test Store/Persistent,
+expansion, search, browser-local favourites, disconnect and reconnect.
+Verify the loopback Host/Origin restrictions, token authentication, and
+snapshot invalidation after save load. Record active/idle FPS on both engine
+families. See [External GUI guide](EXTERNAL_GUI.md) for details.

@@ -21,6 +21,8 @@ REQUIRED_FILES = (
     "game/renpy_inspector/search.py",
     "game/renpy_inspector/runtime.py",
     "game/renpy_inspector/compat.py",
+    "game/renpy_inspector/bridge.py",
+    "game/renpy_inspector/bridge_snapshot.py",
 )
 ENGINES = {
     "renpy7": "Ren'Py 7.4.11 / 7.8.7 (Python 2.7)",
@@ -40,9 +42,19 @@ def collect_files(project_root: Path) -> list[Path]:
         set(game.glob("renpy_inspector*.rpy")) | set(package.rglob("*.py")),
         key=lambda path: path.relative_to(project_root).as_posix(),
     )
+    # The Ant Design bundle is compiled by CI (not checked into Git). When
+    # present, include the static assets in both game installation archives.
+    static_root = game / "renpy_inspector_web"
+    if static_root.exists():
+        if not (static_root / "index.html").is_file():
+            raise ValueError("Ant Design build missing index.html")
+        files.extend(static_root.rglob("*"))
+        files.sort(key=lambda path: path.relative_to(project_root).as_posix())
     for path in files:
         if not path.is_file() or path.is_symlink():
             raise ValueError("Release source is not a regular file: " + str(path))
+        if path.stat().st_size > 4 * 1024 * 1024:
+            raise ValueError("Release source exceeds per-file size limit: " + str(path))
     return files
 
 

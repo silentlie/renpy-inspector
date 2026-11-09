@@ -3,8 +3,10 @@
 from .controller import Inspector
 from .settings import SettingsStore
 from .runtime import collect_context
+from .bridge import InspectorBridge
 
 inspector = Inspector()
+bridge = InspectorBridge(inspector)
 
 
 def install(store_provider, persistent_provider, restart_interaction, savedir=None, context_provider=None):

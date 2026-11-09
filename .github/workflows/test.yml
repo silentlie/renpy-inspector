@@ -56,3 +56,29 @@ jobs:
           sdk_script="$(find "$RUNNER_TEMP" -mindepth 2 -maxdepth 3 -name renpy.sh -type f -print -quit)"
           test -n "$sdk_script"
           bash "$sdk_script" "$RUNNER_TEMP/inspector-fixture" lint --error-code
+
+  web-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies, test frontend and build Ant Design
+        run: |
+          npm install --prefix web --no-audit --no-fund
+          npm run test --prefix web
+          npm run build --prefix web
+          test -f web/dist/index.html
+      - name: Build downloadable dual-engine preview packages
+        run: |
+          mkdir -p game/renpy_inspector_web
+          cp -a web/dist/. game/renpy_inspector_web/
+          python scripts/build_release.py v0.6.0 --engine both --output-dir preview-dist
+          cd preview-dist && sha256sum -c *.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ant-design-preview-zips
+          path: preview-dist/*
+          retention-days: 7

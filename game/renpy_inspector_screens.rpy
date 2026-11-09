@@ -5,6 +5,10 @@ screen renpy_inspector_overlay():
 
     key "K_F8" action Function(renpy_inspector.inspector.toggle_open)
 
+    # Game values are sampled by this native interaction timer, never by HTTP threads.
+    if renpy_inspector.bridge.running:
+        timer 1.5 repeat True action Function(renpy_inspector.bridge.publish, _update_screens=False)
+
     if renpy_inspector.inspector.is_open:
         use renpy_inspector_drawer
     else:
@@ -271,6 +275,32 @@ screen renpy_inspector_drawer():
                             text "Inspector preferences are separate from gameplay saves.":
                                 style "renpy_inspector_hint"
                                 xmaximum row_width
+                            null height 14
+                            text "External inspector · Ant Design" style "renpy_inspector_section_title"
+                            text "Separate browser GUI. Connects only to this machine while enabled.":
+                                style "renpy_inspector_hint"
+                                xmaximum row_width
+                            if renpy_inspector.bridge.running:
+                                text "Local bridge running" style "renpy_inspector_hint"
+                                text renpy_inspector.bridge.url:
+                                    style "renpy_inspector_hint"
+                                    xmaximum row_width
+                                hbox:
+                                    spacing 8
+                                    textbutton "Open external window":
+                                        style "renpy_inspector_action_button"
+                                        action Function(renpy_inspector.bridge.open_browser)
+                                    textbutton "Stop server":
+                                        style "renpy_inspector_action_button"
+                                        action Function(renpy_inspector.bridge.stop)
+                            else:
+                                textbutton "Start local server":
+                                    style "renpy_inspector_action_button"
+                                    action Function(renpy_inspector.bridge.start)
+                            if renpy_inspector.bridge.error:
+                                text renpy_inspector.bridge.error:
+                                    style "renpy_inspector_hint"
+                                    xmaximum row_width
                             if inspector.settings_error:
                                 text inspector.settings_error:
                                     style "renpy_inspector_hint"

@@ -2,7 +2,7 @@
 
 An early **read-only, in-game inspector** for existing Ren'Py desktop games.
 
-> **Status: v0.4 dual-engine MVP, prerelease.** Python unit tests and Ren'Py SDK lint cover core behaviour and script parsing. Actual overlay input, save/load/rollback and performance **still require interactive engine smoke tests** before claiming compatibility. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [PLAN.md](PLAN.md).
+> **Status: v0.6 external Ant Design GUI proof of concept, prerelease.** Python unit tests and Ren'Py SDK lint cover core behaviour and script parsing. Actual overlay input, save/load/rollback and performance **still require interactive engine smoke tests** before claiming compatibility. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [PLAN.md](PLAN.md).
 
 ## Ren'Py 7 / 8 compatibility (v0.4.0)
 
@@ -27,6 +27,23 @@ CI must pass Python 2.7 compilation/tests, Python 3 regression tests, and SDK
 lint on 7.4.11, 7.8.7, 8.4.1 and 8.5.3 before the main-branch automated
 prerelease is published. This **does not** constitute successful interactive
 save/load/rollback or FPS testing on those engines.
+
+## External GUI proof of concept (v0.6)
+
+**Ant Design in a separate browser window:** The in-game F8 inspector remains
+available as a fallback. In the game's **Settings → External inspector**, select
+**Start local server** and then **Open external window**. The local browser
+receives bounded, authenticated, read-only snapshots of Store/Persistent.
+Nothing is sent to a public endpoint. The web GUI supports tree expansion,
+search, selection details and browser-local favourites.
+
+Full installation, security, development and manual test instructions:
+[External GUI guide](docs/EXTERNAL_GUI.md). The distributed ZIPs contain the
+precompiled React/Ant Design UI, so players don't need Node.js.
+
+**This is experimental:** Ren'Py SDK lint and automated tests cannot certify
+live gameplay responsiveness or save/load behavior. The existing native
+inspector is unaffected and can be used if the external service is stopped.
 
 ## Install
 
@@ -156,7 +173,7 @@ Re-running a successful release job re-uploads the assets to the same tag. The w
 - `renpy_inspector_screens.rpy`: cached row rendering via one `vpgrid`, UI actions and one timer.
 - `renpy_inspector_styles.rpy`: style overrides confined to the inspector.
 
-The inspector is strictly read-only with respect to gameplay. It does not mutate game variables or Ren'Py persistent fields; it writes only its own JSON settings. Save/load and in-engine compatibility still need interactive confirmation.
+The native inspector and optional Ant Design browser bridge are strictly read-only with respect to gameplay. It does not mutate game variables or Ren'Py persistent fields; it writes only its own JSON settings. Save/load and in-engine compatibility still need interactive confirmation.
 
 ### Python 2.7 core checks
 
