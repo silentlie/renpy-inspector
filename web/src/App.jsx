@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites } from './tree.js';
 
-const { Header, Content, Sider } = Layout;
+const { Header } = Layout;
 const { Text, Title, Paragraph } = Typography;
 const rootParams = readBridgeFragment(window.location.hash);
 const storeKey = 'renpy-inspector-ant-favourites-v1';
@@ -17,6 +17,15 @@ const initialFavourites = (() => {
   try { return safeFavourites(JSON.parse(localStorage.getItem(storeKey) ?? '[]')); }
   catch { return []; }
 })();
+
+function computeTreeHeight() {
+  // Do not let a very tall, narrow browser produce a thousand-pixel tree.
+  // The inspector details are stacked below the tree on narrow windows.
+  if (window.innerWidth <= 960) {
+    return Math.max(240, Math.min(460, Math.round(window.innerHeight * 0.46)));
+  }
+  return Math.max(300, Math.min(760, window.innerHeight - 330));
+}
 
 function formatTime(epoch) {
   if (!epoch) return 'Waiting for game snapshot';
@@ -44,11 +53,11 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState([]);
   const [favourites, setFavourites] = useState(initialFavourites);
-  const [treeHeight, setTreeHeight] = useState(Math.max(280, window.innerHeight - 360));
+  const [treeHeight, setTreeHeight] = useState(computeTreeHeight);
   const requestId = useRef(0);
 
   useEffect(() => {
-    const resize = () => setTreeHeight(Math.max(280, window.innerHeight - 360));
+    const resize = () => setTreeHeight(computeTreeHeight());
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
@@ -131,8 +140,8 @@ export default function App() {
           </span>
         </Space>
       </Header>
-      <Layout className="workspace-layout">
-        <Sider width={440} className="tree-sider" breakpoint="lg" collapsedWidth="100%" trigger={null}>
+      <div className="workspace-layout">
+        <aside className="tree-sider">
           <div className="sider-heading">
             <div><Text className="eyebrow">EXPLORER</Text><Title level={5} className="side-title">Variable Navigator</Title></div>
             <Tooltip title="Refresh snapshots"><Button size="small" type="text" icon={<ReloadOutlined />}
@@ -154,8 +163,8 @@ export default function App() {
             <Text type="secondary">Snapshot is bounded to protect game performance.</Text>
             {snapshot?.truncated?.[scope] && <Tag color="gold">Partial tree</Tag>}
           </div>
-        </Sider>
-        <Content className="main-content">
+        </aside>
+        <main className="main-content">
           <Tabs activeKey={tab} onChange={setTab} className="workspace-tabs" items={[
             { key: 'explorer', label: 'Inspector' }, { key: 'favourites', label: `Favourites (${favourites.length})` },
             { key: 'overview', label: 'Overview' },
@@ -215,8 +224,8 @@ export default function App() {
               status === 'unpaired' ? 'Not paired. Open this page from the game’s Settings tab.' : error || 'Connecting to game...'}</Text></Space>
             {status !== 'online' && <Tag color="orange">{status}</Tag>}
           </div>
-        </Content>
-      </Layout>
+        </main>
+      </div>
     </Layout>
   </ConfigProvider>;
 }
