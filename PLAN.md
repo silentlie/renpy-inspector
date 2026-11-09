@@ -1,3 +1,44 @@
+# Current delivery plan (9 November 2026)
+
+> **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
+
+## Milestone: PR #7 — external Ant Design foundation (v0.6.0 experimental)
+
+**Goal:** Ship the optional separate browser-based inspector without breaking the native F8 overlay or Ren'Py 7/8 drop-in installation.
+
+- ✅ Python 2.7/3-compatible, opt-in authenticated loopback server; serialized read-only snapshots and bounded inspection.
+- ✅ React + Ant Design 6 client, connected Store/Persistent tree, browser-local favourites, basic overview and details.
+- ✅ Responsive layout fix based on real screenshots; package static assets inside both engine ZIPs without Node.js at runtime.
+- ✅ Unit tests, all four Ren'Py SDK lint targets, frontend build and both preview packages pass CI.
+- ⚠️ Real-game testing confirms browser connects and UI renders on a Ren'Py 7 game; save/load/rollback, FPS, startup on varied OSes and Ren'Py 8 interactive testing remain open.
+- **Merge gate:** Green CI and documented experimental limitations. Publish only a *prerelease*; retain read-only semantics and native fallback.
+
+## Milestone: PR #8 — SugarCube codex/dev-inspired structure
+
+**Reference:** [SugarCube Inspector codex/dev](https://github.com/silentlie/sugarcube-inspector/tree/codex/dev) at `0f533358` (version 1.0.0). Copy design patterns, not its MAIN-world JavaScript inspection/editing.
+
+1. Replace permanent explorer/sidebar + details dashboard with a single full-width Ant Design variable workspace.
+2. Top-level **Overview / Variables / Scripts** tabs. Variables has nested **Store / Persistent / Favourites** scopes.
+3. Show key and type together, right-aligned short preview, and explicit pin actions in each virtualized tree row. Maintain keyboard and mouse expansion and selection.
+4. Show longer values and full paths **on demand** in a detail drawer or expandable panel, never by squeezing the main tree.
+5. Keep bounded snapshots and the authenticated read-only bridge; preserve existing overview, search and browser-local favourites.
+6. Add focused UI/tree tests and responsive checks; package Ren'Py 7/8 preview ZIPs. Keep PR #8 a draft until browser geometry and game smoke tests are satisfactory.
+
+## Later milestones (not PR #8)
+
+- **Lazy per-branch fetching:** a safe, typed, root-relative path API that inspects values only on the Ren'Py game thread, never from HTTP handlers. Include strict path allowlisting, rate/size/page limits, cycle handling, cache expiration after load/rollback, and tests on both engines. This replaces the current global 450-node snapshot limit only after safety and performance verification.
+- **Compare/history:** bounded, read-only primitive change history, with named context and clear retention semantics.
+- **Scripts/source navigation:** only data Ren'Py safely exposes; do not imply SugarCube's Twine passage-source APIs transfer.
+- **Editing, locks and undo/redo:** explicitly out of scope pending separate rollback/write-safety design.
+
+## Validation rules
+
+Passing SDK lint is not an interactive runtime certification. Before claiming production reliability, check browser connection, save/load/rollback, stale data invalidation, FPS and UI geometry in actual games. Do not silently merge experimental features or treat available previews as final releases.
+
+---
+
+# Historical proposal (superseded)
+
 # Ren'Py Inspector: Complete Development Plan
 
 > **Status:** Proposed architecture and implementation plan. No mod has been implemented yet.

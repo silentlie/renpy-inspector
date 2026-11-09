@@ -86,6 +86,32 @@ read-only/watch status and a manual Refresh button. In a Ren'Py 7 host game,
 confirm navigation text size, indent guides, row clipping and footer position
 against multiple resolutions; automated SDK lint does not prove visual fidelity.
 
+
+## External Ant Design inspector (v0.6.0 proof of concept)
+
+The existing F8 in-game drawer remains available. For a larger, separate
+developer workspace, enable **Settings → External inspector (Ant Design) →
+Start local server → Open browser**. The server is opt-in, loopback-only
+(`127.0.0.1`), session-authenticated, and read-only. It serves bounded
+game-state snapshots to a packaged React + Ant Design interface; the game
+never evaluates expressions supplied by the browser.
+
+The release ZIP embeds the compiled browser under
+`game/renpy_inspector_web/`, so **players do not need Node.js**.
+Developers build the React application with `cd web && npm install &&
+npm run build`. The new CI job verifies frontend tests and compiles the
+application before release publication. Python 2.7/3 regression tests and
+Ren'Py SDK lint remain required.
+
+**Important:** External browser favourites are per-browser/per-local-origin
+and can reset if the server's port changes. The bridge exposes only the
+default Store/Persistent roots, up to 450 nodes, 80 children per branch and
+four levels per snapshot. It publishes every ~1.5 seconds when the Ren'Py
+overlay is active. See [External GUI guide](docs/EXTERNAL_GUI.md) for
+security, limitations, installation and manual acceptance tests.
+The browser-based inspector has **not** undergone an interactive Ren'Py
+7/8 smoke test and remains experimental.
+
 ## Limits and caveats
 
 - **Not an engine-verified release.** CI SDK lint checks syntax/init, but actual overlay behaviour, save/rollback compatibility, scrolling, input conflicts, and FPS need validation in real desktop games. See [compatibility checklist](docs/COMPATIBILITY.md).

@@ -56,3 +56,59 @@ jobs:
           sdk_script="$(find "$RUNNER_TEMP" -mindepth 2 -maxdepth 3 -name renpy.sh -type f -print -quit)"
           test -n "$sdk_script"
           bash "$sdk_script" "$RUNNER_TEMP/inspector-fixture" lint --error-code
+
+  ant-design-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install React and Ant Design dependencies
+        run: npm install --no-audit --no-fund
+      - name: Test tree utilities
+        run: npm test
+      - name: Compile browser UI
+        run: npm run build
+      - name: Check compiled HTML and assets
+        run: test -f dist/index.html && test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+      - name: Share compiled UI with preview packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: ant-design-dist
+          path: web/dist/
+          if-no-files-found: error
+
+  preview-packages:
+    if: github.event_name == 'pull_request'
+    needs: [python3-tests, python2-tests, renpy-sdk-lint, ant-design-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Unpack compiled Ant Design UI
+        uses: actions/download-artifact@v4
+        with:
+          name: ant-design-dist
+          path: game/renpy_inspector_web
+      - name: Build both installable preview packages
+        run: |
+          python scripts/build_release.py v0.6.0 --engine both --require-web
+          cd dist
+          sha256sum -c *.sha256
+      - name: Upload experimental Ren'Py 7 and 8 ZIPs
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-inspector-v0.6.0-preview
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          compression-level: 0

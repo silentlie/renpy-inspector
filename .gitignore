@@ -3,3 +3,6 @@ __pycache__/
 *.rpyc
 .pytest_cache/
 *.zip
+web/node_modules/
+web/dist/
+game/renpy_inspector_web/
