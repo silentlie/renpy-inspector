@@ -23,7 +23,7 @@ Use `python scripts/prepare_fixture.py /tmp/renpy-inspector-fixture` to construc
 
 | Ren'Py version | Python unit suite | SDK lint | Interactive/save-load test |
 |---|---|---|---|
-| 8.4.1 | Independent of SDK | CI configured, result not yet recorded | Not yet verified |
-| 8.5.3 | Independent of SDK | CI configured, result not yet recorded | Not yet verified |
+| 8.4.1 | Independent of SDK | Passed in PR #3 (Ren'Py SDK lint) | Not yet verified |
+| 8.5.3 | Independent of SDK | Passed in PR #3 (Ren'Py SDK lint) | Not yet verified |
 
 **Do not claim engine compatibility or stable release until interactive checks above are recorded.** Core benchmarks are not a substitute for gameplay FPS/memory tests. v0.3 prerelease status remains appropriate until then.
