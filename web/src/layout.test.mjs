@@ -74,7 +74,8 @@ test('only the virtual tree may scroll; the document and app shell never scroll'
 });
 
 test('tree descendants and variable labels cannot widen the page', () => {
-  assert.match(css, /\.full-width-variable-tree \.ant-tree-treenode \{[^\n]*max-width: 100%; min-width: 0;/);
+  assert.match(css, /\.full-width-variable-tree \.ant-tree-treenode \{[^\n]*width: auto; max-width: 100%; min-width: 0;/);
+  assert.doesNotMatch(css, /\.full-width-variable-tree \.ant-tree-treenode \{\s*width: 100%/);
   assert.match(css, /\.ant-tree-node-content-wrapper \{[^\n]*min-width: 0; max-width: 100%/);
   assert.match(css, /\.variable-label \{[^\n]*max-width: 56%/);
   assert.match(css, /\.variable-type \{[^\n]*text-overflow: ellipsis/);

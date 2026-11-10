@@ -41,7 +41,7 @@ html, body { overscroll-behavior: none; }
 }
 .full-width-variable-tree .ant-tree-list-holder-inner { width: 100%; min-width: 0; max-width: 100%; }
 .full-width-variable-tree .ant-tree-list-holder-inner { padding-right: 18px; }
-.full-width-variable-tree .ant-tree-treenode { width: 100%; max-width: 100%; min-width: 0; align-items: center; min-height: 28px; overflow: hidden; }
+.full-width-variable-tree .ant-tree-treenode { width: auto; max-width: 100%; min-width: 0; align-items: center; min-height: 28px; overflow: hidden; }
 .full-width-variable-tree .ant-tree-node-content-wrapper { flex: 1 1 0; min-width: 0; max-width: 100%; min-height: 27px; padding: 0 4px; border-radius: 4px; overflow: hidden; }
 .full-width-variable-tree .ant-tree-node-content-wrapper:hover { background: #1c2a3f !important; }
 .full-width-variable-tree .ant-tree-switcher:not(.ant-tree-switcher-noop) { display: inline-flex; align-items: center; justify-content: center; color: #7797b9; }
