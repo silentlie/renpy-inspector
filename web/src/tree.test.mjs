@@ -112,3 +112,30 @@ test('child pages append and set next-cursor metadata', () => {
   assert.equal(result.scopes.store[0].children[0].key, 'b');
   assert.equal(result.scopes.store[0].more, true);
 });
+
+
+import { mergeRootSnapshot } from './tree.js';
+
+test('new snapshot refreshes previews without erasing loaded child pages', () => {
+  const previous = {
+    generation: 3,
+    scopes: { store: [{ key: 'p', loaded: true,
+      children: [{ key: 'child', name: 'loaded' }] },
+      { key: 'after80', name: 'paged' }], persistent: [] },
+    roots: { store: { nextOffset: 160, more: true } },
+  };
+  const incoming = {
+    generation: 3,
+    scopes: { store: [{ key: 'p', name: 'fresh', children: [] }], persistent: [] },
+    root_pages: { store: { next_offset: 80, more: true } },
+  };
+  const merged = mergeRootSnapshot(previous, incoming);
+  assert.equal(merged.scopes.store[0].name, 'fresh');
+  assert.equal(merged.scopes.store[0].children[0].name, 'loaded');
+  assert.equal(merged.scopes.store[1].name, 'paged');
+  assert.equal(merged.roots.store.nextOffset, 160);
+  const reset = mergeRootSnapshot(merged, { ...incoming, generation: 4 });
+  assert.equal(reset.scopes.store.length, 1);
+  assert.equal(reset.scopes.store[0].children.length, 0);
+  assert.equal(reset.roots.store.nextOffset, 80);
+});

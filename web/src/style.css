@@ -102,3 +102,9 @@ html, body { overscroll-behavior: none; }
   .info-page { padding: 16px 12px; }
   .overview-statistics { grid-template-columns: 1fr; }
 }
+
+/* A virtualised sentinel requests the next page when it enters the viewport. */
+.auto-page-sentinel { display:inline-flex;align-items:center;min-height:25px;
+  color:#769bc2;font:11px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.auto-page-sentinel button { cursor:pointer;background:transparent;border:0;padding:2px 3px;
+  color:#f4b28c;font:inherit;text-decoration:underline; }

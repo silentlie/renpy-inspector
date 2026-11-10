@@ -188,3 +188,30 @@ export function asVirtualTreeNodes(nodes, scope, roots, showMore = true) {
   });
   return result;
 }
+
+
+/** Root snapshots refresh previews but do not erase previously loaded pages. */
+export function mergeRootSnapshot(previous, incoming) {
+  const generation = incoming?.generation ?? 0;
+  const scopes = {};
+  const roots = {};
+  for (const scope of ['store', 'persistent']) {
+    const next = incoming?.scopes?.[scope] ?? [];
+    const initial = incoming?.root_pages?.[scope] ??
+      { next_offset: next.length, more: false, capped: false };
+    const rootMeta = {
+      nextOffset: initial.next_offset ?? next.length,
+      more: Boolean(initial.more), capped: Boolean(initial.capped),
+    };
+    if (previous && previous.generation === generation) {
+      scopes[scope] = reconcilePageNodes(previous.scopes?.[scope], next, true);
+      const oldMeta = previous.roots?.[scope];
+      roots[scope] = (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset
+        ? oldMeta : rootMeta;
+    } else {
+      scopes[scope] = next;
+      roots[scope] = rootMeta;
+    }
+  }
+  return { generation, scopes, roots };
+}
