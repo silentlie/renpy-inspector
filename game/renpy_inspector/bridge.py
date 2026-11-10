@@ -26,6 +26,8 @@ except ImportError:
 from .bridge_snapshot import PROTOCOL, encode_snapshot
 from .bridge_paging import (build_tree_page, build_lazy_snapshot,
                             build_tree_value, validate_tree_request)
+from .bridge_search import (build_search_results, build_reveal_chain,
+                            validate_search_request)
 from .browser_favourites import (BrowserFavouritesStore,
                                  MAX_PREFERENCE_BYTES, validate_favourites)
 from .compat import monotonic_time
@@ -81,7 +83,7 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if urlsplit(self.path).path in (
                 '/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
-                '/api/v1/favourites') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -135,7 +137,7 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         path = urlsplit(self.path).path
         if path in ('/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
-                    '/api/v1/favourites'):
+                    '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
@@ -158,26 +160,34 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             try:
                 fields = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
-                expected_fields = (('scope', 'path', 'offset', 'size')
-                                   if path == '/api/v1/children'
-                                   else ('scope', 'path'))
+                if path == '/api/v1/children':
+                    expected_fields = ('scope', 'path', 'offset', 'size')
+                elif path == '/api/v1/search':
+                    expected_fields = ('scope', 'q')
+                else:
+                    expected_fields = ('scope', 'path')
                 if set(fields) != set(expected_fields):
                     raise ValueError('unexpected fields')
                 if any(len(values) != 1 for values in fields.values()):
                     raise ValueError('duplicate fields')
-                raw_path = json.loads(fields['path'][0])
+                if path == '/api/v1/search':
+                    arguments = validate_search_request(
+                        fields['scope'][0], fields['q'][0])
+                    job_kind = 'search'
+                else:
+                    raw_path = json.loads(fields['path'][0])
                 if path == '/api/v1/children':
                     offset = int(fields['offset'][0]) if fields['offset'][0].isdigit() else -1
                     size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
                     arguments = validate_tree_request(fields['scope'][0], raw_path, offset, size)
                     job_kind = 'page'
-                else:
+                elif path == '/api/v1/value' or path == '/api/v1/reveal':
                     scope, path_parts, unused_offset, unused_size = validate_tree_request(
                         fields['scope'][0], raw_path, 0, 1)
                     if not path_parts:
-                        raise ValueError('value needs a path')
+                        raise ValueError('inspection needs a path')
                     arguments = (scope, path_parts)
-                    job_kind = 'value'
+                    job_kind = 'value' if path == '/api/v1/value' else 'reveal'
             except (ValueError, TypeError, KeyError):
                 self._send(400, b'Invalid tree request', origin=origin)
                 return
@@ -342,7 +352,7 @@ class InspectorBridge(object):
         with self.lock:
             if not self.running or len(self.pending_pages) >= 8:
                 return None
-            if kind not in ('page', 'value'):
+            if kind not in ('page', 'value', 'search', 'reveal'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -374,6 +384,10 @@ class InspectorBridge(object):
                 else:
                     if job['kind'] == 'value':
                         result = build_tree_value(self.inspector._providers, *job['args'])
+                    elif job['kind'] == 'search':
+                        result = build_search_results(self.inspector._providers, *job['args'])
+                    elif job['kind'] == 'reveal':
+                        result = build_reveal_chain(self.inspector._providers, *job['args'])
                     else:
                         result = build_tree_page(self.inspector._providers, *job['args'])
                     # Timestamp when the game-thread read actually occurred.
