@@ -10,8 +10,12 @@ import {
 } from '@ant-design/icons';
 import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
-  integrateChildPage, keysOf, mergeRootSnapshot, readBridgeFragment, safeFavourites,
+  integrateChildPage, keysOf, mergeRootSnapshot, readBridgeFragment, refreshWatchedPage,
+  safeFavourites,
 } from './tree.js';
+import {
+  collectWatchedPages, nextWatchBatch, WATCH_INTERVAL_MS,
+} from './watch.js';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
@@ -208,6 +212,8 @@ export default function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [treePages, setTreePages] = useState(null);
   const treePagesRef = useRef(null);
+  const watchJobsRef = useRef([]);
+  const watchCursorRef = useRef(0);
   const loadingRef = useRef(new Set());
   const [loadingPages, setLoadingPages] = useState(new Set());
   const [pageErrors, setPageErrors] = useState({});
@@ -262,7 +268,8 @@ export default function App() {
     return () => { disposed = true; window.clearInterval(timer); };
   }, [token, bridge]);
 
-  const requestPage = useCallback(async (chosenScope, parentKey, offset) => {
+  const requestPage = useCallback(async (chosenScope, parentKey, offset, options = {}) => {
+    const { refresh = false, quiet = false } = options;
     if (!token || !['store', 'persistent'].includes(chosenScope)) return;
     const previous = treePagesRef.current;
     if (!previous) return;
@@ -274,7 +281,7 @@ export default function App() {
     if (!path) return;
     const count = countNodes(previous.scopes?.store) +
       countNodes(previous.scopes?.persistent);
-    if (count >= MAX_CLIENT_TREE_NODES) {
+    if (!refresh && count >= MAX_CLIENT_TREE_NODES) {
       setPageErrors((before) => ({
         ...before, [pageId]: 'Client-side display limit reached',
       }));
@@ -282,7 +289,7 @@ export default function App() {
     }
     loadingRef.current.add(pageId);
     setLoadingPages(new Set(loadingRef.current));
-    setPageErrors((before) => {
+    if (!quiet) setPageErrors((before) => {
       const next = { ...before };
       delete next[pageId];
       return next;
@@ -304,12 +311,14 @@ export default function App() {
       }
       const data = await response.json();
       setTreePages((prior) => {
-        const next = integrateChildPage(prior, data, parentKey);
+        const next = refresh
+          ? refreshWatchedPage(prior, data, parentKey, CHILD_PAGE_SIZE)
+          : integrateChildPage(prior, data, parentKey);
         treePagesRef.current = next;
         return next;
       });
     } catch (reason) {
-      if (treePagesRef.current?.generation === previous.generation) {
+      if (!quiet && treePagesRef.current?.generation === previous.generation) {
         setPageErrors((before) => ({
           ...before, [pageId]: reason.message || 'Page unavailable',
         }));
@@ -319,6 +328,26 @@ export default function App() {
       setLoadingPages(new Set(loadingRef.current));
     }
   }, [bridge, token]);
+
+  // One scheduler for all expanded tree watches and independent favourites.
+  // Never allocate a timer per virtualised row; browser/viewport changes only
+  // change the current watch plan, not the shared scheduler's lifetime.
+  const watchJobs = useMemo(() => collectWatchedPages(
+    treePages, expanded, scope, section, favourites,
+  ), [treePages, expanded, scope, section, favourites]);
+  watchJobsRef.current = watchJobs;
+  useEffect(() => {
+    if (connection !== 'online') return undefined;
+    const timer = window.setInterval(() => {
+      const batch = nextWatchBatch(watchJobsRef.current, watchCursorRef.current);
+      watchCursorRef.current = batch.next;
+      for (const job of batch.jobs) {
+        requestPage(job.scope, job.parentKey, job.offset,
+          { refresh: true, quiet: true });
+      }
+    }, WATCH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [connection, requestPage]);
 
   useEffect(() => { setPageErrors({}); }, [treePages?.generation]);
 

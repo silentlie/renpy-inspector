@@ -92,6 +92,14 @@ export function decodeTreeKey(key) {
 
 function preserveLoadedNode(newer, previous) {
   if (!previous) return newer;
+  // A container can turn into a scalar or disappear between observations.
+  // Keeping its old children would display fictitious state.
+  if (newer.expandable === false ||
+      (newer.state && newer.state !== 'value') ||
+      (previous.type && newer.type && newer.type !== previous.type)) {
+    return { ...newer, children: [], loaded: false, more: false,
+      nextOffset: 0, capped: false };
+  }
   return {
     ...newer,
     children: previous.loaded ? previous.children ?? [] :
@@ -165,6 +173,59 @@ export function integrateChildPage(state, page, parentKey = null) {
   return { ...state, scopes: { ...state.scopes, [scope]: updated } };
 }
 
+
+/** Reconcile a watched page of direct children, preserving deeper loaded trees.
+ * If membership/order changes, drop subsequent offset pages: their positional
+ * cursors may be invalid after insertions/deletions. The scroll sentinel will
+ * fetch the new tail on demand.
+ */
+export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80) {
+  if (!state || page.generation !== state.generation ||
+      !['store', 'persistent'].includes(page.scope) ||
+      !Number.isSafeInteger(page.offset) || page.offset < 0 ||
+      !Array.isArray(page.items) || page.items.length > pageSize) return state;
+  const scope = page.scope;
+  const offset = page.offset;
+  const nextEnd = offset + page.items.length;
+  const replace = (before, metadata) => {
+    if (offset > before.length) return null;
+    const oldSlice = before.slice(offset, offset + pageSize);
+    const keysStable = oldSlice.length >= page.items.length &&
+      page.items.every((item, i) => oldSlice[i].key === item.key) &&
+      (page.items.length === pageSize || !page.more);
+    const nextSlice = page.items.map((item, i) =>
+      preserveLoadedNode(item, oldSlice[i]?.key === item.key ? oldSlice[i] : undefined));
+    if (keysStable) {
+      // Keep already-loaded pages, unless the refreshed final page shrank.
+      const tail = !page.more || page.items.length < pageSize ? [] :
+        before.slice(offset + page.items.length);
+      const next = [...before.slice(0, offset), ...nextSlice, ...tail];
+      const end = tail.length ? Math.max(nextEnd, metadata?.nextOffset ?? 0) : nextEnd;
+      return { nodes: next, meta: { nextOffset: end,
+        more: tail.length ? metadata?.more ?? page.more : page.more,
+        capped: page.capped } };
+    }
+    return { nodes: [...before.slice(0, offset), ...nextSlice],
+      meta: { nextOffset: nextEnd, more: page.more, capped: page.capped } };
+  };
+  if (parentKey === null) {
+    const output = replace(state.scopes?.[scope] ?? [], state.roots?.[scope]);
+    if (!output) return state;
+    return { ...state,
+      scopes: { ...state.scopes, [scope]: output.nodes },
+      roots: { ...state.roots, [scope]: output.meta } };
+  }
+  let changed = false;
+  const updated = updateNode(state.scopes?.[scope] ?? [], parentKey, (node) => {
+    const output = replace(node.children ?? [], node);
+    if (!output) return node;
+    changed = true;
+    return { ...node, children: output.nodes, loaded: true, ...output.meta };
+  });
+  if (!changed) return state;
+  return { ...state, scopes: { ...state.scopes, [scope]: updated } };
+}
+
 /** Synthetic Load More leaves are never game values or favourites. */
 export function asVirtualTreeNodes(nodes, scope, roots, showMore = true) {
   const visit = (items) => (items ?? []).map((node) => {
@@ -204,9 +265,14 @@ export function mergeRootSnapshot(previous, incoming) {
       more: Boolean(initial.more), capped: Boolean(initial.capped),
     };
     if (previous && previous.generation === generation) {
-      scopes[scope] = reconcilePageNodes(previous.scopes?.[scope], next, true);
+      const oldNodes = previous.scopes?.[scope] ?? [];
       const oldMeta = previous.roots?.[scope];
-      roots[scope] = (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset
+      const stablePrefix = next.every((node, i) => oldNodes[i]?.key === node.key);
+      const wholeRoot = !rootMeta.more && !oldMeta?.more;
+      const structuralChange = !stablePrefix ||
+        (wholeRoot && oldNodes.length !== next.length);
+      scopes[scope] = reconcilePageNodes(oldNodes, next, !structuralChange);
+      roots[scope] = !structuralChange && (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset
         ? oldMeta : rootMeta;
     } else {
       scopes[scope] = next;

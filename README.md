@@ -24,9 +24,10 @@ On the first F8 press, the inspector starts its authenticated **127.0.0.1** serv
 - Full-width virtualised tree with **automatic paged loading** on expansion and near the end of scrolled branches. No routine "Load more" click.
 - Popover search (magnifying-glass icon or `/`), on-demand details, and browser-local favourites.
 - Automatic snapshot updates while the game is running. No refresh button or browser footer.
+- **Experimental live watches (PR #10):** a single browser scheduler refreshes expanded branches in the active scope and independently pinned favourites without creating a timer per row.
 - Read-only access: no variable editing, code evaluation, or writes to gameplay saves.
 
-The first snapshot contains only shallow root pages. Expanding a branch fetches up to **80 child nodes per request**; as the virtual tree scrolls close to a page boundary, it requests another page automatically. Bounds remain: **1,000 nodes per branch, eight path levels, 6,000 browser-loaded nodes, eight queued requests and 256 KiB per HTTP response**. This is still not an unrestricted dump of all game state. Search finds already loaded values only. Favourites are stored in the local browser origin and may not survive a port change; a pinned deep path may appear unavailable until its ancestors have been loaded.
+The first snapshot contains only shallow root pages. Expanding a branch fetches up to **80 child nodes per request**; as the virtual tree scrolls close to a page boundary, it requests another page automatically. While a scope is active, the shared watcher polls already-loaded expanded pages and reconciles changed previews; favourites receive independent polling even if the scope is hidden. Structural changes reset affected pagination tails to avoid keeping stale positional cursors. Bounds remain: **1,000 nodes per branch, eight path levels, 6,000 browser-loaded nodes, eight queued requests and 256 KiB per HTTP response**. This is still not an unrestricted dump of all game state. Search finds already loaded values only. Favourites are stored in the local browser origin and may not survive a port change; a pinned deep path may appear unavailable until its ancestors have been loaded.
 
 ## How it works
 

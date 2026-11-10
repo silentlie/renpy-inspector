@@ -42,6 +42,35 @@
   FPS cost, and browser-favourite paths loaded out of order.
 - **Do not merge** until CI plus Ren'Py 7 and 8 real-game tests pass.
 
+## Milestone: PR #10 — SugarCube codex/dev-style live watcher (v0.6.3 experimental)
+
+**Reference:** `silentlie/sugarcube-inspector`, branch `codex/dev`,
+commit `0f533358`: `src/variables/watcher.ts`,
+`src/variables/ui/VariableTree.tsx`,
+`src/variables/nodes.ts`, and `src/variables/favorites.ts`.
+
+- One shared scheduler; no per-node browser interval, no WebSocket dependency.
+- Active Store/Persistent tree scopes own expanded-branch watches; collapsing
+  a parent suspends descendant watches. Hidden scopes are paused.
+- Favourites are independent watches and remain active while another tab is
+  selected, as long as their pages are already present in browser memory.
+- Poll at most two bounded page requests per tick, rotate across up to twelve
+  subscribed pages, and reuse PR #9's read-only Ren'Py game-thread queue.
+- Reconcile stable child keys, update live value previews, reset subsequent
+  positional pages when direct child structure changes, and preserve expanded
+  descendants when safe. Discard updates from stale save/load generations.
+- Keep full-history Compare, persistent cross-port favourites, full-value
+  inspection, editing, locking, and write APIs out of scope.
+
+**Known gap:** A favourite from a branch never loaded in the current session
+cannot yet subscribe by direct path. Live watches sample bounded pages (up to
+twelve) rather than all visible and pinned data simultaneously. Python object
+identity and full change records are not exposed. These require later backend
+work and real-game performance validation.
+
+**Merge order:** PR #9 must pass real-game validation and merge first. PR #10
+is stacked on PR #9 and remains draft until its own CI and interactive tests pass.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
