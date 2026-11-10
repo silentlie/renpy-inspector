@@ -13,7 +13,7 @@ class ExternalUiIntegrationTests(unittest.TestCase):
         self.assertIn('key "K_F8" action Function(renpy_inspector_open_external)', SCREEN)
         self.assertIn('renpy_inspector.bridge.launch_or_open()', INIT)
         self.assertIn('if renpy_inspector.bridge.running:', SCREEN)
-        self.assertIn('Function(renpy_inspector.bridge.publish, _update_screens=False)', SCREEN)
+        self.assertIn('Function(renpy_inspector.bridge.tick, _update_screens=False)', SCREEN)
         self.assertNotIn('renpy_inspector_drawer', SCREEN)
         self.assertNotIn('textbutton', SCREEN)
 

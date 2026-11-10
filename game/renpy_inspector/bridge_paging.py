@@ -13,7 +13,7 @@ from .inspection import MISSING, child_descriptors, read_child, snapshot
 from .bridge_snapshot import _safe_text
 
 MAX_BRANCH = 1000
-PAGE_SIZE = 60
+PAGE_SIZE = 80
 MAX_DEPTH = 8
 
 
@@ -96,10 +96,12 @@ def build_tree_page(providers, scope, path, offset, size):
             'children': [],
         })
     next_offset = offset + len(items)
+    more = next_offset < MAX_BRANCH and (next_offset < len(visible) or truncated)
+    capped = next_offset >= MAX_BRANCH and truncated
     return {
-        'protocol': 2, 'scope': scope,
+        'protocol': 1, 'scope': scope,
         'parent': json.dumps([scope, path], ensure_ascii=True, separators=(',', ':')),
         'offset': offset, 'next_offset': next_offset,
-        'more': next_offset < len(visible), 'capped': bool(truncated),
+        'more': bool(more), 'capped': bool(capped),
         'items': items,
     }

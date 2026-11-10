@@ -10,7 +10,6 @@ import binascii
 import mimetypes
 import os
 import threading
-import time
 import webbrowser
 import json
 
@@ -24,7 +23,7 @@ except ImportError:
     from urllib.parse import urlsplit, parse_qs
 
 from .bridge_snapshot import PROTOCOL, build_snapshot, encode_snapshot
-from .bridge_paging import build_tree_page, validate_tree_request, PAGE_SIZE
+from .bridge_paging import build_tree_page, validate_tree_request
 from .compat import monotonic_time
 
 LOOPBACK = '127.0.0.1'
@@ -126,7 +125,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(503, b'Game interaction paused; retry', origin=origin)
                 return
             status, response = job['response']
-            self._send(status, encode_snapshot(response),
+            self._send(status, response,
                        'application/json; charset=utf-8', origin=origin)
             return
         if path == '/':
@@ -168,7 +167,7 @@ class InspectorBridge(object):
         self.generation = 0
         self.pending_pages = []
         self.last_publish = 0.0
-        self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'captured_at': None,
+        self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'generation': 0, 'captured_at': None,
                                              'scopes': {'store': [], 'persistent': []},
                                              'counts': {}, 'truncated': {}, 'game': {}})
 
@@ -263,7 +262,7 @@ class InspectorBridge(object):
             queued, self.pending_pages = self.pending_pages, []
             for job in queued:
                 job['cancelled'] = True
-                job['response'] = (409, {'error': 'Game state changed'})
+                job['response'] = (409, encode_snapshot({'error': 'Game state changed'}))
                 job['event'].set()
 
     def enqueue_tree_page(self, arguments):
@@ -310,7 +309,11 @@ class InspectorBridge(object):
                     status, result = 409, {'error': 'Game state changed'}
                 if not job['cancelled']:
                     result['generation'] = self.generation
-                    job['response'] = (status, result)
+                    try:
+                        data = encode_snapshot(result)
+                    except (ValueError, TypeError):
+                        status, data = 413, encode_snapshot({'error': 'Page too large'})
+                    job['response'] = (status, data)
                     job['event'].set()
         if monotonic_time() - self.last_publish >= 1.5:
             self.publish()
@@ -322,8 +325,8 @@ class InspectorBridge(object):
             queued, self.pending_pages = self.pending_pages, []
             for job in queued:
                 job['cancelled'] = True
-                job['response'] = (409, {'error': 'Game state changed',
-                                          'generation': self.generation})
+                job['response'] = (409, encode_snapshot({'error': 'Game state changed',
+                                          'generation': self.generation}))
                 job['event'].set()
             self.cached_bytes = encode_snapshot({
                 'protocol': PROTOCOL, 'generation': self.generation,
