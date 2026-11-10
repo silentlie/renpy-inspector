@@ -81,3 +81,13 @@ test('tree descendants and variable labels cannot widen the page', () => {
   assert.match(css, /\.variable-type \{[^\n]*text-overflow: ellipsis/);
   assert.match(css, /\.variable-row \{[^\n]*max-width: 100%/);
 });
+
+
+test('SugarCube-style subscriptions use one bounded shared scheduler', () => {
+  assert.match(jsx, /collectWatchedPages/);
+  assert.match(jsx, /nextWatchBatch/);
+  assert.match(jsx, /WATCH_INTERVAL_MS/);
+  assert.match(jsx, /window\.setInterval\(\(\) => \{/);
+  assert.match(jsx, /refreshWatchedPage\(prior, data, parentKey/);
+  assert.doesNotMatch(jsx, /<WebSocket|new WebSocket|EventSource/);
+});
