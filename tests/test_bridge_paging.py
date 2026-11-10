@@ -172,5 +172,81 @@ class QueueTests(unittest.TestCase):
         self.bridge.cancel_all_tree_pages()
 
 
+
+
+class DirectFavouritesTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.store = ModuleType('store')
+        self.store.deep = {'nested': {'score': 32}}
+        self.store.hidden_value = 90
+        self.store.self_reference = []
+        self.store.self_reference.append(self.store.self_reference)
+        self.providers = {'store': lambda: self.store, 'persistent': lambda: {}}
+
+    def test_value_resolves_without_loading_ancestors_in_browser(self):
+        from renpy_inspector.bridge_paging import build_tree_value
+        node = build_tree_value(self.providers, 'store', (
+            ('attribute', 'deep'), ('key', 'nested'), ('key', 'score')))['node']
+        self.assertEqual(node['preview'], '32')
+        self.assertEqual(node['state'], 'value')
+        self.store.deep = {'nested': {'score': 71}}
+        refreshed = build_tree_value(self.providers, 'store', (
+            ('attribute', 'deep'), ('key', 'nested'), ('key', 'score')))['node']
+        self.assertEqual(refreshed['preview'], '71')
+
+    def test_unavailable_and_recovered_value(self):
+        from renpy_inspector.bridge_paging import build_tree_value
+        path = (('attribute', 'deep'), ('key', 'nested'), ('key', 'score'))
+        del self.store.deep['nested']['score']
+        missing = build_tree_value(self.providers, 'store', path)['node']
+        self.assertEqual(missing['state'], 'missing')
+        self.store.deep['nested']['score'] = 3
+        self.assertEqual(build_tree_value(self.providers, 'store', path)['node']['preview'], '3')
+
+    def test_private_and_cycle_paths_cannot_be_traversed(self):
+        from renpy_inspector.bridge_paging import build_tree_value
+        with self.assertRaises(ValueError):
+            build_tree_value(self.providers, 'store', (('attribute', '__class__'),))
+        result = build_tree_value(self.providers, 'store',
+                                  (('attribute', 'self_reference'), ('index', 0)))
+        self.assertEqual(result['node']['state'], 'cycle')
+
+
+class BrowserPreferencesTests(unittest.TestCase):
+    def setUp(self):
+        from renpy_inspector.browser_favourites import BrowserFavouritesStore
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.store = BrowserFavouritesStore(self.folder.name)
+        self.sample = {'scope': 'store',
+            'key': json.dumps(['store', [['attribute', 'deep'], ['key', 'score']]])}
+
+    def test_persists_across_sessions_and_clear(self):
+        from renpy_inspector.browser_favourites import BrowserFavouritesStore
+        self.assertFalse(self.store.load()['initialized'])
+        self.store.save([self.sample])
+        other = BrowserFavouritesStore(self.folder.name)
+        self.assertTrue(other.load()['initialized'])
+        self.assertEqual(len(other.load()['favourites']), 1)
+        other.save([])
+        self.assertEqual(self.store.load()['favourites'], [])
+        self.assertTrue(self.store.load()['initialized'])
+
+    def test_rejects_traversal_bad_scope_and_oversized_input(self):
+        from renpy_inspector.browser_favourites import validate_favourites
+        bad = [
+            {'scope':'store','key':json.dumps(['store',[['attribute','__dict__']]])},
+            {'scope':'persistent','key':self.sample['key']},
+            {'scope':'store','key':json.dumps(['store',[]])},
+            {'scope':'store','key':json.dumps(['store',[['index',True]]])},
+        ]
+        for item in bad:
+            with self.subTest(item=item), self.assertRaises(ValueError):
+                validate_favourites([item])
+        with self.assertRaises(ValueError):
+            validate_favourites([self.sample]*101)
+
 if __name__ == '__main__':
     unittest.main()
