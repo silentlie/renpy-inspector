@@ -56,3 +56,37 @@ Browser pins persist across localhost port changes in `renpy-inspector-browser-f
 Safety: at most 100 favourites, 8 typed path segments, 1,000 enumerated members per path component, 64 KiB preference file, 4 KiB GET URL and a bounded queue. These limits can cause a valid-but-beyond-limit game variable to report missing; they are intentional rather than a reason to enable expression evaluation. Save/load generations reject stale responses.
 
 Test in-game: pin a deep value, collapse all ancestors, switch to Overview and change the variable, then return to Favourites. Restart the game, reopen the browser on a different port and confirm pins survive. Remove an object and recreate it; the watch should move from Missing to its new value. Check a read-only save directory and unauthenticated/preflight requests.
+
+
+## PR #12: Compare and browser-session history
+
+The read-only Ren'Py Inspector Compare workspace adapts SugarCube's
+`comparison.ts`, `VariableComparison.tsx` and `FavoriteHistory.tsx` patterns
+without direct JavaScript references into the game. The current browser
+retains at most 100 transitions in memory. History is not saved to Ren'Py
+gameplay saves, the inspector preferences file or localhost storage.
+
+The existing game-thread bridge now includes `captured_at` on
+`GET /api/v1/children` and `GET /api/v1/value` responses. The frontend
+compares those observations against the shallow root snapshot and previously
+observed values at the same typed path. Samples arriving out of order are
+ignored. Partial page boundaries are not mistaken for additions/removals.
+Missing/recovered direct favourites and complete sampled parent pages can
+supply meaningful added/removed events.
+
+The new fourth scope tab is **Compare**. It shows a compact, scrollable
+list with current observed value previews, type-aware state, detection time,
+available Ren'Py script file/line, and an action to inspect the path's
+latest value. The details drawer also shows up to twenty recent events
+for the selected path. Switching to Compare retains watchers for the last
+selected Store/Persistent scope, alongside independent favourites.
+
+**Interpretation:** Values are bounded previews, not full Python objects.
+Long strings, unrecognised types and inaccessible reads are not recorded as
+exact primitive changes. A change's file/line describes the latest known
+runtime context, not proven causation. Only sampled variables can appear.
+An in-game value can change and change back between samples without being
+observed. Save/load generation changes clear history automatically; rollback
+that doesn't invalidate the bridge can appear as a normal change. The
+browser's clear button discards events but keeps current baselines so
+unchanged values do not reappear as new changes.

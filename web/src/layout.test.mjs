@@ -101,3 +101,27 @@ test('browser preferences use authenticated inspector-only storage', () => {
   assert.match(jsx, /combineScopedWatches/);
   assert.match(jsx, /Favourite storage/);
 });
+
+
+test('Compare lives in the existing second tab row without shrinking the virtual tree', () => {
+  assert.match(jsx, /key: 'compare', label: \`Compare/);
+  assert.match(jsx, /scope === 'compare'/);
+  assert.match(jsx, /<ComparePane changes=\{changes\}/);
+  assert.match(jsx, /<VariablePane scope=\{scope\}/);
+  assert.match(css, /\.compare-workspace \{ display:flex; flex:1 1 auto;/);
+  assert.doesNotMatch(jsx, /new WebSocket|EventSource|Save gameplay/);
+});
+
+test('changes are derived from the existing shallow root, page and favourite samples', () => {
+  assert.match(jsx, /trackerRef\.current\.observePage/);
+  assert.match(jsx, /trackerRef\.current\.observeValue/);
+  assert.match(jsx, /trackerRef\.current\.beginGeneration/);
+  assert.match(jsx, /requestFavouriteValue/);
+  assert.match(jsx, /clearHistory/);
+  assert.match(jsx, /selectedHistory/);
+});
+
+test('Compare continues observing last selected variable scope', () => {
+  assert.match(jsx, /lastTreeScope/);
+  assert.match(jsx, /scope === 'compare' \? lastTreeScope : scope/);
+});

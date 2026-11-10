@@ -16,6 +16,7 @@ import {
 import {
   collectWatchedPages, combineScopedWatches, nextWatchBatch, WATCH_INTERVAL_MS,
 } from './watch.js';
+import { createChangeTracker, comparisonText } from './comparison.js';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
@@ -206,6 +207,46 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
   </section>;
 }
 
+/** History has its own workspace; it never consumes height in the tree tab. */
+function ComparePane({ changes, onClear, onInspect }) {
+  return <section className="compare-workspace" aria-label="Variable change comparison">
+    <div className="compare-toolbar">
+      <Text type="secondary" className="compare-description">
+        Read-only observed primitive previews · last 100 changes in this browser session.
+        Only sampled paths are compared. Save/load resets the history.
+      </Text>
+      <Button size="small" disabled={!changes.length} onClick={onClear}>Clear history</Button>
+    </div>
+    <div className="compare-list" role="region" aria-label="Observed variable changes">
+      {changes.length ? changes.map((change) =>
+        <article className="compare-entry" key={change.id}>
+          <div className="compare-entry-title">
+            <Text className="compare-path" title={change.path}>{change.path}</Text>
+            <Tag color={change.kind === 'added' ? 'green' :
+              change.kind === 'removed' ? 'volcano' : 'blue'}>{change.kind}</Tag>
+          </div>
+          <div className="compare-context">
+            <Text type="secondary">
+              {new Date(change.capturedAt * 1000).toLocaleTimeString()}
+              {change.context.filename ? ' · ' + change.context.filename : ''}
+              {change.context.line !== null ? ':' + change.context.line : ''}
+            </Text>
+          </div>
+          <div className="compare-values">
+            <div><Text type="secondary">Before</Text>
+              <code>{comparisonText(change.before)}</code></div>
+            <div><Text type="secondary">After</Text>
+              <code>{comparisonText(change.after)}</code></div>
+          </div>
+          <Button type="link" size="small" className="compare-inspect"
+            onClick={() => onInspect(change)}>Inspect variable</Button>
+        </article>) :
+        <Empty className="compare-empty"
+          description="No sampled changes yet. Expand branches or pin values to watch them." />}
+    </div>
+  </section>;
+}
+
 export default function App() {
   const [token] = useState(initialConnection.token);
   const [bridge] = useState(initialConnection.bridge || window.location.origin);
@@ -221,6 +262,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [section, setSection] = useState('variables');
   const [scope, setScope] = useState('store');
+  const [lastTreeScope, setLastTreeScope] = useState('store');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef(null);
@@ -232,6 +274,12 @@ export default function App() {
   const preferenceWritesRef = useRef(Promise.resolve());
   const [watchValues, setWatchValues] = useState({});
   const valueLoadingRef = useRef(new Set());
+  const trackerRef = useRef(createChangeTracker());
+  const gameContextRef = useRef({});
+  const [changes, setChanges] = useState([]);
+  const publishChanges = useCallback(() => {
+    setChanges(trackerRef.current.getChanges());
+  }, []);
   const requestCounter = useRef(0);
 
   useEffect(() => {
@@ -302,6 +350,20 @@ export default function App() {
         const data = await response.json();
         if (!data || data.protocol !== 1 || !data.scopes) throw new Error('Unsupported bridge protocol');
         if (!disposed && id === requestCounter.current) {
+          gameContextRef.current = data.game ?? {};
+          trackerRef.current.beginGeneration(data.generation);
+          if (Number.isFinite(data.captured_at)) {
+            for (const observedScope of ['store', 'persistent']) {
+              trackerRef.current.observePage({
+                scope: observedScope, parentKey: null, offset: 0,
+                items: data.scopes[observedScope] ?? [],
+                more: Boolean(data.root_pages?.[observedScope]?.more),
+                generation: data.generation, capturedAt: data.captured_at,
+                game: gameContextRef.current,
+              });
+            }
+          }
+          publishChanges();
           setSnapshot(data);
           setTreePages((prior) => {
             const next = mergeRootSnapshot(prior, data);
@@ -319,7 +381,7 @@ export default function App() {
     poll();
     const timer = window.setInterval(poll, SNAPSHOT_REFRESH_MS);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, [token, bridge]);
+  }, [token, bridge, publishChanges]);
 
   const requestPage = useCallback(async (chosenScope, parentKey, offset, options = {}) => {
     const { refresh = false, quiet = false } = options;
@@ -363,6 +425,15 @@ export default function App() {
           'Page fetch HTTP ' + response.status);
       }
       const data = await response.json();
+      if (data.generation === previous.generation &&
+          data.generation === treePagesRef.current?.generation) {
+        trackerRef.current.observePage({
+          scope: chosenScope, parentKey, offset, items: data.items,
+          more: Boolean(data.more), generation: data.generation,
+          capturedAt: data.captured_at, game: gameContextRef.current,
+        });
+        publishChanges();
+      }
       setTreePages((prior) => {
         const next = refresh
           ? refreshWatchedPage(prior, data, parentKey, CHILD_PAGE_SIZE)
@@ -380,7 +451,7 @@ export default function App() {
       loadingRef.current.delete(pageId);
       setLoadingPages(new Set(loadingRef.current));
     }
-  }, [bridge, token]);
+  }, [bridge, token, publishChanges]);
 
   const requestFavouriteValue = useCallback(async (job) => {
     if (!token || !job || valueLoadingRef.current.has(job.key)) return;
@@ -402,6 +473,11 @@ export default function App() {
       if (result.generation !== treePagesRef.current?.generation ||
           expectedGeneration !== result.generation ||
           result.node?.key !== job.key) return;
+      trackerRef.current.observeValue({
+        scope: job.scope, node: result.node, generation: result.generation,
+        capturedAt: result.captured_at, game: gameContextRef.current,
+      });
+      publishChanges();
       setWatchValues((old) => {
         const before = old[job.key];
         const node = result.node;
@@ -411,15 +487,16 @@ export default function App() {
       });
     } catch { /* A missing/paused game watch retries on the next scheduler turn. */ }
     finally { valueLoadingRef.current.delete(job.key); }
-  }, [bridge, token]);
+  }, [bridge, token, publishChanges]);
 
   // One scheduler for all expanded tree watches and independent favourites.
   // Never allocate a timer per virtualised row; browser/viewport changes only
   // change the current watch plan, not the shared scheduler's lifetime.
   const watchJobs = useMemo(() => combineScopedWatches(
-    collectWatchedPages(treePages, expanded, scope, section, favourites),
+    collectWatchedPages(treePages, expanded,
+      scope === 'compare' ? lastTreeScope : scope, section, favourites),
     favourites,
-  ), [treePages, expanded, scope, section, favourites]);
+  ), [treePages, expanded, scope, lastTreeScope, section, favourites]);
   watchJobsRef.current = watchJobs;
   useEffect(() => {
     if (connection !== 'online') return undefined;
@@ -454,10 +531,20 @@ export default function App() {
   const activeNode = useMemo(() => {
     if (!selected) return null;
     const captured = flatten(treePages?.scopes?.[selected.scope] ?? []).get(selected.key);
-    return (favourites.some((item) => item.key === selected.key) &&
-      watchValues[selected.key]) || captured || null;
-  }, [treePages, selected, watchValues, favourites]);
+    return watchValues[selected.key] || captured || null;
+  }, [treePages, selected, watchValues]);
   const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
+  const selectedHistory = selected ? changes.filter((entry) => entry.key === selected.key).slice(0, 20) : [];
+  const inspectChange = useCallback((change) => {
+    const parsed = decodeTreeKey(change.key);
+    if (!parsed || parsed.scope !== change.scope) return;
+    setSelected({ scope: change.scope, key: change.key });
+    requestFavouriteValue({ scope: change.scope, key: change.key });
+  }, [requestFavouriteValue]);
+  const clearHistory = useCallback(() => {
+    trackerRef.current.clear();
+    publishChanges();
+  }, [publishChanges]);
   const activeGame = snapshot?.game ?? {};
   const online = connection === 'online';
   useEffect(() => {
@@ -487,7 +574,11 @@ export default function App() {
         items={[{ key: 'overview', label: 'Overview' }, { key: 'variables', label: 'Variables' }, { key: 'scripts', label: 'Scripts' }]} />
       <main className="inspector-main">
         {section === 'variables' && <div className="variables-workspace">
-          <Tabs className="variable-scope-tabs" activeKey={scope} onChange={setScope}
+          <Tabs className="variable-scope-tabs" activeKey={scope}
+            onChange={(next) => {
+              if (next === 'store' || next === 'persistent') setLastTreeScope(next);
+              setScope(next);
+            }}
             tabBarExtraContent={<Popover placement="bottomRight" trigger="click" open={searchOpen}
               onOpenChange={setSearchOpen}
               content={<div className="search-popover" role="search">
@@ -511,12 +602,15 @@ export default function App() {
               </Tooltip>
             </Popover>}
             items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
-              { key: 'favourites', label: `Favourites (${favourites.length})` }]} />
-          <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
-            query={query} favourites={favourites}
-            selected={selected} onSelect={selectNode} onFavourite={pinVariable}
-            expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
-            loadingPages={loadingPages} pageErrors={pageErrors} />
+              { key: 'favourites', label: `Favourites (${favourites.length})` },
+              { key: 'compare', label: `Compare (${changes.length})` }]} />
+          {scope === 'compare'
+            ? <ComparePane changes={changes} onClear={clearHistory} onInspect={inspectChange} />
+            : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
+                query={query} favourites={favourites}
+                selected={selected} onSelect={selectNode} onFavourite={pinVariable}
+                expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
+                loadingPages={loadingPages} pageErrors={pageErrors} />}
         </div>}
         {section === 'overview' && <section className="info-page" aria-label="Runtime overview">
           <Text className="eyebrow">RUNTIME STATUS</Text>
@@ -530,7 +624,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.1 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.5 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -543,6 +637,8 @@ export default function App() {
               { key: 'preferences', label: 'Favourite storage', children: preferencesStatus },
               { key: 'watches', label: 'Favourites', children:
                 'Independent path watches · read-only values · persisted inspector settings' },
+              { key: 'compare', label: 'Compare', children:
+                'Last 100 observed preview changes · session-only · resets after game load' },
               { key: 'budget', label: 'Capture limits', children:
                 '80 per page · up to 1,000 per branch · 8 levels · 6,000 loaded nodes per browser' },
               { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?
@@ -585,9 +681,21 @@ export default function App() {
           </div>
           <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
           {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
+          <div className="detail-history">
+            <div className="detail-history-header">
+              <Text strong>Observed history</Text>
+              <Text type="secondary">{selectedHistory.length} recent changes</Text>
+            </div>
+            {selectedHistory.length ? selectedHistory.map((change) =>
+              <div key={change.id} className="detail-history-entry">
+                <Text type="secondary">{new Date(change.capturedAt * 1000).toLocaleTimeString()} · {change.kind}</Text>
+                <code>{comparisonText(change.before)} → {comparisonText(change.after)}</code>
+              </div>) :
+              <Text type="secondary">No sampled changes for this variable yet.</Text>}
+          </div>
           <Paragraph type="secondary" className="detail-disclaimer">
-            This is a bounded, read-only snapshot preview. Expand branches and scroll to request additional pages.
-            Full string values and unrestricted Python objects are not exposed.
+            This is a bounded, read-only snapshot preview. Compare records sampled
+            previews, not complete values. Expand branches and scroll to request more pages.
           </Paragraph>
         </>}
       </Drawer>

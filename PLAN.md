@@ -83,6 +83,39 @@ is stacked on PR #9 and remains draft until its own CI and interactive tests pas
 
 **Next:** capture bounded primitive change history and a Compare workspace after favourites are reliably sourced.
 
+## Milestone: PR #12 — Change History and Compare (v0.6.5 experimental)
+
+Reference: `silentlie/sugarcube-inspector`, branch `codex/dev`,
+`src/variables/comparison.ts`, `src/variables/ui/VariableComparison.tsx` and
+`src/variables/ui/FavoriteHistory.tsx` at commit `0f533358`.
+
+- Observe existing shallow root snapshots, expanded-branch page polls and
+  independently watched favourites; never inspect Ren'Py objects from HTTP
+  workers and do not introduce a WebSocket dependency.
+- Timestamp page/value observations on the game interaction thread. The browser
+  ignores delayed older samples and deduplicates overlapping observations
+  by stable typed variable path and sampled preview.
+- Record the most recent 100 *observed primitive-preview transitions* in browser
+  memory only. Track changes, added and removed variables where a complete
+  parent sample or a direct path watch supports the conclusion.
+- Reuse the second tab row for a full-height **Compare** workspace with change
+  kind, before/after previews, capture timestamp, available script location and
+  inspect-current-variable action. Add recent history in the details drawer.
+- Retain the last selected Store/Persistent scope's watches while Compare
+  is active; independent favourites are always watched.
+- Clear comparison history and baselines on game load generation changes,
+  and offer manual **Clear history** without resetting reliable baselines.
+- Test deduplication, bounded retention, partial-page shifts, save/load epochs,
+  long/truncated previews, and no history writes to gameplay saves.
+
+**Limitations:** This is sampled polling, not full mutation tracking or a
+transaction log. Ren'Py does not expose SugarCube's turns/passages; file/line
+reflect only runtime metadata where available and are not necessarily the
+cause of a change. Strings may be clipped, so Compare explicitly labels them
+as previews. Rollback that does not advance the load generation may look like
+a regular value transition. Real-game Ren'Py 7/8 interaction and FPS testing
+remain required before merging.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

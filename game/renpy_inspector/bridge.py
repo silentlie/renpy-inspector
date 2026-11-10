@@ -10,6 +10,7 @@ import binascii
 import mimetypes
 import os
 import threading
+import time
 import webbrowser
 import json
 
@@ -375,6 +376,9 @@ class InspectorBridge(object):
                         result = build_tree_value(self.inspector._providers, *job['args'])
                     else:
                         result = build_tree_page(self.inspector._providers, *job['args'])
+                    # Timestamp when the game-thread read actually occurred.
+                    # Clients use this to discard delayed overlapping samples.
+                    result['captured_at'] = time.time()
                     status = 200
             except (ValueError, KeyError, TypeError):
                 status, result = 404, {'error': 'Tree path unavailable'}
