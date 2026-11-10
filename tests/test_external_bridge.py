@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -169,6 +170,31 @@ class HttpBridgeTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as error:
             self.req('/api/v1/snapshot', previous)
         self.assertEqual(error.exception.code, 401)
+
+    def test_f8_launch_start_once_then_open_same_local_server(self):
+        with patch('renpy_inspector.bridge.webbrowser.open', return_value=True) as opened:
+            self.assertTrue(self.bridge.launch_or_open())
+            first = self.bridge.url
+            token = self.bridge.token
+            self.assertTrue(self.bridge.launch_or_open())
+            self.assertEqual(self.bridge.url, first)
+            self.assertEqual(self.bridge.token, token)
+            self.assertEqual(opened.call_count, 2)
+            opened.assert_called_with(first, new=1)
+
+    def test_f8_launch_reports_missing_assets_without_opening_browser(self):
+        self.bridge.stop()
+        os.remove(os.path.join(self.ui_dir, 'index.html'))
+        with patch('renpy_inspector.bridge.webbrowser.open') as opened:
+            self.assertFalse(self.bridge.launch_or_open())
+            opened.assert_not_called()
+        self.assertIn('index.html', self.bridge.error)
+
+    def test_f8_launch_reports_browser_failures(self):
+        with patch('renpy_inspector.bridge.webbrowser.open', return_value=False):
+            self.assertFalse(self.bridge.launch_or_open())
+        self.assertTrue(self.bridge.running)
+        self.assertIn('Could not open browser', self.bridge.error)
 
     def test_snapshot_failure_invalidates_stale_values(self):
         self.inspector._providers['store'] = lambda: self.store
