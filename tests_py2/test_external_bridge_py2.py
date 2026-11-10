@@ -18,6 +18,7 @@ from renpy_inspector.bridge_paging import build_tree_page, build_lazy_snapshot, 
 from renpy_inspector.controller import Inspector
 from renpy_inspector.bridge_paging import build_tree_value
 from renpy_inspector.browser_favourites import BrowserFavouritesStore
+from renpy_inspector.bridge_search import build_search_results, build_reveal_chain, validate_search_request
 
 
 class BridgePy2Tests(unittest.TestCase):
@@ -67,6 +68,20 @@ class BridgePy2Tests(unittest.TestCase):
             self.assertEqual(len(BrowserFavouritesStore(folder).load()['favourites']), 1)
         finally:
             shutil.rmtree(folder)
+
+    def test_search_and_reveal_work_on_python_2(self):
+        root = ModuleType(str('store'))
+        root.player = {'stats': {'hp': 42}}
+        for index in range(105):
+            setattr(root, 'field_{:03d}'.format(index), index)
+        providers = {'store': lambda: root, 'persistent': lambda: {}}
+        results = build_search_results(providers, 'store', 'field_100')
+        self.assertTrue(results['results'])
+        chain = build_reveal_chain(providers, 'store',
+            (('attribute', 'player'), ('key', 'stats'), ('key', 'hp')))
+        self.assertEqual(chain['chain'][-1]['preview'], '42')
+        with self.assertRaises(ValueError):
+            validate_search_request('store', '__\nimport__')
 
     def test_service_starts_and_stops_without_game(self):
         folder = tempfile.mkdtemp(prefix='bridge-py2-')
