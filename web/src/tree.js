@@ -202,8 +202,16 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
   const offset = page.offset;
   const nextEnd = offset + page.items.length;
   const replace = (before, metadata) => {
-    if (offset > before.length) return null;
-    const oldSlice = before.slice(offset, offset + pageSize);
+    // Search-revealed off-page breadcrumbs are outside the sequential
+    // pagination range. Never misidentify them as offset-page members.
+    const revealed = before.filter((node) => node.isRevealed);
+    const sequential = before.filter((node) => !node.isRevealed);
+    if (offset > sequential.length) return null;
+    const oldSlice = sequential.slice(offset, offset + pageSize);
+    const keepRevealed = (loaded) => {
+      const seen = new Set(loaded.map((node) => node.key));
+      return [...loaded, ...revealed.filter((node) => !seen.has(node.key))];
+    };
     const keysStable = oldSlice.length >= page.items.length &&
       page.items.every((item, i) => oldSlice[i].key === item.key) &&
       (page.items.length === pageSize || !page.more);
@@ -212,14 +220,14 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
     if (keysStable) {
       // Keep already-loaded pages, unless the refreshed final page shrank.
       const tail = !page.more || page.items.length < pageSize ? [] :
-        before.slice(offset + page.items.length);
-      const next = [...before.slice(0, offset), ...nextSlice, ...tail];
+        sequential.slice(offset + page.items.length);
+      const next = keepRevealed([...sequential.slice(0, offset), ...nextSlice, ...tail]);
       const end = tail.length ? Math.max(nextEnd, metadata?.nextOffset ?? 0) : nextEnd;
       return { nodes: next, meta: { nextOffset: end,
         more: tail.length ? metadata?.more ?? page.more : page.more,
         capped: page.capped } };
     }
-    return { nodes: [...before.slice(0, offset), ...nextSlice],
+    return { nodes: keepRevealed([...sequential.slice(0, offset), ...nextSlice]),
       meta: { nextOffset: nextEnd, more: page.more, capped: page.capped } };
   };
   if (parentKey === null) {
@@ -323,7 +331,7 @@ export function integrateRevealChain(state, response) {
     const index = current.findIndex((entry) => entry.key === item.key);
     const previous = index >= 0 ? current[index] : null;
     const merged = previous ? preserveLoadedNode(item, previous) :
-      { ...item, children: [], loaded: false };
+      { ...item, children: [], loaded: false, isRevealed: true };
     const next = depth < response.chain.length - 1
       ? { ...merged, children: weave(merged.children, depth + 1) }
       : merged;

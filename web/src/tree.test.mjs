@@ -293,3 +293,39 @@ test('reveal does not overwrite an already expanded branch on a second lookup', 
   assert.equal(result.scopes.store[0].nextOffset,80);
   assert.equal(result.scopes.store[0].loaded,true);
 });
+
+
+import { mergeRootSnapshot, refreshWatchedPage } from './tree.js';
+
+test('off-page search reveal survives root snapshots and watched pagination', () => {
+  const key=(steps)=>JSON.stringify(['store',steps]);
+  const first=Array.from({length:80},(_,i)=>({
+    key:key([['attribute','field_'+String(i).padStart(3,'0')]]),
+    type:'int',state:'value',name:'field',expandable:false,children:[],
+  }));
+  const root={generation:1,scopes:{store:first,persistent:[]},
+    roots:{store:{nextOffset:80,more:true,capped:false}}};
+  const target={key:key([['attribute','field_900']]),name:'field_900',type:'int',
+    state:'value',preview:'900',expandable:false,children:[]};
+  const revealed=integrateRevealChain(root,{
+    generation:1,scope:'store',key:target.key,chain:[target],
+  });
+  assert.equal(revealed.scopes.store.length,81);
+  assert.equal(revealed.scopes.store[80].isRevealed,true);
+  const fresh=mergeRootSnapshot(revealed,{
+    generation:1,scopes:{store:first,persistent:[]},
+    root_pages:{store:{next_offset:80,more:true},persistent:{next_offset:0,more:false}},
+  });
+  assert.equal(fresh.scopes.store.length,81);
+  const page80=Array.from({length:80},(_,i)=>({
+    key:key([['attribute','field_'+String(i+80).padStart(3,'0')]]),
+    type:'int',state:'value',expandable:false,children:[],
+  }));
+  const updated=refreshWatchedPage(fresh,{
+    generation:1,scope:'store',offset:80,items:page80,
+    next_offset:160,more:true,capped:false,
+  });
+  assert.equal(updated.scopes.store.length,161);
+  assert.equal(updated.scopes.store[160].key,target.key);
+  assert.equal(updated.roots.store.nextOffset,160);
+});
