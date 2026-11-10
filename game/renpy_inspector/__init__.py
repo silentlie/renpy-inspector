@@ -6,7 +6,7 @@ from .runtime import collect_context
 from .bridge import InspectorBridge
 
 inspector = Inspector()
-# The external service is dormant until explicitly started from Settings.
+# The external service remains dormant until the first F8 press.
 bridge = InspectorBridge(inspector)
 
 

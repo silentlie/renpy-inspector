@@ -1,231 +1,336 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Card, ConfigProvider, Descriptions, Divider, Empty, Input, Layout,
-  Segmented, Space, Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
+  Button, Card, ConfigProvider, Descriptions, Drawer, Empty, Input, Popover,
+  Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
 } from 'antd';
 import {
-  ApartmentOutlined, CheckCircleFilled, DisconnectOutlined, ReloadOutlined,
-  SearchOutlined, StarFilled, StarOutlined, ThunderboltOutlined,
+  CheckCircleFilled, CopyOutlined, DisconnectOutlined,
+  EyeOutlined, RightOutlined, DownOutlined, SearchOutlined,
+  StarFilled, StarOutlined,
 } from '@ant-design/icons';
-import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites } from './tree.js';
+import {
+  flatten, filteredTree, favouriteNodes, keysOf, readBridgeFragment, safeFavourites,
+} from './tree.js';
 
-const { Header } = Layout;
 const { Text, Title, Paragraph } = Typography;
-const rootParams = readBridgeFragment(window.location.hash);
-const storeKey = 'renpy-inspector-ant-favourites-v1';
-const initialFavourites = (() => {
-  try { return safeFavourites(JSON.parse(localStorage.getItem(storeKey) ?? '[]')); }
-  catch { return []; }
-})();
+const initialConnection = readBridgeFragment(window.location.hash);
+const FAVORITES_KEY = 'renpy-inspector-ant-favourites-v1';
+const SNAPSHOT_REFRESH_MS = 1250;
+const SCOPES = [{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' }];
 
-function computeTreeHeight() {
-  // Do not let a very tall, narrow browser produce a thousand-pixel tree.
-  // The inspector details are stacked below the tree on narrow windows.
-  if (window.innerWidth <= 960) {
-    return Math.max(240, Math.min(460, Math.round(window.innerHeight * 0.46)));
-  }
-  return Math.max(300, Math.min(760, window.innerHeight - 330));
+function loadLocalFavourites() {
+  try { return safeFavourites(JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]')); }
+  catch { return []; }
 }
 
-function formatTime(epoch) {
+function captureTime(epoch) {
   if (!epoch) return 'Waiting for game snapshot';
   return new Date(epoch * 1000).toLocaleTimeString();
 }
 
-function NodeTitle({ node, isFavourite }) {
-  return <span className="tree-item-title">
-    <span className="tree-name">{node.name}</span>
-    <span className="tree-meta"><span className="tree-type">{node.type}</span> · {node.preview}</span>
-    {isFavourite && <StarFilled className="tree-favourite-marker" />}
+function previewKind(type) {
+  const kind = String(type ?? '').toLowerCase();
+  if (['str', 'unicode', 'bytes'].includes(kind)) return 'string';
+  if (['bool', 'boolean'].includes(kind)) return 'boolean';
+  if (['int', 'float', 'long', 'complex'].includes(kind)) return 'number';
+  if (['nonetype', 'none'].includes(kind)) return 'null';
+  return 'object';
+}
+
+function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite }) {
+  const canExpand = Boolean(node.children?.length);
+  return <span className={`variable-row${isActive ? ' variable-row-active' : ''}`}>
+    <span className={`variable-label${canExpand ? ' variable-label-expandable' : ''}`}
+      role={canExpand ? 'button' : undefined} tabIndex={canExpand ? 0 : undefined}
+      aria-expanded={canExpand ? Boolean(node.expanded) : undefined}
+      onClick={canExpand ? (event) => { event.stopPropagation(); onToggle(); } : undefined}
+      onKeyDown={canExpand ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault(); event.stopPropagation(); onToggle();
+        }
+      } : undefined}>
+      <span className="variable-key" title={node.path}>{node.name}</span>
+      <span className="variable-colon">:</span>
+      <span className="variable-type">{node.type}</span>
+    </span>
+    <span className={`variable-preview preview-${previewKind(node.type)}`}
+      title={`${node.type} · ${node.preview}`}>{node.preview}</span>
+    <span className="variable-actions">
+      <Tooltip title="Inspect path and value">
+        <button type="button" className="row-icon-button" aria-label={`Inspect ${node.name}`}
+          onClick={(event) => { event.stopPropagation(); onDetails(); }}>
+          <EyeOutlined />
+        </button>
+      </Tooltip>
+      <Tooltip title={isFavourite ? 'Remove favourite' : 'Add favourite'}>
+        <button type="button" className="row-icon-button" aria-label={`${isFavourite ? 'Remove' : 'Add'} ${node.name} ${isFavourite ? 'from' : 'to'} favourites`}
+          aria-pressed={isFavourite}
+          onClick={(event) => { event.stopPropagation(); onFavourite(); }}>
+          {isFavourite ? <StarFilled className="pinned-star" /> : <StarOutlined />}
+        </button>
+      </Tooltip>
+    </span>
   </span>;
 }
 
-export default function App() {
-  const [token, setToken] = useState(rootParams.token);
-  const [bridge, setBridge] = useState(rootParams.bridge || window.location.origin);
-  const [snapshot, setSnapshot] = useState(null);
-  const [status, setStatus] = useState('connecting');
-  const [reloadCount, setReloadCount] = useState(0);
-  const [error, setError] = useState('');
-  const [scope, setScope] = useState('store');
-  const [query, setQuery] = useState('');
-  const [tab, setTab] = useState('explorer');
-  const [selected, setSelected] = useState(null);
-  const [expanded, setExpanded] = useState([]);
-  const [favourites, setFavourites] = useState(initialFavourites);
-  const [treeHeight, setTreeHeight] = useState(computeTreeHeight);
-  const requestId = useRef(0);
+function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, onFavourite, expanded, onExpand }) {
+  const viewportRef = useRef(null);
+  const [height, setHeight] = useState(450);
 
   useEffect(() => {
-    const resize = () => setTreeHeight(computeTreeHeight());
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
+    const element = viewportRef.current;
+    if (!element) return;
+    const measure = () => {
+      const next = Math.floor(element.getBoundingClientRect().height);
+      if (next > 0) setHeight((before) => before === next ? before : next);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
+  const nodes = useMemo(() => scope === 'favourites'
+    ? favouriteNodes(snapshot?.scopes, favourites)
+    : snapshot?.scopes?.[scope] ?? [], [scope, snapshot, favourites]);
+  const visible = useMemo(() => filteredTree(nodes, query), [nodes, query]);
+  const favKeys = useMemo(() => new Set(favourites.map((x) => `${x.scope}:${x.key}`)), [favourites]);
+  const hasQuery = Boolean(query.trim());
+  const expandedKeys = hasQuery ? keysOf(visible) : expanded[scope] ?? [];
+  const expandedSet = new Set(expandedKeys);
+  const treeData = useMemo(() => {
+    const convert = (items) => items.map((node) => ({
+      ...node,
+      title: node.name,
+      isLeaf: !node.children?.length,
+      children: convert(node.children ?? []),
+    }));
+    return convert(visible);
+  }, [visible]);
+
+  return <section className="variable-pane" aria-label="Variable tree workspace">
+    <div ref={viewportRef} className="variable-tree-viewport">
+      {treeData.length ? <Tree
+        className="full-width-variable-tree" blockNode showLine={{ showLeafIcon: false }}
+        switcherIcon={({ expanded: isExpanded }) => isExpanded ? <DownOutlined /> : <RightOutlined />}
+        selectable={false} virtual height={height}
+        treeData={treeData} expandedKeys={expandedKeys} autoExpandParent={hasQuery}
+        onExpand={(next) => { if (!hasQuery) onExpand(scope, next); }}
+        titleRender={(raw) => {
+          const node = raw;
+          const originScope = scope === 'favourites' ? node.favouriteScope : scope;
+          const sourceKey = node.sourceKey ?? node.key;
+          const pinned = favKeys.has(`${originScope}:${sourceKey}`);
+          return <TreeRow node={{ ...node, expanded: expandedSet.has(node.key) }}
+            isFavourite={pinned}
+            isActive={selected?.scope === originScope && selected?.key === sourceKey}
+            onToggle={hasQuery ? undefined : () => {
+              onExpand(scope, expandedSet.has(node.key)
+                ? expandedKeys.filter((key) => key !== node.key)
+                : [...expandedKeys, node.key]);
+            }}
+            onDetails={() => onSelect(originScope, sourceKey)}
+            onFavourite={() => onFavourite(originScope, sourceKey)} />;
+        }} /> :
+        <Empty className="empty-variables" description={hasQuery ? 'No captured variables match this search' :
+          scope === 'favourites' ? 'Pin variables using the star on a tree row' : 'No variables captured'} />}
+    </div>
+  </section>;
+}
+
+export default function App() {
+  const [token] = useState(initialConnection.token);
+  const [bridge] = useState(initialConnection.bridge || window.location.origin);
+  const [snapshot, setSnapshot] = useState(null);
+  const [connection, setConnection] = useState(token ? 'connecting' : 'unpaired');
+  const [error, setError] = useState('');
+  const [section, setSection] = useState('variables');
+  const [scope, setScope] = useState('store');
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
+  const [selected, setSelected] = useState(null);
+  const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
+  const [favourites, setFavourites] = useState(loadLocalFavourites);
+  const requestCounter = useRef(0);
+
   useEffect(() => {
-    try { localStorage.setItem(storeKey, JSON.stringify(favourites)); } catch { /* private mode */ }
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favourites)); } catch { /* private browsing */ }
   }, [favourites]);
 
   useEffect(() => {
-    if (!token) { setStatus('unpaired'); return; }
+    if (!token) { setConnection('unpaired'); return; }
     let disposed = false;
-    const seq = ++requestId.current;
-    const refresh = async () => {
+    let busy = false;
+    const id = ++requestCounter.current;
+    const poll = async () => {
+      if (busy) return;
+      busy = true;
       try {
         const response = await fetch(`${bridge}/api/v1/snapshot`, {
-          headers: { 'X-Inspector-Token': token },
-          method: 'GET', cache: 'no-store', mode: 'cors',
+          headers: { 'X-Inspector-Token': token }, method: 'GET', cache: 'no-store', mode: 'cors',
         });
         if (!response.ok) throw new Error(response.status === 401 ? 'Pairing token expired' : `HTTP ${response.status}`);
         const data = await response.json();
         if (!data || data.protocol !== 1 || !data.scopes) throw new Error('Unsupported bridge protocol');
-        if (!disposed && seq === requestId.current) {
-          setSnapshot(data); setStatus('online'); setError('');
+        if (!disposed && id === requestCounter.current) {
+          setSnapshot(data); setConnection('online'); setError('');
         }
-      } catch (e) {
-        if (!disposed && seq === requestId.current) {
-          setStatus('offline'); setError(e.message || 'Connection failed');
+      } catch (failure) {
+        if (!disposed && id === requestCounter.current) {
+          setConnection('offline'); setError(failure.message || 'Connection unavailable');
         }
-      }
+      } finally { busy = false; }
     };
-    refresh();
-    const handle = window.setInterval(refresh, 1250);
-    return () => { disposed = true; window.clearInterval(handle); };
-  }, [token, bridge, reloadCount]);
+    poll();
+    const timer = window.setInterval(poll, SNAPSHOT_REFRESH_MS);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [token, bridge]);
 
-  const nodes = snapshot?.scopes?.[scope] ?? [];
-  const nodeMap = useMemo(() => flatten(nodes), [nodes]);
-  const visibleNodes = useMemo(() => filteredTree(nodes, query), [nodes, query]);
-  const selection = selected?.scope === scope ? nodeMap.get(selected.key) : null;
-  const favKeys = useMemo(() => new Set(favourites.map((x) => `${x.scope}:${x.key}`)), [favourites]);
-  const treeData = useMemo(() => {
-    const decorate = (entries) => entries.map((node) => ({
-      ...node,
-      title: <NodeTitle node={node} isFavourite={favKeys.has(`${scope}:${node.key}`)} />,
-      children: decorate(node.children ?? []),
-      isLeaf: !node.children?.length,
-    }));
-    return decorate(visibleNodes);
-  }, [visibleNodes, favKeys, scope]);
-  const expandedKeys = query ? keysOf(visibleNodes) : expanded;
-  const currentFavourite = selection && favKeys.has(`${scope}:${selection.key}`);
-  const toggleFavourite = (key) => {
-    const location = { scope, key };
-    setFavourites((list) => {
-      const kept = list.filter((x) => !(x.scope === scope && x.key === key));
-      return kept.length !== list.length ? kept : [...kept, location].slice(0, 100);
+  const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
+  const pinVariable = useCallback((chosenScope, key) => {
+    if (!SCOPES.some((item) => item.key === chosenScope)) return;
+    setFavourites((before) => {
+      const rest = before.filter((x) => !(x.scope === chosenScope && x.key === key));
+      return rest.length < before.length ? rest : [...before, { scope: chosenScope, key }].slice(0, 100);
     });
-  };
-  const selectNode = (key, selectedScope = scope) => {
-    setScope(selectedScope); setTab('explorer'); setSelected({ key, scope: selectedScope });
-  };
+  }, []);
+  const onExpanded = useCallback((chosenScope, keys) => {
+    setExpanded((before) => ({ ...before, [chosenScope]: keys }));
+  }, []);
+  const activeNode = useMemo(() => {
+    if (!selected) return null;
+    return flatten(snapshot?.scopes?.[selected.scope] ?? []).get(selected.key) || null;
+  }, [snapshot, selected]);
+  const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
+  const activeGame = snapshot?.game ?? {};
+  const online = connection === 'online';
+  useEffect(() => {
+    if (!searchOpen) return;
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchOpen]);
+  useEffect(() => {
+    const shortcut = (event) => {
+      const element = event.target;
+      if (event.key !== '/' || event.ctrlKey || event.altKey || event.metaKey ||
+        element?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element?.tagName || '')) return;
+      event.preventDefault();
+      setSection('variables');
+      setSearchOpen(true);
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => document.removeEventListener('keydown', shortcut);
+  }, []);
 
-  return <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: {
-    colorPrimary: '#5b9ff3', colorBgBase: '#0c111e', colorText: '#e6edfb',
-    borderRadius: 8, fontSize: 13, wireframe: false,
+  return <ConfigProvider theme={{ algorithm: [theme.darkAlgorithm, theme.compactAlgorithm], token: {
+    colorPrimary: '#5b9ff3', colorBgBase: '#0e1726', colorText: '#e8eef9',
+    fontSize: 13, borderRadius: 7,
   } }}>
-    <Layout className="root-shell">
-      <Header className="app-header">
-        <div className="header-brand"><ApartmentOutlined className="brand-icon" />
-          <div><Title level={4} className="brand-title">Ren'Py Inspector</Title>
-            <Text className="brand-caption">EXTERNAL WORKSPACE <span className="brand-version">/ v0.6 preview</span></Text>
+    <div className="inspector-shell">
+      <Tabs className="main-navigation" activeKey={section} onChange={setSection}
+        items={[{ key: 'overview', label: 'Overview' }, { key: 'variables', label: 'Variables' }, { key: 'scripts', label: 'Scripts' }]} />
+      <main className="inspector-main">
+        {section === 'variables' && <div className="variables-workspace">
+          <Tabs className="variable-scope-tabs" activeKey={scope} onChange={setScope}
+            tabBarExtraContent={<Popover placement="bottomRight" trigger="click" open={searchOpen}
+              onOpenChange={setSearchOpen}
+              content={<div className="search-popover" role="search">
+                <Input ref={searchRef} prefix={<SearchOutlined />} allowClear size="middle"
+                  aria-label="Search captured variables" placeholder="Search captured variables"
+                  value={query} onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' || event.key === 'Enter') {
+                      event.stopPropagation();
+                      if (event.key === 'Escape') event.preventDefault();
+                      setSearchOpen(false);
+                    }
+                  }} />
+                <Text type="secondary" className="search-hint">Filters captured nodes · Esc to close</Text>
+              </div>}>
+              <Tooltip title={query ? 'Search active: ' + query : 'Search variables'}>
+                <Button className={query ? 'search-trigger search-trigger-active' : 'search-trigger'}
+                  icon={<SearchOutlined />} size="small" type="text"
+                  aria-label={query ? 'Search variables (filter active)' : 'Search variables'}
+                  aria-expanded={searchOpen} />
+              </Tooltip>
+            </Popover>}
+            items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
+              { key: 'favourites', label: `Favourites (${favourites.length})` }]} />
+          <VariablePane scope={scope} snapshot={snapshot} query={query} favourites={favourites}
+            selected={selected} onSelect={selectNode} onFavourite={pinVariable}
+            expanded={expanded} onExpand={onExpanded} />
+        </div>}
+        {section === 'overview' && <section className="info-page" aria-label="Runtime overview">
+          <Text className="eyebrow">RUNTIME STATUS</Text>
+          <Title level={3}>Overview</Title>
+          <div className="overview-statistics">
+            <Card><Statistic title="Captured Store nodes" value={snapshot?.counts?.store ?? 0} /></Card>
+            <Card><Statistic title="Captured Persistent nodes" value={snapshot?.counts?.persistent ?? 0} /></Card>
+            <Card><Statistic title="Browser favourites" value={favourites.length} /></Card>
           </div>
-        </div>
-        <Space size={14}>
-          <Tag color="blue">READ ONLY</Tag>
-          <span className="status-indicator">
-            {status === 'online' ? <CheckCircleFilled style={{ color: '#55d7a5' }} /> :
-              status === 'connecting' ? <Spin size="small" /> : <DisconnectOutlined style={{ color: '#ff9b81' }} />}
-            <span>{status === 'online' ? 'Connected' : status === 'connecting' ? 'Connecting' : 'Disconnected'}</span>
-          </span>
-        </Space>
-      </Header>
-      <div className="workspace-layout">
-        <aside className="tree-sider">
-          <div className="sider-heading">
-            <div><Text className="eyebrow">EXPLORER</Text><Title level={5} className="side-title">Variable Navigator</Title></div>
-            <Tooltip title="Refresh snapshots"><Button size="small" type="text" icon={<ReloadOutlined />}
-              onClick={() => setReloadCount((n) => n + 1)} /></Tooltip>
+          <Card title="Active session" className="overview-card">
+            <Descriptions column={1} size="small" items={[
+              { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
+              { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.1 preview' },
+              { key: 'connection', label: 'Connection', children: <span className="overview-connection">
+                {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
+                  connection === 'connecting' ? <Spin size="small" /> :
+                    <DisconnectOutlined style={{ color: '#ff9b81' }} />}
+                {online ? 'Connected' : connection === 'connecting' ? 'Connecting' : 'Disconnected'}
+              </span> },
+              ...(error ? [{ key: 'error', label: 'Connection error', children: error }] : []),
+              { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
+              { key: 'mode', label: 'Access', children: 'Read-only · authenticated local session · automatic updates' },
+              { key: 'budget', label: 'Capture limits', children: '450 nodes total · 80 per branch · 4 levels deep' },
+              { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?
+                'Partial snapshot. Some branches are not included.' : 'Within configured snapshot limits' },
+            ]} />
+          </Card>
+        </section>}
+        {section === 'scripts' && <section className="info-page" aria-label="Script context">
+          <Text className="eyebrow">SCRIPT CONTEXT</Text>
+          <Title level={3}>Scripts</Title>
+          <Paragraph type="secondary">Available script location metadata is shown below. Full source browsing is not supported by the external bridge.</Paragraph>
+          <Card className="overview-card"><Descriptions column={1} size="small" items={[
+            { key: 'file', label: 'Script file', children: activeGame.filename || 'Not exposed by game runtime' },
+            { key: 'line', label: 'Line', children: activeGame.line || 'Unavailable' },
+          ]} /></Card>
+        </section>}
+      </main>
+      <Drawer title="Variable details" className="inspector-detail-drawer" placement="right"
+        width="min(520px, 94vw)" open={Boolean(selected)} onClose={() => setSelected(null)}>
+        {selected && <>
+          <div className="detail-heading">
+            <div><Text type="secondary">{selected.scope.toUpperCase()}</Text>
+              <Title level={4}>{activeNode?.name || 'Variable unavailable'}</Title></div>
+            <Button icon={selectedPinned ? <StarFilled /> : <StarOutlined />}
+              aria-label={selectedPinned ? 'Remove favourite' : 'Add favourite'}
+              onClick={() => pinVariable(selected.scope, selected.key)}>
+              {selectedPinned ? 'Pinned' : 'Pin'}
+            </Button>
           </div>
-          <Segmented className="scope-toggle" size="middle" block value={scope} onChange={(next) => { setScope(next); setSelected(null); setExpanded([]); }}
-            options={[{ label: 'Store', value: 'store' }, { label: 'Persistent', value: 'persistent' }]} />
-          <Input className="tree-search" allowClear prefix={<SearchOutlined />} placeholder="Filter variables by name, path or value"
-            value={query} onChange={(event) => setQuery(event.target.value)} />
-          <div className="tree-bar"><Text className="eyebrow">VARIABLES</Text><Text type="secondary">{snapshot?.counts?.[scope] ?? 0} inspected</Text></div>
-          {status !== 'online' && !snapshot ? <Empty className="tree-empty" description="Enable External UI in the game's Settings, then open the browser window." /> :
-            treeData.length ? <Tree blockNode showLine className="inspector-tree" treeData={treeData}
-              height={treeHeight} selectable virtual selectedKeys={selection ? [selection.key] : []}
-              expandedKeys={expandedKeys} autoExpandParent={Boolean(query)}
-              onExpand={(keys) => { if (!query) setExpanded(keys); }}
-              onSelect={(keys) => { if (keys[0]) setSelected({ scope, key: keys[0] }); }} /> :
-              <Empty className="tree-empty" description={query ? 'No matching variables in snapshot' : 'No variables captured'} />}
-          <div className="tree-footer">
-            <Text type="secondary">Snapshot is bounded to protect game performance.</Text>
-            {snapshot?.truncated?.[scope] && <Tag color="gold">Partial tree</Tag>}
-          </div>
-        </aside>
-        <main className="main-content">
-          <Tabs activeKey={tab} onChange={setTab} className="workspace-tabs" items={[
-            { key: 'explorer', label: 'Inspector' }, { key: 'favourites', label: `Favourites (${favourites.length})` },
-            { key: 'overview', label: 'Overview' },
+          <Descriptions column={1} size="small" bordered items={[
+            { key: 'path', label: 'Path', children: <Text copyable={{ text: activeNode?.path ?? '' }} className="path-monospace">{activeNode?.path || 'Not in latest snapshot'}</Text> },
+            { key: 'type', label: 'Type', children: <Tag color="geekblue">{activeNode?.type || 'Unknown'}</Tag> },
+            { key: 'state', label: 'State', children: activeNode?.state || 'Missing from latest snapshot' },
           ]} />
-          {tab === 'explorer' && <div className="content-inner">
-            {selection ? <>
-              <div className="content-title-row">
-                <div><Text className="eyebrow">SELECTED VARIABLE</Text><Title level={3} className="content-title">{selection.name}</Title></div>
-                <Tooltip title={currentFavourite ? 'Unpin variable' : 'Add to browser favourites'}><Button
-                  type={currentFavourite ? 'primary' : 'default'}
-                  icon={currentFavourite ? <StarFilled /> : <StarOutlined />}
-                  onClick={() => toggleFavourite(selection.key)}>{currentFavourite ? 'Pinned' : 'Pin'}</Button></Tooltip>
-              </div>
-              <Card className="detail-card" bordered={false}>
-                <Descriptions bordered size="middle" column={1} items={[
-                  { key: 'path', label: 'Path', children: <Text copyable className="monospace">{selection.path}</Text> },
-                  { key: 'type', label: 'Type', children: <Tag color="geekblue">{selection.type}</Tag> },
-                  { key: 'state', label: 'State', children: selection.state },
-                ]} />
-                <Divider orientation="left">Current value</Divider>
-                <pre className="value-pane">{selection.preview}</pre>
-                {selection.limited && <Text type="warning">Children beyond the snapshot budget are not included.</Text>}
-              </Card>
-            </> : <div className="welcome-panel">
-              <div className="welcome-icon"><ApartmentOutlined /></div>
-              <Title level={3}>Explore your game state</Title>
-              <Paragraph type="secondary">Select a variable on the left to inspect its type, path and current value. Expand collections without modifying gameplay.</Paragraph>
-              <div className="welcome-steps"><span>01 &nbsp; Find a variable</span><span>02 &nbsp; Inspect safely</span><span>03 &nbsp; Pin what matters</span></div>
-            </div>}
-          </div>}
-          {tab === 'favourites' && <div className="content-inner">
-            <div className="content-title-row"><div><Text className="eyebrow">LOCAL WATCHLIST</Text><Title level={3}>Favourites</Title></div><Tag>Browser-local</Tag></div>
-            <Paragraph type="secondary">Pins live in this browser's storage; they do not change Ren'Py's native watchlist.</Paragraph>
-            {favourites.length === 0 ? <Empty description="Select a variable and click Pin" /> :
-              <div className="favourites-list">{favourites.map((favorite) => {
-                const node = flatten(snapshot?.scopes?.[favorite.scope] ?? []).get(favorite.key);
-                return <Card key={`${favorite.scope}:${favorite.key}`} className="favourite-card" size="small" onClick={() => selectNode(favorite.key, favorite.scope)}>
-                  <Space direction="vertical" size={2}><Text strong>{node?.name ?? 'Temporarily unavailable'}</Text><Text type="secondary" className="monospace">{node?.path ?? favorite.key}</Text></Space>
-                  <Tag color={node ? 'cyan' : 'default'}>{node?.preview ?? 'Missing'}</Tag>
-                </Card>;
-              })}</div>}
-          </div>}
-          {tab === 'overview' && <div className="content-inner">
-            <Text className="eyebrow">RUNTIME STATUS</Text><Title level={3}>Overview</Title>
-            <div className="stat-grid"><Card><Statistic title="Store entries" value={snapshot?.counts?.store ?? 0}/></Card>
-              <Card><Statistic title="Persistent entries" value={snapshot?.counts?.persistent ?? 0}/></Card>
-              <Card><Statistic title="Browser watches" value={favourites.length}/></Card></div>
-            <Card className="detail-card" title="Active session"><Descriptions column={1} size="middle" items={[
-              { key: 'game', label: 'Game', children: snapshot?.game?.game || 'Unavailable' },
-              { key: 'version', label: "Ren'Py", children: snapshot?.game?.version || 'Unavailable' },
-              { key: 'time', label: 'Last capture', children: formatTime(snapshot?.captured_at) },
-              { key: 'mode', label: 'Access', children: 'Read-only · local authenticated API' },
-            ]} /></Card>
-          </div>}
-          <div className="connection-banner">
-            <Space><ThunderboltOutlined /><Text type="secondary">{status === 'online' ? `Live snapshot · ${formatTime(snapshot?.captured_at)}` :
-              status === 'unpaired' ? 'Not paired. Open this page from the game’s Settings tab.' : error || 'Connecting to game...'}</Text></Space>
-            {status !== 'online' && <Tag color="orange">{status}</Tag>}
+          <div className="detail-preview-heading"><Text strong>Captured value preview</Text>
+            <Tooltip title="Copy the captured preview, not a full live value">
+              <Button icon={<CopyOutlined />} disabled={!activeNode} size="small"
+                onClick={() => activeNode && navigator.clipboard?.writeText(activeNode.preview).catch(() => {})}>Copy preview</Button>
+            </Tooltip>
           </div>
-        </main>
-      </div>
-    </Layout>
+          <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
+          {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
+          <Paragraph type="secondary" className="detail-disclaimer">This is a bounded, read-only snapshot. Full values and uncaptured descendants are not available through the current bridge.</Paragraph>
+        </>}
+      </Drawer>
+    </div>
   </ConfigProvider>;
 }

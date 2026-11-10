@@ -9,12 +9,13 @@ PACKAGE = (ROOT / 'game' / 'renpy_inspector' / '__init__.py').read_text(encoding
 
 
 class ExternalUiIntegrationTests(unittest.TestCase):
-    def test_opt_in_game_screen(self):
-        self.assertIn('Function(renpy_inspector.bridge.start)', SCREEN)
-        self.assertIn('Function(renpy_inspector.bridge.stop)', SCREEN)
-        self.assertIn('Function(renpy_inspector.bridge.open_browser)', SCREEN)
+    def test_f8_starts_browser_and_keeps_polling_without_native_gui(self):
+        self.assertIn('key "K_F8" action Function(renpy_inspector_open_external)', SCREEN)
+        self.assertIn('renpy_inspector.bridge.launch_or_open()', INIT)
         self.assertIn('if renpy_inspector.bridge.running:', SCREEN)
         self.assertIn('Function(renpy_inspector.bridge.publish, _update_screens=False)', SCREEN)
+        self.assertNotIn('renpy_inspector_drawer', SCREEN)
+        self.assertNotIn('textbutton', SCREEN)
 
     def test_state_invalidation_after_game_load(self):
         self.assertIn('renpy_inspector.bridge.invalidate', INIT)

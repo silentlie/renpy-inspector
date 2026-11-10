@@ -38,6 +38,12 @@ class BridgePy2Tests(unittest.TestCase):
             bridge.start()
             self.assertTrue(bridge.running, bridge.error)
             self.assertTrue(bridge.url.startswith('http://127.0.0.1:'))
+            called = []
+            bridge.open_browser = lambda: called.append(bridge.url) or True
+            self.assertTrue(bridge.launch_or_open())
+            self.assertTrue(bridge.launch_or_open())
+            self.assertEqual(len(called), 2)
+            self.assertEqual(called[0], called[1])
             bridge.stop()
             self.assertFalse(bridge.running)
         finally:

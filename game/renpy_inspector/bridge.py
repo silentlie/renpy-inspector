@@ -194,11 +194,31 @@ class InspectorBridge(object):
         self.invalidate()
 
     def open_browser(self):
-        if self.running:
-            try:
-                webbrowser.open(self.url, new=1)
-            except Exception:
-                self.error = 'Could not open browser automatically; copy the URL.'
+        """Reopen the current authenticated local browser workspace."""
+        if not self.running:
+            return False
+        try:
+            opened = webbrowser.open(self.url, new=1)
+            if not opened:
+                self.error = 'Could not open browser automatically; check default browser.'
+                return False
+            self.error = ''
+            return True
+        except Exception:
+            self.error = 'Could not open browser automatically; check default browser.'
+            return False
+
+    def launch_or_open(self):
+        """F8 entrypoint: opt-in start once, then open the existing session.
+
+        Invoked as a Ren'Py Function action on the interaction thread.
+        Keeps the existing port/token when the server is already running.
+        """
+        if not self.running:
+            self.start()
+        if not self.running:
+            return False
+        return self.open_browser()
 
     def invalidate(self):
         """After a Ren'Py save load, discard snapshot from the previous state."""

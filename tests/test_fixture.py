@@ -18,14 +18,12 @@ class EngineFixtureTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare_fixture(result)
 
-    def test_legacy_screen_search_has_find_action_not_input_action(self):
+    def test_f8_only_screen_does_not_render_game_gui(self):
         source = (Path(__file__).resolve().parents[1] / 'game' /
                   'renpy_inspector_screens.rpy').read_text(encoding='utf-8')
-        self.assertIn('textbutton "Find":', source)
-        find_block = source.split('textbutton "Find":', 1)[1].split('if inspector.applied_search:', 1)[0]
-        self.assertIn('action Function(inspector.run_search)', find_block)
-        between = source.split('input:', 1)[1].split('textbutton "Find":', 1)[0]
-        self.assertNotIn('action Function(inspector.run_search)', between)
+        self.assertIn('key "K_F8" action Function(renpy_inspector_open_external)', source)
+        self.assertNotIn('textbutton', source)
+        self.assertNotIn('renpy_inspector_drawer', source)
 
     def test_game_python_is_safe_for_renpy7_unicode_loader(self):
         package = Path(__file__).resolve().parents[1] / 'game' / 'renpy_inspector'
