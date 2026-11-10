@@ -64,3 +64,19 @@ test('session and snapshot diagnostics live in Overview', () => {
     assert.ok(jsx.includes("label: '"+label+"'"), 'Missing Overview field '+label);
   }
 });
+
+
+test('only the virtual tree may scroll; the document and app shell never scroll', () => {
+  assert.match(css, /html, body, #root \{[\s\S]*?overflow: hidden;/);
+  assert.match(css, /\.inspector-shell \{[\s\S]*?max-height:100dvh;/);
+  assert.match(css, /\.full-width-variable-tree \.ant-tree-list-holder \{[\s\S]*?overflow-x: hidden !important; overflow-y: auto;/);
+  assert.match(css, /overscroll-behavior-y: contain;/);
+});
+
+test('tree descendants and variable labels cannot widen the page', () => {
+  assert.match(css, /\.full-width-variable-tree \.ant-tree-treenode \{[^\n]*max-width: 100%; min-width: 0;/);
+  assert.match(css, /\.ant-tree-node-content-wrapper \{[^\n]*min-width: 0; max-width: 100%/);
+  assert.match(css, /\.variable-label \{[^\n]*max-width: 56%/);
+  assert.match(css, /\.variable-type \{[^\n]*text-overflow: ellipsis/);
+  assert.match(css, /\.variable-row \{[^\n]*max-width: 100%/);
+});
