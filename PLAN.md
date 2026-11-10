@@ -71,6 +71,18 @@ work and real-game performance validation.
 **Merge order:** PR #9 must pass real-game validation and merge first. PR #10
 is stacked on PR #9 and remains draft until its own CI and interactive tests pass.
 
+## Milestone: PR #11 — independent and durable favourites (v0.6.4 experimental)
+
+- Add authenticated, read-only direct-path value observation over the existing game-thread queue; avoid requiring ancestor expansion.
+- Keep favourites watched in all browser tabs, with bounded scheduler throughput.
+- Persist validated typed favourite paths in a dedicated inspector preferences file in Ren'Py's save directory, unaffected by localhost port rotation.
+- Maintain strict Host/Origin and token enforcement. The sole PUT endpoint is scoped to inspector preferences, not gameplay or save data.
+- Differentiate missing variables from uncollected ones, and resume when a path becomes available again.
+- Provide migration from older origin-local favourite storage, Python 2/3 tests, and both engine packages.
+- Gate merge on game-thread safety, failure handling, save/load and rollback smoke tests.
+
+**Next:** capture bounded primitive change history and a Compare workspace after favourites are reliably sourced.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

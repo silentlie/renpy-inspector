@@ -46,3 +46,13 @@ When a watched page keeps the same stable keys, its value/type previews update w
 9. Check narrow-screen virtual scroll, keyboard controls and no extra scrollbars.
 
 SDK lint and unit tests do not prove runtime or browser interaction behaviour.
+
+## PR #11: Independent favourites and durable storage
+
+Favourite values now use an authenticated `GET /api/v1/value` with a typed root-relative location. These reads are queued and resolved on Ren'Py's interaction thread, even when a favourite is not part of an expanded tree. Missing values stay pinned and are sampled again as the game changes. The browser shares the existing bounded watcher scheduler, issuing at most two sample jobs per tick. With many pinned locations, update latency grows.
+
+Browser pins persist across localhost port changes in `renpy-inspector-browser-favourites.json` within the game's inspector-specific save directory. `GET /api/v1/favourites` reads this metadata and authenticated `PUT /api/v1/favourites` writes only this one JSON file after strict validation. It cannot write gameplay values, scripts, or Ren'Py saves. If no writable save directory exists, the UI displays a local-only storage status. On a fresh preference file, the browser imports its previous origin-local favourites once.
+
+Safety: at most 100 favourites, 8 typed path segments, 1,000 enumerated members per path component, 64 KiB preference file, 4 KiB GET URL and a bounded queue. These limits can cause a valid-but-beyond-limit game variable to report missing; they are intentional rather than a reason to enable expression evaluation. Save/load generations reject stale responses.
+
+Test in-game: pin a deep value, collapse all ancestors, switch to Overview and change the variable, then return to Favourites. Restart the game, reopen the browser on a different port and confirm pins survive. Remove an object and recreate it; the watch should move from Missing to its new value. Check a read-only save directory and unauthenticated/preflight requests.
