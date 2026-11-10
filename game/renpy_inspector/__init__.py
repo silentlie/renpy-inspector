@@ -16,6 +16,7 @@ def install(store_provider, persistent_provider, restart_interaction, savedir=No
     inspector.bind(store_provider, persistent_provider, settings=settings,
                    context_provider=context_provider)
     inspector._on_change = restart_interaction
+    bridge.configure_favourites_directory(savedir)
 
 
 def register_named_store(name, provider):

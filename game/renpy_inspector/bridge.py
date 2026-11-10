@@ -1,8 +1,8 @@
 """Opt-in, authenticated loopback bridge for the Ant Design inspector UI.
 
-The HTTP thread ONLY serves pre-serialized bytes. Game state is inspected by
-publish(), which must be called by the Ren'Py interaction thread. The bridge
-has no write/eval endpoints and never connects to a remote host.
+HTTP workers never read gameplay objects. Game state is inspected only by
+Ren'Py's interaction-thread tick/publish. The only preference write permitted
+is an authenticated, bounded inspector-only JSON file, never game state.
 """
 from __future__ import unicode_literals
 
@@ -23,7 +23,10 @@ except ImportError:
     from urllib.parse import urlsplit, parse_qs
 
 from .bridge_snapshot import PROTOCOL, encode_snapshot
-from .bridge_paging import build_tree_page, build_lazy_snapshot, validate_tree_request
+from .bridge_paging import (build_tree_page, build_lazy_snapshot,
+                            build_tree_value, validate_tree_request)
+from .browser_favourites import (BrowserFavouritesStore,
+                                 MAX_PREFERENCE_BYTES, validate_favourites)
 from .compat import monotonic_time
 
 LOOPBACK = '127.0.0.1'
@@ -57,7 +60,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
             self.send_header('Access-Control-Allow-Headers', 'X-Inspector-Token')
-            self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS')
         self.end_headers()
         if body:
             self.wfile.write(body)
@@ -75,7 +78,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(403)
             return
         origin = self.headers.get('Origin')
-        if urlsplit(self.path).path in ('/api/v1/snapshot', '/api/v1/children') and origin in ALLOWED_DEV_ORIGINS:
+        if urlsplit(self.path).path in (
+                '/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
+                '/api/v1/favourites') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -83,13 +88,53 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self._send(405)
 
+    def do_PUT(self):
+        """The ONLY HTTP write is to inspector-owned favourites metadata."""
+        if not self._allowed_origin():
+            self._send(403)
+            return
+        origin = self.headers.get('Origin')
+        if urlsplit(self.path).path != '/api/v1/favourites':
+            self._send(405, origin=origin)
+            return
+        bridge = self.server.bridge
+        if not self.headers.get('X-Inspector-Token') or self.headers.get('X-Inspector-Token') != bridge.token:
+            self._send(401, b'Unauthorized', origin=origin)
+            return
+        if bridge.favourites_store is None:
+            self._send(503, b'No inspector save directory', origin=origin)
+            return
+        try:
+            length_string = self.headers.get('Content-Length', '')
+            if not length_string.isdigit():
+                raise ValueError('missing content length')
+            size = int(length_string)
+            if not 1 <= size <= MAX_PREFERENCE_BYTES:
+                raise ValueError('invalid preference size')
+            if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
+                raise ValueError('invalid preference type')
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            if not isinstance(payload, dict) or set(payload) != set(('version', 'favourites')) or payload['version'] != 1:
+                raise ValueError('invalid preference payload')
+            validated = validate_favourites(payload['favourites'])
+        except (ValueError, TypeError, UnicodeError, OverflowError):
+            self._send(400, b'Invalid favourites', origin=origin)
+            return
+        try:
+            result = bridge.favourites_store.save(validated)
+        except (OSError, IOError, ValueError):
+            self._send(503, b'Cannot save inspector preferences', origin=origin)
+            return
+        self._send(200, encode_snapshot(result), 'application/json; charset=utf-8', origin=origin)
+
     def do_GET(self):
         if not self._allowed_origin():
             self._send(403)
             return
         origin = self.headers.get('Origin')
         path = urlsplit(self.path).path
-        if path in ('/api/v1/snapshot', '/api/v1/children'):
+        if path in ('/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
+                    '/api/v1/favourites'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
@@ -99,24 +144,44 @@ class _Handler(BaseHTTPRequestHandler):
                     data = self.server.bridge.cached_bytes
                 self._send(200, data, 'application/json; charset=utf-8', origin=origin)
                 return
+            if path == '/api/v1/favourites':
+                store = self.server.bridge.favourites_store
+                if store is None:
+                    self._send(503, b'No inspector save directory', origin=origin)
+                    return
+                self._send(200, encode_snapshot(store.load()),
+                           'application/json; charset=utf-8', origin=origin)
+                return
             if len(self.path) > 4096:
                 self._send(400, b'Invalid tree request', origin=origin)
                 return
             try:
                 fields = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
-                if set(fields) != set(('scope', 'path', 'offset', 'size')):
+                expected_fields = (('scope', 'path', 'offset', 'size')
+                                   if path == '/api/v1/children'
+                                   else ('scope', 'path'))
+                if set(fields) != set(expected_fields):
                     raise ValueError('unexpected fields')
                 if any(len(values) != 1 for values in fields.values()):
                     raise ValueError('duplicate fields')
                 raw_path = json.loads(fields['path'][0])
-                offset = int(fields['offset'][0]) if fields['offset'][0].isdigit() else -1
-                size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
-                arguments = validate_tree_request(fields['scope'][0], raw_path, offset, size)
+                if path == '/api/v1/children':
+                    offset = int(fields['offset'][0]) if fields['offset'][0].isdigit() else -1
+                    size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
+                    arguments = validate_tree_request(fields['scope'][0], raw_path, offset, size)
+                    job_kind = 'page'
+                else:
+                    scope, path_parts, unused_offset, unused_size = validate_tree_request(
+                        fields['scope'][0], raw_path, 0, 1)
+                    if not path_parts:
+                        raise ValueError('value needs a path')
+                    arguments = (scope, path_parts)
+                    job_kind = 'value'
             except (ValueError, TypeError, KeyError):
                 self._send(400, b'Invalid tree request', origin=origin)
                 return
             bridge = self.server.bridge
-            job = bridge.enqueue_tree_page(arguments)
+            job = bridge.enqueue_tree_page(arguments, kind=job_kind)
             if job is None:
                 self._send(429, b'Inspector queue is busy', origin=origin)
                 return
@@ -163,6 +228,7 @@ class InspectorBridge(object):
         self.server = None
         self.thread = None
         self.token = None
+        self.favourites_store = None
         self.error = ''
         self.generation = 0
         self.pending_pages = []
@@ -180,6 +246,10 @@ class InspectorBridge(object):
         """
         if directory:
             self.ui_dir = os.path.join(directory, 'renpy_inspector_web')
+
+    def configure_favourites_directory(self, savedir):
+        """Called during game init; no gameplay state is stored in preferences."""
+        self.favourites_store = BrowserFavouritesStore(savedir) if savedir else None
 
     @property
     def running(self):
@@ -266,12 +336,14 @@ class InspectorBridge(object):
                 job['response'] = (409, encode_snapshot({'error': 'Game state changed'}))
                 job['event'].set()
 
-    def enqueue_tree_page(self, arguments):
-        """HTTP thread: store primitive values only, never inspect gameplay."""
+    def enqueue_tree_page(self, arguments, kind='page'):
+        """HTTP thread: queue primitive paths; never inspect gameplay."""
         with self.lock:
             if not self.running or len(self.pending_pages) >= 8:
                 return None
-            job = {'args': arguments, 'generation': self.generation,
+            if kind not in ('page', 'value'):
+                return None
+            job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
                    'cancelled': False}
             self.pending_pages.append(job)
@@ -299,7 +371,10 @@ class InspectorBridge(object):
                 if not valid:
                     status, result = 409, {'error': 'Game state changed'}
                 else:
-                    result = build_tree_page(self.inspector._providers, *job['args'])
+                    if job['kind'] == 'value':
+                        result = build_tree_value(self.inspector._providers, *job['args'])
+                    else:
+                        result = build_tree_page(self.inspector._providers, *job['args'])
                     status = 200
             except (ValueError, KeyError, TypeError):
                 status, result = 404, {'error': 'Tree path unavailable'}
