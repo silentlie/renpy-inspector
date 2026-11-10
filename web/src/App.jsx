@@ -30,8 +30,9 @@ function countNodes(nodes) {
   }
   return total;
 }
-function pageRequestId(scope, parent, offset) {
-  return JSON.stringify([scope, parent, offset]);
+function pageRequestId(scope, parent, offset, generation) {
+  // In-flight requests from a previous game load must not poison new pages.
+  return JSON.stringify([generation, scope, parent, offset]);
 }
 const SCOPES = [{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' }];
 
@@ -172,7 +173,7 @@ function VariablePane({ scope, treePages, query, favourites, selected, onSelect,
         titleRender={(raw) => {
           const node = raw;
           if (node.isLoadMore) {
-            const requestId = pageRequestId(node.scope, node.parentKey, node.nextOffset);
+            const requestId = pageRequestId(node.scope, node.parentKey, node.nextOffset, treePages?.generation);
             return <AutoPageSentinel scope={node.scope} offset={node.nextOffset}
               loading={loadingPages.has(requestId)} error={pageErrors[requestId]}
               requestPage={() => onRequestPage(node.scope, node.parentKey, node.nextOffset)} />;
@@ -263,11 +264,13 @@ export default function App() {
 
   const requestPage = useCallback(async (chosenScope, parentKey, offset) => {
     if (!token || !['store', 'persistent'].includes(chosenScope)) return;
-    const pageId = pageRequestId(chosenScope, parentKey, offset);
-    if (loadingRef.current.has(pageId)) return;
     const previous = treePagesRef.current;
     if (!previous) return;
-    const path = parentKey === null ? [] : decodeTreeKey(parentKey)?.path;
+    const pageId = pageRequestId(chosenScope, parentKey, offset, previous.generation);
+    if (loadingRef.current.has(pageId)) return;
+    const decoded = parentKey === null ? null : decodeTreeKey(parentKey);
+    if (parentKey !== null && decoded?.scope !== chosenScope) return;
+    const path = parentKey === null ? [] : decoded?.path;
     if (!path) return;
     const count = countNodes(previous.scopes?.store) +
       countNodes(previous.scopes?.persistent);
@@ -306,14 +309,18 @@ export default function App() {
         return next;
       });
     } catch (reason) {
-      setPageErrors((before) => ({
-        ...before, [pageId]: reason.message || 'Page unavailable',
-      }));
+      if (treePagesRef.current?.generation === previous.generation) {
+        setPageErrors((before) => ({
+          ...before, [pageId]: reason.message || 'Page unavailable',
+        }));
+      }
     } finally {
       loadingRef.current.delete(pageId);
       setLoadingPages(new Set(loadingRef.current));
     }
   }, [bridge, token]);
+
+  useEffect(() => { setPageErrors({}); }, [treePages?.generation]);
 
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
   const pinVariable = useCallback((chosenScope, key) => {
