@@ -13,7 +13,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'game'))
-from renpy_inspector.bridge_paging import MAX_BRANCH, PAGE_SIZE, build_tree_page, validate_tree_request
+from renpy_inspector.bridge_paging import MAX_BRANCH, PAGE_SIZE, build_tree_page, build_lazy_snapshot, validate_tree_request
 from renpy_inspector.bridge import InspectorBridge
 from renpy_inspector.controller import Inspector
 
@@ -26,6 +26,18 @@ class PagingTests(unittest.TestCase):
         self.store.cycle = []
         self.store.cycle.append(self.store.cycle)
         self.providers = {'store': lambda: self.store, 'persistent': lambda: {}}
+
+    def test_shallow_snapshot_and_root_paging(self):
+        for i in range(650):
+            setattr(self.store, 'field_{:04d}'.format(i), i)
+        page = build_lazy_snapshot(self.providers, {'game': 'Fixture'})
+        self.assertEqual(page['protocol'], 1)
+        self.assertEqual(len(page['scopes']['store']), PAGE_SIZE)
+        self.assertTrue(page['root_pages']['store']['more'])
+        self.assertEqual(page['root_pages']['store']['next_offset'], PAGE_SIZE)
+        # No eager grandchildren in the root snapshot.
+        self.assertTrue(all(not item['children'] for item in page['scopes']['store']))
+        self.assertEqual(page['game']['game'], 'Fixture')
 
     def test_list_pagination_and_hard_cap(self):
         parent = (('attribute', 'big'),)

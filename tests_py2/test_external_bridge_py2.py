@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'gam
 
 from renpy_inspector.bridge_snapshot import build_snapshot, encode_snapshot
 from renpy_inspector.bridge import InspectorBridge
-from renpy_inspector.bridge_paging import build_tree_page, validate_tree_request
+from renpy_inspector.bridge_paging import build_tree_page, build_lazy_snapshot, validate_tree_request
 from renpy_inspector.controller import Inspector
 
 
@@ -40,6 +40,9 @@ class BridgePy2Tests(unittest.TestCase):
         self.assertEqual(page2['items'][0]['name'], '[160]')
         with self.assertRaises(ValueError):
             validate_tree_request('store', [['attribute', '__class__']], 0, 80)
+        shallow = build_lazy_snapshot(providers)
+        self.assertTrue(shallow['root_pages']['store']['more'])
+        self.assertEqual(len(shallow['scopes']['store']), 1)
 
     def test_service_starts_and_stops_without_game(self):
         folder = tempfile.mkdtemp(prefix='bridge-py2-')

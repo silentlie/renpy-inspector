@@ -22,8 +22,8 @@ except ImportError:
     from socketserver import ThreadingMixIn
     from urllib.parse import urlsplit, parse_qs
 
-from .bridge_snapshot import PROTOCOL, build_snapshot, encode_snapshot
-from .bridge_paging import build_tree_page, validate_tree_request
+from .bridge_snapshot import PROTOCOL, encode_snapshot
+from .bridge_paging import build_tree_page, build_lazy_snapshot, validate_tree_request
 from .compat import monotonic_time
 
 LOOPBACK = '127.0.0.1'
@@ -169,7 +169,8 @@ class InspectorBridge(object):
         self.last_publish = 0.0
         self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'generation': 0, 'captured_at': None,
                                              'scopes': {'store': [], 'persistent': []},
-                                             'counts': {}, 'truncated': {}, 'game': {}})
+                                             'counts': {}, 'truncated': {},
+                                             'root_pages': {}, 'game': {}})
 
     def configure_game_directory(self, directory):
         """Use Ren'Py's actual game/ location, not an import cache path.
@@ -332,7 +333,8 @@ class InspectorBridge(object):
                 'protocol': PROTOCOL, 'generation': self.generation,
                 'captured_at': None,
                 'scopes': {'store': [], 'persistent': []},
-                'counts': {}, 'truncated': {}, 'game': {}})
+                'counts': {}, 'truncated': {},
+                'root_pages': {}, 'game': {}})
 
     def publish(self):
         """Read game values ONLY on the Ren'Py interaction thread."""
@@ -341,7 +343,7 @@ class InspectorBridge(object):
         try:
             info = (self.inspector._context_info()
                     if self.inspector._context_provider else {})
-            data = build_snapshot(self.inspector._providers, game_info=info)
+            data = build_lazy_snapshot(self.inspector._providers, game_info=info)
             with self.lock:
                 data['generation'] = self.generation
                 self.cached_bytes = encode_snapshot(data)

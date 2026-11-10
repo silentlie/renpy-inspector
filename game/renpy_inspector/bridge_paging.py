@@ -6,11 +6,12 @@ build_tree_page. Ren'Py's interaction thread performs all game-data reads.
 from __future__ import unicode_literals
 
 import json
+import time
 
 from .compat import integer_types, string_types
+from .bridge_snapshot import MAX_TEXT, _safe_text
 from .favorites import encode_location, format_location
 from .inspection import MISSING, child_descriptors, read_child, snapshot
-from .bridge_snapshot import _safe_text
 
 MAX_BRANCH = 1000
 PAGE_SIZE = 80
@@ -105,3 +106,39 @@ def build_tree_page(providers, scope, path, offset, size):
         'more': bool(more), 'capped': bool(capped),
         'items': items,
     }
+
+
+def build_lazy_snapshot(providers, game_info=None):
+    """Capture shallow root pages; fetch descendants only on user expansion.
+
+    Root and child pages use the same bounded ordering, unlike the former
+    450-node recursively sampled snapshot which could obscure whole subtrees.
+    """
+    result = {
+        'protocol': 1, 'captured_at': time.time(),
+        'scopes': {}, 'counts': {}, 'truncated': {},
+        'root_pages': {}, 'game': {},
+    }
+    if isinstance(game_info, dict):
+        for name in ('game', 'version', 'filename', 'line'):
+            value = game_info.get(name)
+            if type(value) in (int, float) or isinstance(value, string_types):
+                result['game'][name] = _safe_text(value)
+    for scope in ('store', 'persistent'):
+        try:
+            page = build_tree_page(providers, scope, (), 0, PAGE_SIZE)
+            result['scopes'][scope] = page['items']
+            result['counts'][scope] = len(page['items'])
+            result['truncated'][scope] = bool(page['more'] or page['capped'])
+            result['root_pages'][scope] = {
+                'next_offset': page['next_offset'],
+                'more': page['more'], 'capped': page['capped'],
+            }
+        except Exception:
+            result['scopes'][scope] = []
+            result['counts'][scope] = 0
+            result['truncated'][scope] = False
+            result['root_pages'][scope] = {
+                'next_offset': 0, 'more': False, 'capped': False,
+            }
+    return result
