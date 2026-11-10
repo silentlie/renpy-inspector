@@ -5,7 +5,9 @@ on:
 
 jobs:
   python3-tests:
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 runner images do not provide actions/setup-python 3.9.
+    # Pin until the Python 3.9 compatibility target is retired.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ['3.9', '3.13']
