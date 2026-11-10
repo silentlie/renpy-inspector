@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Card, ConfigProvider, Descriptions, Drawer, Empty, Input,
+  Button, Card, ConfigProvider, Descriptions, Drawer, Empty, Input, Popover,
   Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
 } from 'antd';
 import {
-  ApartmentOutlined, CheckCircleFilled, CopyOutlined, DisconnectOutlined,
-  EyeOutlined, ReloadOutlined, RightOutlined, DownOutlined, SearchOutlined,
+  CheckCircleFilled, CopyOutlined, DisconnectOutlined,
+  EyeOutlined, RightOutlined, DownOutlined, SearchOutlined,
   StarFilled, StarOutlined,
 } from '@ant-design/icons';
 import {
@@ -113,12 +113,6 @@ function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, 
   }, [visible]);
 
   return <section className="variable-pane" aria-label="Variable tree workspace">
-    <div className="variable-pane-summary">
-      <Text type="secondary">{scope === 'favourites' ? `${favourites.length} saved browser pins` : `${snapshot?.counts?.[scope] ?? 0} captured nodes`}</Text>
-      {scope !== 'favourites' && snapshot?.truncated?.[scope] &&
-        <Tag color="gold" title="The bridge limits captures to protect the game">Partial snapshot</Tag>}
-      {hasQuery && <Text type="secondary">Filtered, captured nodes only</Text>}
-    </div>
     <div ref={viewportRef} className="variable-tree-viewport">
       {treeData.length ? <Tree
         className="full-width-variable-tree" blockNode showLine={{ showLeafIcon: false }}
@@ -145,12 +139,6 @@ function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, 
         <Empty className="empty-variables" description={hasQuery ? 'No captured variables match this search' :
           scope === 'favourites' ? 'Pin variables using the star on a tree row' : 'No variables captured'} />}
     </div>
-    <div className="variable-pane-footer">
-      <Text type="secondary">Read-only · Captured values · Live updates</Text>
-      <Text type="secondary">{scope !== 'favourites' && snapshot?.truncated?.[scope]
-        ? 'Some branches are not included in the bounded snapshot'
-        : 'Expand a captured branch to browse its children'}</Text>
-    </div>
   </section>;
 }
 
@@ -160,10 +148,11 @@ export default function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [connection, setConnection] = useState(token ? 'connecting' : 'unpaired');
   const [error, setError] = useState('');
-  const [refresh, setRefresh] = useState(0);
   const [section, setSection] = useState('variables');
   const [scope, setScope] = useState('store');
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
   const [favourites, setFavourites] = useState(loadLocalFavourites);
@@ -200,7 +189,7 @@ export default function App() {
     poll();
     const timer = window.setInterval(poll, SNAPSHOT_REFRESH_MS);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, [token, bridge, refresh]);
+  }, [token, bridge]);
 
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
   const pinVariable = useCallback((chosenScope, key) => {
@@ -220,36 +209,56 @@ export default function App() {
   const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
   const activeGame = snapshot?.game ?? {};
   const online = connection === 'online';
+  useEffect(() => {
+    if (!searchOpen) return;
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchOpen]);
+  useEffect(() => {
+    const shortcut = (event) => {
+      const element = event.target;
+      if (event.key !== '/' || event.ctrlKey || event.altKey || event.metaKey ||
+        element?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element?.tagName || '')) return;
+      event.preventDefault();
+      setSection('variables');
+      setSearchOpen(true);
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => document.removeEventListener('keydown', shortcut);
+  }, []);
 
   return <ConfigProvider theme={{ algorithm: [theme.darkAlgorithm, theme.compactAlgorithm], token: {
     colorPrimary: '#5b9ff3', colorBgBase: '#0e1726', colorText: '#e8eef9',
     fontSize: 13, borderRadius: 7,
   } }}>
     <div className="inspector-shell">
-      <header className="inspector-header">
-        <div className="product-brand">
-          <ApartmentOutlined className="product-icon" />
-          <span><strong>Ren'Py Inspector</strong><small>External workspace · v0.6.1 preview</small></span>
-        </div>
-        <div className="connection-status" role="status">
-          <Tag color="blue">READ ONLY</Tag>
-          {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
-            connection === 'connecting' ? <Spin size="small" /> : <DisconnectOutlined style={{ color: '#ff9b81' }} />}
-          <span>{online ? 'Connected' : connection === 'connecting' ? 'Connecting' : 'Disconnected'}</span>
-        </div>
-      </header>
       <Tabs className="main-navigation" activeKey={section} onChange={setSection}
         items={[{ key: 'overview', label: 'Overview' }, { key: 'variables', label: 'Variables' }, { key: 'scripts', label: 'Scripts' }]} />
       <main className="inspector-main">
         {section === 'variables' && <div className="variables-workspace">
-          <div className="variables-toolbar">
-            <Input allowClear size="middle" className="variable-search"
-              prefix={<SearchOutlined />} placeholder="Search captured variable name, path, type or value"
-              aria-label="Search captured variables" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <Tooltip title="Fetch latest snapshot"><Button type="text" aria-label="Refresh snapshot"
-              icon={<ReloadOutlined />} onClick={() => setRefresh((n) => n + 1)} /></Tooltip>
-          </div>
           <Tabs className="variable-scope-tabs" activeKey={scope} onChange={setScope}
+            tabBarExtraContent={<Popover placement="bottomRight" trigger="click" open={searchOpen}
+              onOpenChange={setSearchOpen}
+              content={<div className="search-popover" role="search">
+                <Input ref={searchRef} prefix={<SearchOutlined />} allowClear size="middle"
+                  aria-label="Search captured variables" placeholder="Search captured variables"
+                  value={query} onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' || event.key === 'Enter') {
+                      event.stopPropagation();
+                      if (event.key === 'Escape') event.preventDefault();
+                      setSearchOpen(false);
+                    }
+                  }} />
+                <Text type="secondary" className="search-hint">Filters captured nodes · Esc to close</Text>
+              </div>}>
+              <Tooltip title={query ? 'Search active: ' + query : 'Search variables'}>
+                <Button className={query ? 'search-trigger search-trigger-active' : 'search-trigger'}
+                  icon={<SearchOutlined />} size="small" type="text"
+                  aria-label={query ? 'Search variables (filter active)' : 'Search variables'}
+                  aria-expanded={searchOpen} />
+              </Tooltip>
+            </Popover>}
             items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
               { key: 'favourites', label: `Favourites (${favourites.length})` }]} />
           <VariablePane scope={scope} snapshot={snapshot} query={query} favourites={favourites}
@@ -268,8 +277,19 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.1 preview' },
+              { key: 'connection', label: 'Connection', children: <span className="overview-connection">
+                {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
+                  connection === 'connecting' ? <Spin size="small" /> :
+                    <DisconnectOutlined style={{ color: '#ff9b81' }} />}
+                {online ? 'Connected' : connection === 'connecting' ? 'Connecting' : 'Disconnected'}
+              </span> },
+              ...(error ? [{ key: 'error', label: 'Connection error', children: error }] : []),
               { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
-              { key: 'connection', label: 'Connection', children: online ? 'Local authenticated read-only API' : 'Disconnected' },
+              { key: 'mode', label: 'Access', children: 'Read-only · authenticated local session · automatic updates' },
+              { key: 'budget', label: 'Capture limits', children: '450 nodes total · 80 per branch · 4 levels deep' },
+              { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?
+                'Partial snapshot. Some branches are not included.' : 'Within configured snapshot limits' },
             ]} />
           </Card>
         </section>}
@@ -283,10 +303,6 @@ export default function App() {
           ]} /></Card>
         </section>}
       </main>
-      <footer className="inspector-statusbar">
-        <span>{online ? `Live snapshot · ${captureTime(snapshot?.captured_at)}` : error || 'Open this inspector from the game Settings to pair'}</span>
-        <span>Read-only · Local session</span>
-      </footer>
       <Drawer title="Variable details" className="inspector-detail-drawer" placement="right"
         width="min(520px, 94vw)" open={Boolean(selected)} onClose={() => setSelected(null)}>
         {selected && <>

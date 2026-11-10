@@ -65,3 +65,9 @@ Alternatively, run `npm run build` and copy the contents of `web/dist/` into `ga
 - Test saving/loading/rollback while connected and inspect that stale data is invalidated.
 - Confirm the bridge listens on loopback only; a request without the token returns 401 and a foreign Origin/Host returns 403.
 - Repeat on Ren'Py 8 and measure FPS/CPU with the native and external inspectors off/on.
+
+## Compact tree-first workspace (PR #8)
+
+The permanent UI above Variables consists of only two Ant Design tab rows: **Overview / Variables / Scripts** and **Store / Persistent / Favourites**. There is no persistent branding bar, summary strip, footer or manual refresh button. The tree takes the remaining browser height. Automatic bridge snapshots continue; Overview now holds connection details, last capture, read-only status and coverage warnings.
+
+Click or keyboard-activate the magnifying-glass icon on the second tab row (or press `/` outside a text field) to open the temporary search field. Search filters captured nodes as you type, Escape or Enter dismisses it, and clicking outside closes the popover. The search icon stays highlighted if a filter is active; clear it inside the popover. Search cannot inspect uncaptured branches.

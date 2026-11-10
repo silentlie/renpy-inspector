@@ -37,3 +37,30 @@ test('small viewports preserve legible, unsqueezed navigation', () => {
   assert.doesNotMatch(css, /grid-template-columns:minmax\(300px,420px\)/);
   assert.doesNotMatch(css, /flex-direction:column!important/);
 });
+
+
+test('two tab layers are the only permanent controls above the tree', () => {
+  assert.doesNotMatch(jsx, /<header className="inspector-header"|className="product-brand"/);
+  assert.doesNotMatch(jsx, /<footer|variable-pane-footer|variable-pane-summary|variables-toolbar/);
+  assert.doesNotMatch(css, /inspector-header|inspector-statusbar|variable-pane-summary|variable-pane-footer/);
+  assert.match(jsx, /className="main-navigation"/);
+  assert.match(jsx, /className="variable-scope-tabs"/);
+  assert.match(css, /min-height: 34px/);
+  assert.match(css, /min-height: 33px/);
+});
+
+test('search opens as a transient popover without a refresh button', () => {
+  assert.match(jsx, /<Popover placement="bottomRight"/);
+  assert.match(jsx, /tabBarExtraContent=\{<Popover/);
+  assert.match(jsx, /aria-label=\{query \? 'Search variables \(filter active\)' : 'Search variables'\}/);
+  assert.match(jsx, /searchRef\.current\?\.focus\(\)/);
+  assert.match(jsx, /setQuery\(event\.target\.value\)/);
+  assert.match(jsx, /event\.key === 'Escape'/);
+  assert.doesNotMatch(jsx, /ReloadOutlined|setRefresh|Refresh snapshot/);
+});
+
+test('session and snapshot diagnostics live in Overview', () => {
+  for (const label of ['Connection', 'Capture limits', 'Coverage', 'Access', 'Last capture']) {
+    assert.ok(jsx.includes("label: '"+label+"'"), 'Missing Overview field '+label);
+  }
+});
