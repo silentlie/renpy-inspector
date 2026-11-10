@@ -1,12 +1,12 @@
 # External Ant Design interface: SugarCube-inspired PR #8
 
-> **Installable review build:** Pull request #8 CI produces
-> `renpy-inspector-v0.6.1-preview`, containing Ren'Py 7/8 test ZIPs.
-> This is not a public release and does not replace v0.6.0 on `main`.
+> **PR #9 development:** v0.6.1 is published. Draft PR #9 adds an
+> auto-paged virtual tree and new read-only child API; use its PR preview
+> packages, not the older PR #8 ZIPs, to test this feature.
 
 ## F8-only game integration
 
-As of the latest PR #8 revision, the Ren'Py game has **no native Inspector GUI**. F8 starts the local server and immediately opens the browser if stopped, or reopens the same authenticated browser session if already running. The only screen remaining in Ren'Py is an invisible F8 action and a conditional 1.5-second snapshot timer; any connection/coverage information belongs in the browser's Overview tab.
+Since PR #8, the Ren'Py game has **no native Inspector GUI**. F8 starts the local server and immediately opens the browser if stopped, or reopens the same authenticated browser session if already running. In PR #9 the invisible overlay uses a 250ms request-processing timer and refreshes shallow root snapshots approximately every 1.5 seconds; connection/coverage information belongs in the browser's Overview tab.
 
 ## Information architecture
 
@@ -30,15 +30,16 @@ PR #8 reorganizes the external inspector around the navigational pattern of
 
 ## Deliberate safety boundaries
 
-This is a **frontend-only** change. The bridge is still the opt-in, loopback,
-authenticated, read-only version introduced in PR #7. The 450-node global,
-80-children-per-parent and four-level snapshot limits are unchanged. Search
-works only against captured data, and expanding a branch never executes an
-untrusted expression or requests additional Python objects over HTTP.
+PR #9 retains the loopback-authenticated, read-only bridge and adds a *bounded*
+typed-path paging API. The first snapshot includes shallow Store/Persistent
+roots; expanding a node requests its first page on the game thread. Virtual
+pagination sentinels automatically request more pages as they become visible.
+HTTP worker threads queue only primitive arguments and serve serialised bytes.
 
-Implementing lazy, typed-path, per-branch inspection remains a separate
-security/performance milestone. Editing/locks/undo are also deferred because
-Ren'Py save/rollback semantics must be designed separately.
+Limits: 80 children/page, 1,000 entries/branch, eight levels, 6,000 loaded nodes
+in the browser and 256 KiB per response. Search remains restricted to *loaded*
+data and favourites may be unresolved until the path is loaded. Editing,
+locking, full-value access and undo/redo are still excluded.
 
 ## Verification
 

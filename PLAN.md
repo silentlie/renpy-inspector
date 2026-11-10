@@ -25,9 +25,28 @@
 6. Remove the native inspector UI entirely; F8 starts the bridge and opens a browser, or reopens the existing browser session when already running.
 7. Add focused UI/tree tests and responsive checks; package Ren'Py 7/8 preview ZIPs. Keep PR #8 a draft until browser geometry and game smoke tests are satisfactory.
 
-## Later milestones (not PR #8)
+## Milestone: PR #9 — auto-paged virtual tree (v0.6.2 experimental)
 
-- **Lazy per-branch fetching:** a safe, typed, root-relative path API that inspects values only on the Ren'Py game thread, never from HTTP handlers. Include strict path allowlisting, rate/size/page limits, cycle handling, cache expiration after load/rollback, and tests on both engines. This replaces the current global 450-node snapshot limit only after safety and performance verification.
+- Retain Ant Design virtual scrolling, but let entering a visible pagination
+  sentinel **automatically** request the next bounded page.
+- Expand a node to fetch its first children; no ordinary "Load More" button.
+- Python 2.7/3 typed-path validation and authenticated read-only GET-only
+  paging. HTTP workers queue only primitive arguments; Ren'Py's timer resolves
+  requests on the game thread, then serialises bounded JSON results.
+- Limit each page to 80 children, each branch to 1,000 entries, depth to eight,
+  browser-loaded nodes to 6,000 and queued jobs to eight.
+- Preserve expanded pages when shallow root previews update; cancel requests
+  and reset generation after game load.
+- **Open questions for real-game testing:** virtual sentinel visibility,
+  stale descendant previews, rapid expand/collapse, pause during menu overlays,
+  FPS cost, and browser-favourite paths loaded out of order.
+- **Do not merge** until CI plus Ren'Py 7 and 8 real-game tests pass.
+
+## Later milestones (not PR #9)
+
+- **Freshness for expanded branches:** refresh only watched/visible child pages,
+  reconcile object replacements, and invalidate nested paths after rollback.
+  Add tests for deep favourites and concurrent page requests.
 - **Compare/history:** bounded, read-only primitive change history, with named context and clear retention semantics.
 - **Scripts/source navigation:** only data Ren'Py safely exposes; do not imply SugarCube's Twine passage-source APIs transfer.
 - **Editing, locks and undo/redo:** explicitly out of scope pending separate rollback/write-safety design.
