@@ -172,10 +172,15 @@ class HttpBridgeTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 401)
 
     def test_f8_launch_start_once_then_open_same_local_server(self):
+        self.bridge.stop()
+        self.assertFalse(self.bridge.running)
         with patch('webbrowser.open', return_value=True) as opened:
+            # First F8 starts the server and opens the browser.
             self.assertTrue(self.bridge.launch_or_open())
+            self.assertTrue(self.bridge.running)
             first = self.bridge.url
             token = self.bridge.token
+            # Further F8 presses reopen the same authenticated session.
             self.assertTrue(self.bridge.launch_or_open())
             self.assertEqual(self.bridge.url, first)
             self.assertEqual(self.bridge.token, token)
