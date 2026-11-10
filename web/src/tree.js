@@ -200,7 +200,7 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
       const tail = !page.more || page.items.length < pageSize ? [] :
         before.slice(offset + page.items.length);
       const next = [...before.slice(0, offset), ...nextSlice, ...tail];
-      const end = Math.max(nextEnd, metadata?.nextOffset ?? 0);
+      const end = tail.length ? Math.max(nextEnd, metadata?.nextOffset ?? 0) : nextEnd;
       return { nodes: next, meta: { nextOffset: end,
         more: tail.length ? metadata?.more ?? page.more : page.more,
         capped: page.capped } };
