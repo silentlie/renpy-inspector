@@ -12,7 +12,7 @@ import tempfile
 import threading
 
 from .bridge_paging import validate_tree_request
-from .compat import atomic_replace
+from .compat import atomic_replace, string_types
 
 MAX_FAVOURITES = 100
 MAX_PREFERENCE_BYTES = 64 * 1024
@@ -27,7 +27,7 @@ def validate_favourites(payload):
         if not isinstance(item, dict) or set(item) != set(('scope', 'key')):
             raise ValueError('invalid favourite entry')
         key, scope = item['key'], item['scope']
-        if not isinstance(key, (str, bytes)) or len(key) > 2048:
+        if not isinstance(key, string_types) or len(key) > 2048:
             raise ValueError('invalid favourite key')
         try:
             pair = json.loads(key)
