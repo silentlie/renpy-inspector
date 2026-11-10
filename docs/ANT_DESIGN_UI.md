@@ -4,6 +4,10 @@
 > `renpy-inspector-v0.6.1-preview`, containing Ren'Py 7/8 test ZIPs.
 > This is not a public release and does not replace v0.6.0 on `main`.
 
+## F8-only game integration
+
+As of the latest PR #8 revision, the Ren'Py game has **no native Inspector GUI**. F8 starts the local server and immediately opens the browser if stopped, or reopens the same authenticated browser session if already running. The only screen remaining in Ren'Py is an invisible F8 action and a conditional 1.5-second snapshot timer; any connection/coverage information belongs in the browser's Overview tab.
+
 ## Information architecture
 
 PR #8 reorganizes the external inspector around the navigational pattern of

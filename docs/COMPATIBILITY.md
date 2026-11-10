@@ -1,55 +1,28 @@
-# Ren'Py runtime compatibility matrix
+# Ren'Py Inspector: engine compatibility
 
-## Automated checks for v0.4.0
+The PR #8 external-only build keeps one Python 2.7/3-compatible inspection package for Ren'Py 7 and 8, with a separate React + Ant Design browser interface.
 
-One shared game-source tree supports both Python 2.7 and Python 3 using
-`game/renpy_inspector/compat.py`. There are no duplicated engine branches.
-Each tagged release builds engine-labelled `-renpy7.zip` and `-renpy8.zip`
-archives from identical installable source, with SHA-256 checksums.
+| SDK | Interpreter | Automated validation | Manual in-game check |
+| --- | --- | --- | --- |
+| Ren'Py 7.4.11 | Python 2.7 | CI lint and standalone tests | Still required |
+| Ren'Py 7.8.7 | Python 2.7 | CI lint and standalone tests | Still required |
+| Ren'Py 8.4.1 | Python 3 | CI lint and standalone tests | Still required |
+| Ren'Py 8.5.3 | Python 3 | CI lint and standalone tests | Still required |
 
-Pull requests run Python 3.9/3.13 tests, a standalone Python 2.7 Docker job
-which **compiles the whole game Python package and runs its own regression
-suite**, and official SDK lint on all four versions listed below. The release
-workflow repeats the complete validation workflow on the merge commit before
-publishing both packages.
+The native implementation is now a **displayless overlay screen** handling F8 and a snapshot timer. It contains no drawer, tree, tabs, settings or other in-game inspector widgets.
 
-| Ren'Py SDK | Interpreter | SDK lint | Interactive/save-load test |
-|---|---|---|---|
-| 7.4.11 | Python 2.7 | CI configured; verify PR run | Not yet verified |
-| 7.8.7 | Python 2.7 | CI configured; verify PR run | Not yet verified |
-| 8.4.1 | Python 3 | CI configured; verify PR run | Not yet verified |
-| 8.5.3 | Python 3 | CI configured; verify PR run | Not yet verified |
+## Interactive acceptance criteria
 
-SDK lint tests script parsing and initialization, not input or actual gameplay.
-The Python 2.7 regression suite verifies the inspection core and settings on
-that runtime, but it is not embedded in the Ren'Py interpreter or renderer.
+1. With inspector files installed but no bridge active, gameplay and normal save/load work. The server must not auto-start during init.
+2. F8 starts the localhost bridge, opens the browser and does not show a native inspector GUI.
+3. A second F8 press opens the **same session URL**, with the same port/token.
+4. Actual browser game state matches the current scene, updates through the 1.5-second Ren'Py interaction-thread timer, and remains read-only.
+5. Browser close/reopen works; the server remains alive while the game continues.
+6. The server fails safely if Ant Design assets or a default browser are unavailable. Transient errors should not block gameplay.
+7. Save/load/rollback invalidates stale snapshots and does not serialize inspector state into gameplay saves.
+8. Test F8 with menus, modal dialogues, hidden overlays and customised game keymaps. F8 may be intercepted by host games; record exceptions.
+9. Validate no HTTP writes/eval, token/session isolation, loopback-only binding, and bounded inspection.
+10. Benchmark game FPS, memory use, and responsiveness without inspector, inspector installed/idle, and inspector/browser active.
+11. Test uninstall/upgrade after previous native drawer releases. The styles file is overwritten with an empty stub and the old drawer screen is replaced; remove independently installed experimental GUI files.
 
-## Interactive checks still required
-
-Create the fixture with
-`python scripts/prepare_fixture.py /tmp/renpy-inspector-fixture`, then start it
-in each SDK. Record OS, resolution, test actions, logs and measured FPS.
-
-- F8 and the Inspect tab open/close the overlay without blocking gameplay.
-  Verify footer remains visible at 720p, 900p and 1080p.
-- In Variables, expand a list/dictionary with over 200 entries, use **Load next 200 entries**, and confirm prior expanded branches stay open; repeat until the 1,000-per-branch cap.
-- Verify indentation guides, arrow alignment, compact tabs and readable variable previews on Ren'Py 7 and 8.
-- Verify polling buttons are only under Settings and Refresh remains available in the fixed footer.
-  Test Overview, Variables, Scripts and Settings at multiple resolutions.
-- Search for nested variables; click to reveal; expand, pin and track values.
-- Inspect discovered `characters.affection` named store and a registered root.
-- Display current script file/line, return-stack depth and engine version.
-- Toggle 0 ms manual polling and normal 250 ms polling; ensure one timer only.
-- Restart the game; verify favourites, named-scope selection and width persist.
-- Save with drawer open; load and rollback; confirm no stale references or
-  inspector data accidentally inserted into game saves.
-- Replace watched dictionaries and modules; verify watched paths reconnect.
-- Test Unicode dictionary keys, lists, cycles, very large dictionaries and
-  case-insensitive search on both Python 2 and Python 3.
-- Uninstall only inspector files; verify pre-existing host saves still load.
-- Measure UI responsiveness, idle/active FPS, memory and long-running polling
-  relative to the same game with the mod removed.
-
-**Do not claim fully validated game compatibility or stable release until these
-interactive checks are documented.** Standalone benchmarks and SDK lint cannot
-replace engine-level runtime verification.
+SDK lint verifies syntax/init, not actual browser launch, F8 handling or save/rollback behaviour. Do not claim universal engine or game compatibility without interactive evidence.

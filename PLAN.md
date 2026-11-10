@@ -13,7 +13,7 @@
 - ⚠️ Real-game testing confirms browser connects and UI renders on a Ren'Py 7 game; save/load/rollback, FPS, startup on varied OSes and Ren'Py 8 interactive testing remain open.
 - **Merge gate:** Green CI and documented experimental limitations. Publish only a *prerelease*; retain read-only semantics and native fallback.
 
-## Milestone: PR #8 — SugarCube codex/dev-inspired structure
+## Milestone: PR #8 — SugarCube codex/dev-inspired external-only interface
 
 **Reference:** [SugarCube Inspector codex/dev](https://github.com/silentlie/sugarcube-inspector/tree/codex/dev) at `0f533358` (version 1.0.0). Copy design patterns, not its MAIN-world JavaScript inspection/editing.
 
@@ -22,7 +22,8 @@
 3. Show key and type together, right-aligned short preview, and explicit pin actions in each virtualized tree row. Maintain keyboard and mouse expansion and selection.
 4. Show longer values and full paths **on demand** in a detail drawer or expandable panel, never by squeezing the main tree.
 5. Keep bounded snapshots and the authenticated read-only bridge; preserve existing overview, search and browser-local favourites.
-6. Add focused UI/tree tests and responsive checks; package Ren'Py 7/8 preview ZIPs. Keep PR #8 a draft until browser geometry and game smoke tests are satisfactory.
+6. Remove the native inspector UI entirely; F8 starts the bridge and opens a browser, or reopens the existing browser session when already running.
+7. Add focused UI/tree tests and responsive checks; package Ren'Py 7/8 preview ZIPs. Keep PR #8 a draft until browser geometry and game smoke tests are satisfactory.
 
 ## Later milestones (not PR #8)
 
