@@ -688,16 +688,47 @@ export default function App() {
               onOpenChange={setSearchOpen}
               content={<div className="search-popover" role="search">
                 <Input ref={searchRef} prefix={<SearchOutlined />} allowClear size="middle"
-                  aria-label="Search captured variables" placeholder="Search captured variables"
-                  value={query} onChange={(event) => setQuery(event.target.value)}
+                  aria-label="Search variables across Store and Persistent"
+                  placeholder="Search variable names or paths"
+                  value={query} onChange={(event) => {
+                    setQuery(event.target.value);
+                    setRevealError('');
+                  }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Escape' || event.key === 'Enter') {
-                      event.stopPropagation();
-                      if (event.key === 'Escape') event.preventDefault();
-                      setSearchOpen(false);
+                    if (event.key === 'Escape') {
+                      event.stopPropagation(); event.preventDefault(); setSearchOpen(false);
+                    } else if (event.key === 'Enter' &&
+                      searchMatches.query === query.trim() && searchMatches.items.length) {
+                      event.stopPropagation(); event.preventDefault();
+                      revealResult(searchMatches.items[0]);
                     }
                   }} />
-                <Text type="secondary" className="search-hint">Filters captured nodes · Esc to close</Text>
+                <Text type="secondary" className="search-hint">
+                  Global bounded search · type at least two characters · Esc to close
+                </Text>
+                {query.trim().length >= 2 && <div className="remote-search-results"
+                  role="listbox" aria-label="Matching game variables">
+                  {searchMatches.busy && <div className="remote-search-status">
+                    <Spin size="small" /> Searching game state…</div>}
+                  {!searchMatches.busy && searchMatches.error &&
+                    <Text type="danger">{searchMatches.error}</Text>}
+                  {!searchMatches.busy && searchMatches.query === query.trim() &&
+                    searchMatches.items.map((match) =>
+                      <button type="button" className="remote-search-hit"
+                        role="option" aria-selected={false} key={match.key}
+                        disabled={revealBusy} onClick={() => revealResult(match)}>
+                        <span className="remote-search-path">{match.path}</span>
+                        <span className="remote-search-preview">{match.type} · {match.preview}</span>
+                      </button>)}
+                  {!searchMatches.busy && !searchMatches.error &&
+                    searchMatches.query === query.trim() && !searchMatches.items.length &&
+                    <Text type="secondary">No matches within the search budget.</Text>}
+                  {searchMatches.limited && <Text type="secondary" className="remote-search-warning">
+                    Partial results: depth, traversal and result counts are bounded.
+                    Narrow the term or expand a likely branch.
+                  </Text>}
+                  {revealError && <Text type="danger" role="alert">{revealError}</Text>}
+                </div>}
               </div>}>
               <Tooltip title={query ? 'Search active: ' + query : 'Search variables'}>
                 <Button className={query ? 'search-trigger search-trigger-active' : 'search-trigger'}

@@ -125,3 +125,16 @@ test('Compare continues observing last selected variable scope', () => {
   assert.match(jsx, /lastTreeScope/);
   assert.match(jsx, /scope === 'compare' \? lastTreeScope : scope/);
 });
+
+
+test('global search stays inside popup and reveals through the virtual Tree', () => {
+  assert.match(jsx, /api\/v1\/search/);
+  assert.match(jsx, /api\/v1\/reveal/);
+  assert.match(jsx, /scope: 'all', q: term/);
+  assert.match(jsx, /window\.setTimeout\(async \(\) => \{/);
+  assert.match(jsx, /integrateRevealChain/);
+  assert.match(jsx, /revealParentKeys/);
+  assert.match(jsx, /treeRef\.current\?\.scrollTo\?\.\(\{ key: revealTarget\.key \}\)/);
+  assert.match(jsx, /role="listbox" aria-label="Matching game variables"/);
+  assert.doesNotMatch(jsx, /permanent-search-toolbar|new WebSocket/);
+});

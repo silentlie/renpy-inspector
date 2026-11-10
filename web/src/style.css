@@ -137,3 +137,18 @@ html, body { overscroll-behavior: none; }
   .compare-list { padding:0 10px 10px; }
   .compare-values { gap:6px; }
 }
+
+
+/* Search is a popover only. Results scroll inside it, never the tree. */
+.remote-search-results { max-height:min(340px,55vh);overflow-x:hidden;overflow-y:auto;
+  display:flex;flex-direction:column;gap:3px;overscroll-behavior:contain; }
+.remote-search-status { display:flex;gap:8px;align-items:center;padding:8px 4px; }
+.remote-search-hit { appearance:none;border:0;border-radius:5px;
+  cursor:pointer;background:transparent;color:inherit;text-align:left;display:flex;
+  flex-direction:column;align-items:stretch;gap:3px;min-width:0;padding:7px; }
+.remote-search-hit:hover,.remote-search-hit:focus-visible { background:#213854;outline:1px solid #567eae; }
+.remote-search-hit:disabled { opacity:.5;cursor:default; }
+.remote-search-path,.remote-search-preview {font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%; }
+.remote-search-preview { color:#a6bdd8;font-size:11px; }
+.remote-search-warning {padding:6px 4px;font-size:11px; }
