@@ -95,6 +95,7 @@ class FavoriteApiTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(responses[0][0], 200)
         self.assertEqual(responses[0][1]['node']['preview'], '51')
+        self.assertGreater(responses[0][1]['captured_at'], 0)
         self.assertEqual(self.workers, [self.origin_thread])
         self.store.player['stats']['hp'] = 77
         changed = []
