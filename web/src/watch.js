@@ -84,3 +84,27 @@ export function nextWatchBatch(jobs, cursor, batchSize = WATCHES_PER_TICK) {
   const current = Array.from({ length: n }, (_, i) => jobs[(start + i) % jobs.length]);
   return { jobs: current, next: (start + n) % jobs.length };
 }
+
+
+/** Independent location subscriptions, including favourites in unloaded trees.
+ * The existing shared scheduler executes these alongside active tree pages.
+ */
+export function collectIndependentFavouriteWatches(favourites) {
+  const result = [], seen = new Set();
+  for (const fav of (favourites ?? []).slice(0, 100)) {
+    const decoded = decodeTreeKey(fav.key);
+    if (!decoded || decoded.scope !== fav.scope || !decoded.path.length ||
+        seen.has(fav.key)) continue;
+    seen.add(fav.key);
+    result.push({ kind: 'value', id: 'value:' + fav.key,
+      scope: fav.scope, key: fav.key });
+  }
+  return result;
+}
+
+export function combineScopedWatches(pageJobs, favourites) {
+  return [
+    ...collectIndependentFavouriteWatches(favourites),
+    ...(pageJobs ?? []).map((job) => ({ ...job, kind: 'page' })),
+  ];
+}

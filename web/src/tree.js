@@ -39,8 +39,16 @@ export function readBridgeFragment(fragment) {
 
 export function safeFavourites(data) {
   if (!Array.isArray(data)) return [];
-  return data.filter((x) => x && (x.scope === 'store' || x.scope === 'persistent') &&
-    typeof x.key === 'string' && x.key.length < 2048).slice(0, 100);
+  const unique = new Set();
+  return data.filter((x) => {
+    if (!x || !['store', 'persistent'].includes(x.scope) ||
+        typeof x.key !== 'string' || x.key.length > 2048) return false;
+    const decoded = decodeTreeKey(x.key);
+    if (!decoded || decoded.scope !== x.scope || !decoded.path.length) return false;
+    if (unique.has(x.key)) return false;
+    unique.add(x.key);
+    return true;
+  }).slice(0, 100);
 }
 
 /** Resolve browser-local favourite paths against the current bounded snapshot.
@@ -48,7 +56,7 @@ export function safeFavourites(data) {
  * descendant of another favourite, so render keys are namespaced per root.
  * sourceKey always identifies the original scope/key for pin and detail actions.
  */
-export function favouriteNodes(scopes, favourites) {
+export function favouriteNodes(scopes, favourites, directValues = {}) {
   const maps = {
     store: flatten(scopes?.store ?? []),
     persistent: flatten(scopes?.persistent ?? []),
@@ -62,11 +70,17 @@ export function favouriteNodes(scopes, favourites) {
   });
   return (favourites ?? []).map(({ scope, key }) => {
     const original = maps[scope]?.get(key);
+    const live = directValues[key];
+    if (live) {
+      const merged = live.state === 'missing' ? { ...live, children: [], expandable: false } :
+        { ...original, ...live, children: original?.children ?? [] };
+      return clone(merged, scope, key);
+    }
     if (original) return clone(original, scope, key);
     return {
       key: JSON.stringify([scope, key, key]), sourceKey: key,
-      name: 'Unavailable favourite', path: key, type: 'missing',
-      preview: 'Not present in current bounded snapshot', state: 'missing',
+      name: 'Waiting for favourite watch', path: key, type: 'pending',
+      preview: 'Waiting for live value', state: 'pending',
       favouriteScope: scope, children: [], isLeaf: true,
     };
   });

@@ -142,3 +142,54 @@ def build_lazy_snapshot(providers, game_info=None):
                 'next_offset': 0, 'more': False, 'capped': False,
             }
     return result
+
+
+def build_tree_value(providers, scope, path):
+    """Resolve a single pinned path safely, without requiring tree expansion.
+
+    Called ONLY by Ren'Py's interaction thread. Each segment must be a visible
+    descriptor, preventing private attribute access or arbitrary evaluation.
+    Missing keys produce an explicit missing node so pins survive replacements.
+    """
+    scope, path, unused_offset, unused_size = validate_tree_request(
+        scope, [[kind, value] for kind, value in path], 0, 1)
+    if not path:
+        raise ValueError('a favourite must identify a node')
+    value = providers[scope]()
+    ancestors = set((id(value),))
+    missing = False
+    is_cycle = False
+    for depth, segment in enumerate(path):
+        descriptors, unused_truncated = child_descriptors(
+            value, MAX_BRANCH, is_store_root=(depth == 0 and scope == 'store'))
+        if segment not in [pair[0] for pair in descriptors]:
+            missing = True
+            break
+        value = read_child(value, segment)
+        if value is MISSING:
+            missing = True
+            break
+        is_cycle = id(value) in ancestors
+        if is_cycle and depth != len(path) - 1:
+            missing = True
+            break
+        ancestors.add(id(value))
+    if missing:
+        state, type_name, preview, expandable = 'missing', 'missing', '<missing>', False
+    else:
+        state, type_name, preview, expandable, unused_token = snapshot(
+            value, is_cycle=is_cycle)
+    last_kind, last_value = path[-1]
+    name = last_value if last_kind == 'attribute' else (
+        '[{}]'.format(last_value) if last_kind == 'index' else repr(last_value))
+    node = {
+        'key': json.dumps([scope, path], ensure_ascii=True, separators=(',', ':')),
+        'name': _safe_text(name, 90),
+        'path': _safe_text(format_location(scope, path), 230),
+        'type': _safe_text(type_name, 48),
+        'preview': _safe_text(preview),
+        'state': _safe_text(state, 18),
+        'expandable': bool(expandable),
+        'children': [],
+    }
+    return {'protocol': 1, 'scope': scope, 'node': node}

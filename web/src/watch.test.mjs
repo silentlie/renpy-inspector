@@ -57,3 +57,25 @@ test('shared scheduler rotates bounded batches rather than all watches', () => {
     ids.push(...next.jobs.map(x=>x.id));cursor=next.next;}
   assert.deepEqual(ids,['a','b','c','d','e','a']);
 });
+
+
+import { collectIndependentFavouriteWatches, combineScopedWatches } from './watch.js';
+
+test('independent watches include deep favourite keys outside loaded tree', () => {
+  const path = JSON.stringify(['store', [['attribute', 'nested'], ['key', 'score']]]);
+  const values = collectIndependentFavouriteWatches([
+    { scope:'store', key:path }, { scope:'store', key:path },
+    { scope:'persistent', key:path }, { scope:'store', key:'bad' },
+  ]);
+  assert.equal(values.length, 1);
+  assert.equal(values[0].key, path);
+  assert.equal(values[0].kind, 'value');
+});
+
+test('one shared poll plan contains values and expanded pages', () => {
+  const path = JSON.stringify(['persistent', [['attribute', 'flag']]]);
+  const jobs = combineScopedWatches([{ scope:'store', parentKey:'p',
+    offset:0, id:'page-p' }], [{ scope:'persistent', key:path }]);
+  assert.equal(jobs.length, 2);
+  assert.deepEqual(jobs.map(j=>j.kind), ['value','page']);
+});

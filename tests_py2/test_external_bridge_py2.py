@@ -16,6 +16,8 @@ from renpy_inspector.bridge_snapshot import build_snapshot, encode_snapshot
 from renpy_inspector.bridge import InspectorBridge
 from renpy_inspector.bridge_paging import build_tree_page, build_lazy_snapshot, validate_tree_request
 from renpy_inspector.controller import Inspector
+from renpy_inspector.bridge_paging import build_tree_value
+from renpy_inspector.browser_favourites import BrowserFavouritesStore
 
 
 class BridgePy2Tests(unittest.TestCase):
@@ -48,6 +50,23 @@ class BridgePy2Tests(unittest.TestCase):
         shallow = build_lazy_snapshot(providers)
         self.assertTrue(shallow['root_pages']['store']['more'])
         self.assertEqual(len(shallow['scopes']['store']), 80)
+
+    def test_direct_watch_and_persistent_browser_favourites_py2(self):
+        root = ModuleType(str('store'))
+        root.profile = {'score': 10}
+        providers = {'store': lambda: root, 'persistent': lambda: {}}
+        location = (('attribute', 'profile'), ('key', 'score'))
+        self.assertEqual(build_tree_value(providers, 'store', location)['node']['preview'], '10')
+        root.profile = {'score': 25}
+        self.assertEqual(build_tree_value(providers, 'store', location)['node']['preview'], '25')
+        folder = tempfile.mkdtemp(prefix='inspector-favourites-py2-')
+        try:
+            store = BrowserFavouritesStore(folder)
+            key = json.dumps(['store', location], separators=(',', ':'))
+            store.save([{'scope': 'store', 'key': key}])
+            self.assertEqual(len(BrowserFavouritesStore(folder).load()['favourites']), 1)
+        finally:
+            shutil.rmtree(folder)
 
     def test_service_starts_and_stops_without_game(self):
         folder = tempfile.mkdtemp(prefix='bridge-py2-')
