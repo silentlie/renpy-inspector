@@ -139,3 +139,51 @@ test('new snapshot refreshes previews without erasing loaded child pages', () =>
   assert.equal(reset.scopes.store[0].children.length, 0);
   assert.equal(reset.roots.store.nextOffset, 80);
 });
+
+
+import { refreshWatchedPage } from './tree.js';
+
+test('watched pages update previews without losing expanded grandchildren', () => {
+  const parent = { key:'parent', type:'dict', expandable:true,loaded:true,
+    nextOffset:2,more:false,children:[
+      {key:'a',name:'a',type:'int',state:'value',preview:'1',children:[]},
+      {key:'nested',name:'nested',type:'dict',state:'value',expandable:true,loaded:true,
+        children:[{key:'deep',name:'deep',preview:'20',children:[]}],preview:'1 item'},
+    ]};
+  const state={generation:1,scopes:{store:[parent]},roots:{}};
+  const next=refreshWatchedPage(state,{scope:'store',generation:1,
+    offset:0,next_offset:2,more:false,items:[
+      {key:'a',name:'a',type:'int',state:'value',preview:'9',children:[]},
+      {key:'nested',name:'nested',type:'dict',state:'value',expandable:true,
+        preview:'1 item',children:[]},
+    ]},'parent');
+  assert.equal(next.scopes.store[0].children[0].preview,'9');
+  assert.equal(next.scopes.store[0].children[1].children[0].key,'deep');
+  assert.equal(next.scopes.store[0].children[1].loaded,true);
+});
+
+test('structural replacement removes stale child pages and resets cursor', () => {
+  const prior={generation:5,scopes:{store:[{key:'p',loaded:true,
+    children:[{key:'old',type:'int',preview:'7'}, {key:'tail',type:'int'}],
+    nextOffset:2,more:false}]},roots:{}};
+  const result=refreshWatchedPage(prior,{scope:'store',generation:5,
+    offset:0,items:[{key:'new',type:'int',state:'value',preview:'8'}],
+    next_offset:1,more:true,capped:false},'p');
+  assert.deepEqual(result.scopes.store[0].children.map(n=>n.key),['new']);
+  assert.equal(result.scopes.store[0].nextOffset,1);
+  assert.equal(result.scopes.store[0].more,true);
+});
+
+test('scalars and changed types lose stale expanded children', () => {
+  const old=[{key:'x',type:'dict',state:'value',expandable:true,loaded:true,
+    children:[{key:'y',type:'str'}]}];
+  const next=reconcilePageNodes(old,[{key:'x',type:'int',state:'value',expandable:false,children:[]}]);
+  assert.equal(next[0].loaded,false);
+  assert.deepEqual(next[0].children,[]);
+});
+
+test('stale watched pages from a previous load are ignored', () => {
+  const state={generation:7,scopes:{store:[]},roots:{}};
+  const page={scope:'store',generation:6,offset:0,items:[]};
+  assert.equal(refreshWatchedPage(state,page),state);
+});
