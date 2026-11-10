@@ -11,17 +11,20 @@ import mimetypes
 import os
 import threading
 import webbrowser
+import json
 
 try:
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
     from SocketServer import ThreadingMixIn
-    from urlparse import urlsplit
+    from urlparse import urlsplit, parse_qs
 except ImportError:
     from http.server import HTTPServer, BaseHTTPRequestHandler
     from socketserver import ThreadingMixIn
-    from urllib.parse import urlsplit
+    from urllib.parse import urlsplit, parse_qs
 
-from .bridge_snapshot import PROTOCOL, build_snapshot, encode_snapshot
+from .bridge_snapshot import PROTOCOL, encode_snapshot
+from .bridge_paging import build_tree_page, build_lazy_snapshot, validate_tree_request
+from .compat import monotonic_time
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -72,7 +75,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(403)
             return
         origin = self.headers.get('Origin')
-        if urlsplit(self.path).path == '/api/v1/snapshot' and origin in ALLOWED_DEV_ORIGINS:
+        if urlsplit(self.path).path in ('/api/v1/snapshot', '/api/v1/children') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -86,14 +89,44 @@ class _Handler(BaseHTTPRequestHandler):
             return
         origin = self.headers.get('Origin')
         path = urlsplit(self.path).path
-        if path == '/api/v1/snapshot':
+        if path in ('/api/v1/snapshot', '/api/v1/children'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
                 return
-            with self.server.bridge.lock:
-                data = self.server.bridge.cached_bytes
-            self._send(200, data, 'application/json; charset=utf-8', origin=origin)
+            if path == '/api/v1/snapshot':
+                with self.server.bridge.lock:
+                    data = self.server.bridge.cached_bytes
+                self._send(200, data, 'application/json; charset=utf-8', origin=origin)
+                return
+            if len(self.path) > 4096:
+                self._send(400, b'Invalid tree request', origin=origin)
+                return
+            try:
+                fields = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if set(fields) != set(('scope', 'path', 'offset', 'size')):
+                    raise ValueError('unexpected fields')
+                if any(len(values) != 1 for values in fields.values()):
+                    raise ValueError('duplicate fields')
+                raw_path = json.loads(fields['path'][0])
+                offset = int(fields['offset'][0]) if fields['offset'][0].isdigit() else -1
+                size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
+                arguments = validate_tree_request(fields['scope'][0], raw_path, offset, size)
+            except (ValueError, TypeError, KeyError):
+                self._send(400, b'Invalid tree request', origin=origin)
+                return
+            bridge = self.server.bridge
+            job = bridge.enqueue_tree_page(arguments)
+            if job is None:
+                self._send(429, b'Inspector queue is busy', origin=origin)
+                return
+            if not job['event'].wait(3.0):
+                bridge.cancel_tree_page(job)
+                self._send(503, b'Game interaction paused; retry', origin=origin)
+                return
+            status, response = job['response']
+            self._send(status, response,
+                       'application/json; charset=utf-8', origin=origin)
             return
         if path == '/':
             name = 'index.html'
@@ -131,9 +164,13 @@ class InspectorBridge(object):
         self.thread = None
         self.token = None
         self.error = ''
-        self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'captured_at': None,
+        self.generation = 0
+        self.pending_pages = []
+        self.last_publish = 0.0
+        self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'generation': 0, 'captured_at': None,
                                              'scopes': {'store': [], 'persistent': []},
-                                             'counts': {}, 'truncated': {}, 'game': {}})
+                                             'counts': {}, 'truncated': {},
+                                             'root_pages': {}, 'game': {}})
 
     def configure_game_directory(self, directory):
         """Use Ren'Py's actual game/ location, not an import cache path.
@@ -182,6 +219,7 @@ class InspectorBridge(object):
             self.stop()
 
     def stop(self):
+        self.cancel_all_tree_pages()
         server = self.server
         self.server = None
         self.token = None
@@ -220,12 +258,83 @@ class InspectorBridge(object):
             return False
         return self.open_browser()
 
-    def invalidate(self):
-        """After a Ren'Py save load, discard snapshot from the previous state."""
+    def cancel_all_tree_pages(self):
         with self.lock:
-            self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'captured_at': None,
-                                                 'scopes': {'store': [], 'persistent': []},
-                                                 'counts': {}, 'truncated': {}, 'game': {}})
+            queued, self.pending_pages = self.pending_pages, []
+            for job in queued:
+                job['cancelled'] = True
+                job['response'] = (409, encode_snapshot({'error': 'Game state changed'}))
+                job['event'].set()
+
+    def enqueue_tree_page(self, arguments):
+        """HTTP thread: store primitive values only, never inspect gameplay."""
+        with self.lock:
+            if not self.running or len(self.pending_pages) >= 8:
+                return None
+            job = {'args': arguments, 'generation': self.generation,
+                   'event': threading.Event(), 'response': None,
+                   'cancelled': False}
+            self.pending_pages.append(job)
+            return job
+
+    def cancel_tree_page(self, job):
+        with self.lock:
+            job['cancelled'] = True
+            if job in self.pending_pages:
+                self.pending_pages.remove(job)
+
+    def tick(self):
+        """Ren'Py interaction thread: at most two page jobs per 250ms tick."""
+        if not self.running:
+            return
+        with self.lock:
+            jobs = self.pending_pages[:2]
+            del self.pending_pages[:2]
+        for job in jobs:
+            if job['cancelled']:
+                continue
+            try:
+                with self.lock:
+                    valid = job['generation'] == self.generation and self.running
+                if not valid:
+                    status, result = 409, {'error': 'Game state changed'}
+                else:
+                    result = build_tree_page(self.inspector._providers, *job['args'])
+                    status = 200
+            except (ValueError, KeyError, TypeError):
+                status, result = 404, {'error': 'Tree path unavailable'}
+            except Exception:
+                status, result = 500, {'error': 'Read-only inspection failed'}
+            with self.lock:
+                if job['generation'] != self.generation:
+                    status, result = 409, {'error': 'Game state changed'}
+                if not job['cancelled']:
+                    result['generation'] = self.generation
+                    try:
+                        data = encode_snapshot(result)
+                    except (ValueError, TypeError):
+                        status, data = 413, encode_snapshot({'error': 'Page too large'})
+                    job['response'] = (status, data)
+                    job['event'].set()
+        if monotonic_time() - self.last_publish >= 1.5:
+            self.publish()
+
+    def invalidate(self):
+        """Discard pages and old snapshots after save-load or session reset."""
+        with self.lock:
+            self.generation += 1
+            queued, self.pending_pages = self.pending_pages, []
+            for job in queued:
+                job['cancelled'] = True
+                job['response'] = (409, encode_snapshot({'error': 'Game state changed',
+                                          'generation': self.generation}))
+                job['event'].set()
+            self.cached_bytes = encode_snapshot({
+                'protocol': PROTOCOL, 'generation': self.generation,
+                'captured_at': None,
+                'scopes': {'store': [], 'persistent': []},
+                'counts': {}, 'truncated': {},
+                'root_pages': {}, 'game': {}})
 
     def publish(self):
         """Read game values ONLY on the Ren'Py interaction thread."""
@@ -234,10 +343,11 @@ class InspectorBridge(object):
         try:
             info = (self.inspector._context_info()
                     if self.inspector._context_provider else {})
-            data = build_snapshot(self.inspector._providers, game_info=info)
-            payload = encode_snapshot(data)
+            data = build_lazy_snapshot(self.inspector._providers, game_info=info)
             with self.lock:
-                self.cached_bytes = payload
+                data['generation'] = self.generation
+                self.cached_bytes = encode_snapshot(data)
+            self.last_publish = monotonic_time()
             self.error = ''
         except Exception as exc:
             # An inspection error must not interrupt gameplay.

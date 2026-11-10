@@ -21,16 +21,16 @@ On the first F8 press, the inspector starts its authenticated **127.0.0.1** serv
 ## What the browser provides
 
 - Top-level **Overview / Variables / Scripts** tabs and Store / Persistent / Favourites scopes.
-- Full-width virtualized tree with type and bounded value previews.
+- Full-width virtualised tree with **automatic paged loading** on expansion and near the end of scrolled branches. No routine "Load more" click.
 - Popover search (magnifying-glass icon or `/`), on-demand details, and browser-local favourites.
 - Automatic snapshot updates while the game is running. No refresh button or browser footer.
 - Read-only access: no variable editing, code evaluation, or writes to gameplay saves.
 
-Snapshot limits are conservative: **450 nodes total**, **80 children per branch**, **four levels deep** and **256 KiB per response**. Search operates only on captured values, not arbitrary Python paths. Favourites are stored in the local browser origin and may not survive a port change.
+The first snapshot contains only shallow root pages. Expanding a branch fetches up to **80 child nodes per request**; as the virtual tree scrolls close to a page boundary, it requests another page automatically. Bounds remain: **1,000 nodes per branch, eight path levels, 6,000 browser-loaded nodes, eight queued requests and 256 KiB per HTTP response**. This is still not an unrestricted dump of all game state. Search finds already loaded values only. Favourites are stored in the local browser origin and may not survive a port change; a pinned deep path may appear unavailable until its ancestors have been loaded.
 
 ## How it works
 
-F8 calls an opt-in bridge launcher on Ren'Py's interaction thread. The server binds to `127.0.0.1` on an ephemeral port and generates a new pairing token when it starts. The token is passed in the local browser URL fragment and is required in an API header. The HTTP server only serves already serialized, bounded JSON and static Ant Design assets. Game values are collected on Ren'Py's interaction thread by a 1.5-second timer while the server runs.
+F8 calls an opt-in bridge launcher on Ren'Py's interaction thread. The server binds to `127.0.0.1` on an ephemeral port and generates a new pairing token when it starts. The token is passed in the local browser URL fragment and is required in an API header. The HTTP server only serves already serialised, bounded JSON and static Ant Design assets. Child-page HTTP requests queue validated typed paths; they never inspect game objects on HTTP threads. A 250ms Ren'Py interaction-thread timer services at most two queued requests per tick and publishes a shallow root refresh around every 1.5 seconds.
 
 The server stays available until the game exits. Closing a browser tab does **not** stop the game or its server. The F8 handler displays a brief Ren'Py notification only if the local server or browser cannot be opened. Some games suppress Ren'Py overlay screens; F8 and refreshes may be unavailable during those moments.
 

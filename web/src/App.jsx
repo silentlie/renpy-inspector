@@ -9,13 +9,31 @@ import {
   StarFilled, StarOutlined,
 } from '@ant-design/icons';
 import {
-  flatten, filteredTree, favouriteNodes, keysOf, readBridgeFragment, safeFavourites,
+  asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
+  integrateChildPage, keysOf, mergeRootSnapshot, readBridgeFragment, safeFavourites,
 } from './tree.js';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
 const FAVORITES_KEY = 'renpy-inspector-ant-favourites-v1';
 const SNAPSHOT_REFRESH_MS = 1250;
+const CHILD_PAGE_SIZE = 80;
+const MAX_CLIENT_TREE_NODES = 6000;
+function countNodes(nodes) {
+  let total = 0;
+  const stack = [...(nodes || [])];
+  while (stack.length) {
+    const node = stack.pop();
+    total += 1;
+    if (total > MAX_CLIENT_TREE_NODES) return total;
+    for (const child of node.children || []) stack.push(child);
+  }
+  return total;
+}
+function pageRequestId(scope, parent, offset, generation) {
+  // In-flight requests from a previous game load must not poison new pages.
+  return JSON.stringify([generation, scope, parent, offset]);
+}
 const SCOPES = [{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' }];
 
 function loadLocalFavourites() {
@@ -37,8 +55,37 @@ function previewKind(type) {
   return 'object';
 }
 
+
+/** Ant Design virtualises these sentinels: they mount only near the viewport.
+ * When one is visible, request the next bounded page. No Load More click needed.
+ * A manual retry control is available only when the request fails.
+ */
+function AutoPageSentinel({ scope, offset, loading, error, requestPage }) {
+  const spanRef = useRef(null);
+  const triggerRef = useRef(requestPage);
+  triggerRef.current = requestPage;
+  useEffect(() => {
+    const element = spanRef.current;
+    if (!element || loading || error) return undefined;
+    if (!('IntersectionObserver' in window)) {
+      triggerRef.current();
+      return undefined;
+    }
+    const root = element.closest('.ant-tree-list-holder');
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) triggerRef.current();
+    }, { root, rootMargin: '160px 0px 160px 0px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [offset, loading, error]);
+  return <span ref={spanRef} className="auto-page-sentinel" aria-live="polite">
+    {error ? <button type="button" onClick={() => triggerRef.current()}>
+      Could not load · Retry</button> : loading ? 'Loading more…' : 'More entries below…'}
+  </span>;
+}
+
 function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite }) {
-  const canExpand = Boolean(node.children?.length);
+  const canExpand = Boolean(node.expandable || node.children?.length) && typeof onToggle === 'function';
   return <span className={`variable-row${isActive ? ' variable-row-active' : ''}`}>
     <span className={`variable-label${canExpand ? ' variable-label-expandable' : ''}`}
       role={canExpand ? 'button' : undefined} tabIndex={canExpand ? 0 : undefined}
@@ -73,7 +120,8 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
   </span>;
 }
 
-function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, onFavourite, expanded, onExpand }) {
+function VariablePane({ scope, treePages, query, favourites, selected, onSelect, onFavourite,
+  expanded, onExpand, onRequestPage, loadingPages, pageErrors }) {
   const viewportRef = useRef(null);
   const [height, setHeight] = useState(450);
 
@@ -95,22 +143,17 @@ function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, 
   }, []);
 
   const nodes = useMemo(() => scope === 'favourites'
-    ? favouriteNodes(snapshot?.scopes, favourites)
-    : snapshot?.scopes?.[scope] ?? [], [scope, snapshot, favourites]);
+    ? favouriteNodes(treePages?.scopes, favourites)
+    : treePages?.scopes?.[scope] ?? [], [scope, treePages, favourites]);
   const visible = useMemo(() => filteredTree(nodes, query), [nodes, query]);
   const favKeys = useMemo(() => new Set(favourites.map((x) => `${x.scope}:${x.key}`)), [favourites]);
   const hasQuery = Boolean(query.trim());
   const expandedKeys = hasQuery ? keysOf(visible) : expanded[scope] ?? [];
   const expandedSet = new Set(expandedKeys);
   const treeData = useMemo(() => {
-    const convert = (items) => items.map((node) => ({
-      ...node,
-      title: node.name,
-      isLeaf: !node.children?.length,
-      children: convert(node.children ?? []),
-    }));
-    return convert(visible);
-  }, [visible]);
+    if (scope === 'favourites') return asVirtualTreeNodes(visible, scope, {}, false);
+    return asVirtualTreeNodes(visible, scope, treePages?.roots, !hasQuery);
+  }, [visible, scope, treePages?.roots, hasQuery]);
 
   return <section className="variable-pane" aria-label="Variable tree workspace">
     <div ref={viewportRef} className="variable-tree-viewport">
@@ -119,9 +162,22 @@ function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, 
         switcherIcon={({ expanded: isExpanded }) => isExpanded ? <DownOutlined /> : <RightOutlined />}
         selectable={false} virtual height={height}
         treeData={treeData} expandedKeys={expandedKeys} autoExpandParent={hasQuery}
-        onExpand={(next) => { if (!hasQuery) onExpand(scope, next); }}
+        onExpand={(next, details) => {
+          if (hasQuery) return;
+          onExpand(scope, next);
+          if (details.expanded && scope !== 'favourites') {
+            const found = flatten(treePages?.scopes?.[scope] ?? []).get(details.node.key);
+            if (found?.expandable && !found.loaded) onRequestPage(scope, found.key, 0);
+          }
+        }}
         titleRender={(raw) => {
           const node = raw;
+          if (node.isLoadMore) {
+            const requestId = pageRequestId(node.scope, node.parentKey, node.nextOffset, treePages?.generation);
+            return <AutoPageSentinel scope={node.scope} offset={node.nextOffset}
+              loading={loadingPages.has(requestId)} error={pageErrors[requestId]}
+              requestPage={() => onRequestPage(node.scope, node.parentKey, node.nextOffset)} />;
+          }
           const originScope = scope === 'favourites' ? node.favouriteScope : scope;
           const sourceKey = node.sourceKey ?? node.key;
           const pinned = favKeys.has(`${originScope}:${sourceKey}`);
@@ -129,9 +185,13 @@ function VariablePane({ scope, snapshot, query, favourites, selected, onSelect, 
             isFavourite={pinned}
             isActive={selected?.scope === originScope && selected?.key === sourceKey}
             onToggle={hasQuery ? undefined : () => {
-              onExpand(scope, expandedSet.has(node.key)
-                ? expandedKeys.filter((key) => key !== node.key)
-                : [...expandedKeys, node.key]);
+              const opening = !expandedSet.has(node.key);
+              onExpand(scope, opening
+                ? [...expandedKeys, node.key]
+                : expandedKeys.filter((key) => key !== node.key));
+              if (opening && scope !== 'favourites' && node.expandable && !node.loaded) {
+                onRequestPage(scope, node.key, 0);
+              }
             }}
             onDetails={() => onSelect(originScope, sourceKey)}
             onFavourite={() => onFavourite(originScope, sourceKey)} />;
@@ -146,6 +206,11 @@ export default function App() {
   const [token] = useState(initialConnection.token);
   const [bridge] = useState(initialConnection.bridge || window.location.origin);
   const [snapshot, setSnapshot] = useState(null);
+  const [treePages, setTreePages] = useState(null);
+  const treePagesRef = useRef(null);
+  const loadingRef = useRef(new Set());
+  const [loadingPages, setLoadingPages] = useState(new Set());
+  const [pageErrors, setPageErrors] = useState({});
   const [connection, setConnection] = useState(token ? 'connecting' : 'unpaired');
   const [error, setError] = useState('');
   const [section, setSection] = useState('variables');
@@ -178,7 +243,13 @@ export default function App() {
         const data = await response.json();
         if (!data || data.protocol !== 1 || !data.scopes) throw new Error('Unsupported bridge protocol');
         if (!disposed && id === requestCounter.current) {
-          setSnapshot(data); setConnection('online'); setError('');
+          setSnapshot(data);
+          setTreePages((prior) => {
+            const next = mergeRootSnapshot(prior, data);
+            treePagesRef.current = next;
+            return next;
+          });
+          setConnection('online'); setError('');
         }
       } catch (failure) {
         if (!disposed && id === requestCounter.current) {
@@ -190,6 +261,66 @@ export default function App() {
     const timer = window.setInterval(poll, SNAPSHOT_REFRESH_MS);
     return () => { disposed = true; window.clearInterval(timer); };
   }, [token, bridge]);
+
+  const requestPage = useCallback(async (chosenScope, parentKey, offset) => {
+    if (!token || !['store', 'persistent'].includes(chosenScope)) return;
+    const previous = treePagesRef.current;
+    if (!previous) return;
+    const pageId = pageRequestId(chosenScope, parentKey, offset, previous.generation);
+    if (loadingRef.current.has(pageId)) return;
+    const decoded = parentKey === null ? null : decodeTreeKey(parentKey);
+    if (parentKey !== null && decoded?.scope !== chosenScope) return;
+    const path = parentKey === null ? [] : decoded?.path;
+    if (!path) return;
+    const count = countNodes(previous.scopes?.store) +
+      countNodes(previous.scopes?.persistent);
+    if (count >= MAX_CLIENT_TREE_NODES) {
+      setPageErrors((before) => ({
+        ...before, [pageId]: 'Client-side display limit reached',
+      }));
+      return;
+    }
+    loadingRef.current.add(pageId);
+    setLoadingPages(new Set(loadingRef.current));
+    setPageErrors((before) => {
+      const next = { ...before };
+      delete next[pageId];
+      return next;
+    });
+    try {
+      const params = new URLSearchParams({
+        scope: chosenScope, path: JSON.stringify(path),
+        offset: String(offset), size: String(CHILD_PAGE_SIZE),
+      });
+      const response = await fetch(bridge + '/api/v1/children?' + params, {
+        headers: { 'X-Inspector-Token': token }, method: 'GET',
+        cache: 'no-store', mode: 'cors',
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 409 ? 'Game state changed' :
+          response.status === 503 ? 'Game interaction paused' :
+          response.status === 429 ? 'Request queue busy' :
+          'Page fetch HTTP ' + response.status);
+      }
+      const data = await response.json();
+      setTreePages((prior) => {
+        const next = integrateChildPage(prior, data, parentKey);
+        treePagesRef.current = next;
+        return next;
+      });
+    } catch (reason) {
+      if (treePagesRef.current?.generation === previous.generation) {
+        setPageErrors((before) => ({
+          ...before, [pageId]: reason.message || 'Page unavailable',
+        }));
+      }
+    } finally {
+      loadingRef.current.delete(pageId);
+      setLoadingPages(new Set(loadingRef.current));
+    }
+  }, [bridge, token]);
+
+  useEffect(() => { setPageErrors({}); }, [treePages?.generation]);
 
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
   const pinVariable = useCallback((chosenScope, key) => {
@@ -204,8 +335,8 @@ export default function App() {
   }, []);
   const activeNode = useMemo(() => {
     if (!selected) return null;
-    return flatten(snapshot?.scopes?.[selected.scope] ?? []).get(selected.key) || null;
-  }, [snapshot, selected]);
+    return flatten(treePages?.scopes?.[selected.scope] ?? []).get(selected.key) || null;
+  }, [treePages, selected]);
   const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
   const activeGame = snapshot?.game ?? {};
   const online = connection === 'online';
@@ -261,9 +392,10 @@ export default function App() {
             </Popover>}
             items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
               { key: 'favourites', label: `Favourites (${favourites.length})` }]} />
-          <VariablePane scope={scope} snapshot={snapshot} query={query} favourites={favourites}
+          <VariablePane scope={scope} treePages={treePages} query={query} favourites={favourites}
             selected={selected} onSelect={selectNode} onFavourite={pinVariable}
-            expanded={expanded} onExpand={onExpanded} />
+            expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
+            loadingPages={loadingPages} pageErrors={pageErrors} />
         </div>}
         {section === 'overview' && <section className="info-page" aria-label="Runtime overview">
           <Text className="eyebrow">RUNTIME STATUS</Text>
@@ -287,7 +419,8 @@ export default function App() {
               ...(error ? [{ key: 'error', label: 'Connection error', children: error }] : []),
               { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
               { key: 'mode', label: 'Access', children: 'Read-only · authenticated local session · automatic updates' },
-              { key: 'budget', label: 'Capture limits', children: '450 nodes total · 80 per branch · 4 levels deep' },
+              { key: 'budget', label: 'Capture limits', children:
+                '80 per page · up to 1,000 per branch · 8 levels · 6,000 loaded nodes per browser' },
               { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?
                 'Partial snapshot. Some branches are not included.' : 'Within configured snapshot limits' },
             ]} />
@@ -328,7 +461,10 @@ export default function App() {
           </div>
           <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
           {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
-          <Paragraph type="secondary" className="detail-disclaimer">This is a bounded, read-only snapshot. Full values and uncaptured descendants are not available through the current bridge.</Paragraph>
+          <Paragraph type="secondary" className="detail-disclaimer">
+            This is a bounded, read-only snapshot preview. Expand branches and scroll to request additional pages.
+            Full string values and unrestricted Python objects are not exposed.
+          </Paragraph>
         </>}
       </Drawer>
     </div>

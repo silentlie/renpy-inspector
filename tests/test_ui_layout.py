@@ -17,8 +17,8 @@ class ExternalOnlyUiLayoutTests(unittest.TestCase):
 
     def test_snapshot_timer_survives_removing_native_drawer(self):
         self.assertIn('if renpy_inspector.bridge.running:', SCREEN)
-        self.assertIn('timer 1.5 repeat True', SCREEN)
-        self.assertIn('Function(renpy_inspector.bridge.publish, _update_screens=False)', SCREEN)
+        self.assertIn('timer 0.25 repeat True', SCREEN)
+        self.assertIn('Function(renpy_inspector.bridge.tick, _update_screens=False)', SCREEN)
 
     def test_no_native_inspector_interface(self):
         for forbidden in ('textbutton', 'frame:', 'hbox:', 'vbox:', 'viewport:',

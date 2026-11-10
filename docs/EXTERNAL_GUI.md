@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #8 experimental workflow.** The browser is the entire inspector UI. Ren'Py provides only the F8 key handler and read-only snapshot publishing.
+**PR #9 experimental paging workflow.** The browser remains the entire inspector UI. Ren'Py provides only F8 plus a read-only page-request/snapshot timer. The v0.6.1 release remains the stable baseline.
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. Get the correct engine-specific ZIP from the current [PR #8](https://github.com/silentlie/renpy-inspector/pull/8) preview or the appropriate release.
+2. For experimental paging, get the engine-specific preview ZIP from [PR #9](https://github.com/silentlie/renpy-inspector/pull/9). For the prior implementation, use the v0.6.1 release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
@@ -28,14 +28,14 @@ A short in-game error notification may appear if static assets are missing or th
 
 The browser has top-level **Overview / Variables / Scripts** tabs, nested **Store / Persistent / Favourites** scopes, a virtual tree, a popover search, details drawers and browser-local favourites. The tree occupies the available viewport, without permanent header or footer. Search via the icon or `/`, then dismiss with Escape/Enter.
 
-The connection state, capture timestamp, coverage warning, and read-only status live in **Overview**. The browser requests immutable snapshots automatically; there is no manual refresh button.
+On branch expansion, the browser requests its first **80** children over the authenticated GET-only API. As the virtualised list scrolls and its pagination sentinel enters the viewport, it requests the next 80 automatically. The tree renders only visible rows, even if hundreds of nodes have been loaded. A retry control appears only after a failed page request. The connection state, capture timestamp, coverage warning, and read-only status live in **Overview**; there is no manual refresh button.
 
 ## Security and resource limits
 
 - The server binds only to `127.0.0.1` on an OS-selected port, uses a **new 256-bit token when first started**, and validates Host/Origin headers. Do not share pairing URLs.
-- The browser authenticates its `GET /api/v1/snapshot` requests with a token header. POST and unknown routes are rejected. The token lives in a URL fragment, not an HTTP path.
-- Game values are inspected **only on the Ren'Py interaction thread**. HTTP worker threads return serialized bytes and cannot execute arbitrary Python or mutate game state.
-- Each capture is bounded by 450 total nodes, 80 children per branch, four levels deep and 256 KiB. The timer publishes about every 1.5 seconds while the overlay key handler is active. Temporarily suppressed Ren'Py overlays can delay updates.
+- The browser authenticates `GET /api/v1/snapshot` and `GET /api/v1/children` using the token header. The paging request sends typed JSON path segments, scope, offset and size as URL-encoded query fields. POST and unknown routes are rejected. The token lives in a URL fragment, not an HTTP path.
+- Game values are inspected **only on the Ren'Py interaction thread**. HTTP workers validate and queue primitive requests; the game timer resolves at most two per 250ms tick and serialises responses before the HTTP worker returns them. Nothing executes user-supplied Python expressions or writes game state.
+- Initial captures include shallow root pages only. Children are fetched on demand, **80 per request**, capped at **1,000 entries per branch**, **eight path levels** and **6,000 browser-loaded nodes**. HTTP response size is capped at **256 KiB** and the page-request queue holds at most eight jobs. The timer refreshes shallow roots about every 1.5 seconds. Overlay suppression may pause all requests.
 - Browser-local favourites are separate from native legacy favourites, can expire with a local-origin port change, and are not gameplay saves.
 - No telemetry or remote network server. The HTML/JS/CSS assets load from the localhost service.
 
@@ -63,7 +63,7 @@ Alternatively, copy the `web/dist/` contents into `game/renpy_inspector_web/`. C
 - Install the Ren'Py 7 package in a real game. Press F8 once: local server launches, browser opens, snapshot appears and **no native inspector GUI** appears.
 - Press F8 a second time: browser opens the same URL, token and port. No second local server.
 - Change a variable in-game, then verify the browser updates automatically.
-- Expand tree branches, search, pin/unpin, open details, and navigate Overview/Scripts.
+- Expand deep tree branches and verify that the initial page arrives. Scroll toward the end and confirm additional pages load automatically without a "Load More" click; verify Ant Design only renders visible rows. Search, pin/unpin, open details and navigate Overview/Scripts.
 - Close and reopen the browser; gameplay and server should continue.
 - Try running with web files missing: transient diagnostic, no game crash.
 - Test save/load and rollback while connected. Confirm no stale snapshot persists after game load.
@@ -72,3 +72,5 @@ Alternatively, copy the `web/dist/` contents into `game/renpy_inspector_web/`. C
 - Exit the game and confirm the local server stops.
 
 **Not yet confirmed:** Some heavily customised games may intercept F8 or suppress overlay screens. SDK lint does not prove in-game key capture or browser launch.
+
+**Additional PR #9 caveat:** Loaded child-page previews are cached in the browser; a parent changing in-game may require collapsing/reloading or a new session before all previously fetched descendant values reflect replacement objects. Direct save/load invalidates the game generation and discards cached pages. Automatic server-side change subscriptions and Compare are separate future work.

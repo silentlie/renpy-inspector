@@ -71,3 +71,147 @@ export function favouriteNodes(scopes, favourites) {
     };
   });
 }
+
+
+/** Keys are typed JSON locations. No expression evaluation is performed. */
+export function decodeTreeKey(key) {
+  try {
+    const pair = JSON.parse(key);
+    if (!Array.isArray(pair) || pair.length !== 2 ||
+        !['store', 'persistent'].includes(pair[0]) ||
+        !Array.isArray(pair[1]) || pair[1].length > 8) return null;
+    if (!pair[1].every((s) =>
+      Array.isArray(s) && s.length === 2 &&
+      ((s[0] === 'attribute' && typeof s[1] === 'string' && !s[1].startsWith('_')) ||
+       (s[0] === 'index' && Number.isSafeInteger(s[1]) && s[1] >= 0) ||
+       (s[0] === 'key' && (typeof s[1] === 'string' || typeof s[1] === 'boolean' ||
+         Number.isSafeInteger(s[1]) || s[1] === null))))) return null;
+    return { scope: pair[0], path: pair[1] };
+  } catch { return null; }
+}
+
+function preserveLoadedNode(newer, previous) {
+  if (!previous) return newer;
+  return {
+    ...newer,
+    children: previous.loaded ? previous.children ?? [] :
+      reconcilePageNodes(previous.children ?? [], newer.children ?? []),
+    loaded: Boolean(previous.loaded),
+    more: previous.more ?? newer.more,
+    nextOffset: previous.nextOffset ?? newer.nextOffset,
+    capped: previous.capped ?? newer.capped,
+  };
+}
+
+/** Refresh live root previews without discarding child pages. */
+export function reconcilePageNodes(previous, incoming, preserveExtra = false) {
+  const old = new Map((previous ?? []).map((node) => [node.key, node]));
+  const result = (incoming ?? []).map((node) => preserveLoadedNode(node, old.get(node.key)));
+  if (preserveExtra) {
+    const seen = new Set(result.map((node) => node.key));
+    for (const node of previous ?? []) if (!seen.has(node.key)) result.push(node);
+  }
+  return result;
+}
+
+export function appendPageNodes(previous, incoming) {
+  const result = (previous ?? []).slice();
+  const index = new Map(result.map((node, i) => [node.key, i]));
+  for (const node of incoming ?? []) {
+    const i = index.get(node.key);
+    if (i === undefined) {
+      index.set(node.key, result.length);
+      result.push(node);
+    } else {
+      result[i] = preserveLoadedNode(node, result[i]);
+    }
+  }
+  return result;
+}
+
+function updateNode(nodes, parentKey, transform) {
+  let changed = false;
+  const next = (nodes ?? []).map((node) => {
+    if (node.key === parentKey) {
+      changed = true;
+      return transform(node);
+    }
+    const children = updateNode(node.children, parentKey, transform);
+    if (children !== node.children) {
+      changed = true;
+      return { ...node, children };
+    }
+    return node;
+  });
+  return changed ? next : nodes;
+}
+
+export function integrateChildPage(state, page, parentKey = null) {
+  if (!state || page.generation !== state.generation ||
+      !['store', 'persistent'].includes(page.scope) ||
+      !Array.isArray(page.items)) return state;
+  const scope = page.scope;
+  const children = state.scopes[scope] ?? [];
+  const meta = { nextOffset: page.next_offset, more: page.more, capped: page.capped };
+  if (parentKey === null) return {
+    ...state,
+    scopes: { ...state.scopes, [scope]: appendPageNodes(children, page.items) },
+    roots: { ...state.roots, [scope]: meta },
+  };
+  const updated = updateNode(children, parentKey, (node) => ({
+    ...node, loaded: true, children: appendPageNodes(node.children, page.items), ...meta,
+  }));
+  if (updated === children) return state;
+  return { ...state, scopes: { ...state.scopes, [scope]: updated } };
+}
+
+/** Synthetic Load More leaves are never game values or favourites. */
+export function asVirtualTreeNodes(nodes, scope, roots, showMore = true) {
+  const visit = (items) => (items ?? []).map((node) => {
+    const descendants = visit(node.children ?? []);
+    if (showMore && node.more) descendants.push({
+      key: '__page__:' + node.key, isLoadMore: true, parentKey: node.key,
+      scope, name: 'Load next 80 entries', isLeaf: true,
+      nextOffset: node.nextOffset ?? 0,
+    });
+    return {
+      ...node, title: node.name,
+      isLeaf: !node.expandable || Boolean(node.loaded && !descendants.length),
+      children: descendants,
+    };
+  });
+  const result = visit(nodes);
+  if (showMore && roots?.[scope]?.more) result.push({
+    key: '__page__:root:' + scope, isLoadMore: true, parentKey: null,
+    scope, name: 'Load next 80 entries', isLeaf: true,
+    nextOffset: roots[scope].nextOffset ?? 0,
+  });
+  return result;
+}
+
+
+/** Root snapshots refresh previews but do not erase previously loaded pages. */
+export function mergeRootSnapshot(previous, incoming) {
+  const generation = incoming?.generation ?? 0;
+  const scopes = {};
+  const roots = {};
+  for (const scope of ['store', 'persistent']) {
+    const next = incoming?.scopes?.[scope] ?? [];
+    const initial = incoming?.root_pages?.[scope] ??
+      { next_offset: next.length, more: false, capped: false };
+    const rootMeta = {
+      nextOffset: initial.next_offset ?? next.length,
+      more: Boolean(initial.more), capped: Boolean(initial.capped),
+    };
+    if (previous && previous.generation === generation) {
+      scopes[scope] = reconcilePageNodes(previous.scopes?.[scope], next, true);
+      const oldMeta = previous.roots?.[scope];
+      roots[scope] = (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset
+        ? oldMeta : rootMeta;
+    } else {
+      scopes[scope] = next;
+      roots[scope] = rootMeta;
+    }
+  }
+  return { generation, scopes, roots };
+}
