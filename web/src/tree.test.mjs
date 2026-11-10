@@ -38,7 +38,7 @@ test('favourite scope resolves captured nodes and keeps missing pins', async () 
   assert.equal(favs.length, 2);
   assert.equal(favs[0].name, 'health');
   assert.equal(favs[0].favouriteScope, 'store');
-  assert.equal(favs[1].state, 'missing');
+  assert.equal(favs[1].state, 'pending');
   assert.equal(favs[1].favouriteScope, 'persistent');
 });
 
