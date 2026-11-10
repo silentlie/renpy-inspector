@@ -41,8 +41,13 @@ class BridgePy2Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_tree_request('store', [['attribute', '__class__']], 0, 80)
         shallow = build_lazy_snapshot(providers)
-        self.assertTrue(shallow['root_pages']['store']['more'])
+        self.assertFalse(shallow['root_pages']['store']['more'])
         self.assertEqual(len(shallow['scopes']['store']), 1)
+        for i in range(100):
+            setattr(root, 'field{:03d}'.format(i), i)
+        shallow = build_lazy_snapshot(providers)
+        self.assertTrue(shallow['root_pages']['store']['more'])
+        self.assertEqual(len(shallow['scopes']['store']), 80)
 
     def test_service_starts_and_stops_without_game(self):
         folder = tempfile.mkdtemp(prefix='bridge-py2-')

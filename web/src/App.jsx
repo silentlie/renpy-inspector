@@ -455,7 +455,7 @@ export default function App() {
           <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
           {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
           <Paragraph type="secondary" className="detail-disclaimer">
-            Read-only preview. Expand branches and scroll to request additional bounded pages.
+            This is a bounded, read-only snapshot preview. Expand branches and scroll to request additional pages.
             Full string values and unrestricted Python objects are not exposed.
           </Paragraph>
         </>}
