@@ -1,8 +1,8 @@
 # External Ant Design interface: SugarCube-inspired PR #8
 
-> **PR #9 development:** v0.6.1 is published. Draft PR #9 adds an
-> auto-paged virtual tree and new read-only child API; use its PR preview
-> packages, not the older PR #8 ZIPs, to test this feature.
+> **PR #12 development:** v0.6.4 is the published baseline. Draft PR #12 adds
+> bounded, browser-session Change History and Compare. Use its v0.6.5
+> preview installers to test new behaviour; the code is not yet on `main`.
 
 ## F8-only game integration
 
@@ -15,7 +15,7 @@ PR #8 reorganizes the external inspector around the navigational pattern of
 (commit `0f533358`), without copying its JavaScript-world introspection model:
 
 - **Overview / Variables / Scripts** are the top-level tabs.
-- **Variables** contains **Store / Persistent / Favourites**, search and the
+- **Variables** contains **Store / Persistent / Favourites / Compare**, search and the
   full-width, virtualized Ant Design tree. The tree is the primary workspace.
 - Each row places `key: type` on the left, a bounded value preview on the right,
   and explicit Inspect and Star actions next to it. Clicking expandable names
@@ -23,8 +23,9 @@ PR #8 reorganizes the external inspector around the navigational pattern of
 - **Inspect** opens an on-demand details drawer. Its value is explicitly called
   a *captured preview*: the bridge does not supply unrestricted string contents.
 - **Favourites** is a tree scope, not a second dashboard panel. Its paths are
-  resolved from the current Store/Persistent snapshot; missing favourites remain
-  visible and can be unpinned.
+  resolved independently by the authenticated, read-only path API; missing favourites remain
+  visible and can be unpinned. **Compare** has a separate scrollable workspace and
+  never consumes space in the normal variable tree.
 - Scripts shows only the safely available runtime file/line fields. The bridge
   does not expose SugarCube/Twine source or Ren'Py source text.
 
