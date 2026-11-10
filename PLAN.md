@@ -116,6 +116,31 @@ as previews. Rollback that does not advance the load generation may look like
 a regular value transition. Real-game Ren'Py 7/8 interaction and FPS testing
 remain required before merging.
 
+## Milestone: PR #13 — bounded global variable Search & Reveal (v0.6.6)
+
+- Follow SugarCube Inspector `codex/dev`'s search-and-reveal navigation
+  behaviour without bringing unrestricted JavaScript reflection into Ren'Py.
+- Add authenticated read-only `GET /api/v1/search` for Store/Persistent
+  variable names and formatted typed paths, beyond the loaded tree.
+  Queries are debounced (350ms), at least 2 characters and at most 64.
+- Budget each game-thread search: 1,400 visited entries, 30 hits,
+  five path levels, at most 100 children per non-root branch and 160 queued
+  candidate branches. Report partial/limited results explicitly.
+- Add `GET /api/v1/reveal` to revalidate an individual typed path on the
+  game interaction thread and return its bounded ancestor chain.
+- Browser materialises only the returned path, expands its ancestors,
+  highlights the target and virtual-scrolls to its stable key without
+  downloading every previous pagination page.
+- Keep search results only inside the existing popup. No new permanent
+  header, toolbar or footer. Esc closes; Enter reveals the first match.
+- Confirm Python 2.7/3 compatibility, SDK lint, Chrome interaction tests,
+  invalid/stale-path rejection and FPS with large Store namespaces.
+
+**Limitations:** Search is not an exhaustive Python graph index; inaccessible
+object members, children beyond per-branch budgets and changes occurring
+between searches may not appear. Real-game Ren'Py 7/8 smoke testing is
+required before merging.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

@@ -26,14 +26,14 @@ A short in-game error notification may appear if static assets are missing or th
 
 ## Browser interaction
 
-The browser has top-level **Overview / Variables / Scripts** tabs, nested **Store / Persistent / Favourites** scopes, a virtual tree, a popover search, details drawers and browser-local favourites. The tree occupies the available viewport, without permanent header or footer. Search via the icon or `/`, then dismiss with Escape/Enter.
+The browser has top-level **Overview / Variables / Scripts** tabs, nested **Store / Persistent / Favourites** scopes, a virtual tree, a popover search, details drawers and browser-local favourites. The tree occupies the available viewport, without permanent header or footer. Search via the icon or `/`; type at least two characters. Global name/path results are shown only in the popup and include bounded previews. Enter reveals the first result, or click a hit to materialise its verified ancestor chain, expand the path and scroll to it in the virtualised Store/Persistent tree. Escape closes search. No permanent search bar is added.
 
 On branch expansion, the browser requests its first **80** children over the authenticated GET-only API. As the virtualised list scrolls and its pagination sentinel enters the viewport, it requests the next 80 automatically. The tree renders only visible rows, even if hundreds of nodes have been loaded. A retry control appears only after a failed page request. The connection state, capture timestamp, coverage warning, and read-only status live in **Overview**; there is no manual refresh button.
 
 ## Security and resource limits
 
 - The server binds only to `127.0.0.1` on an OS-selected port, uses a **new 256-bit token when first started**, and validates Host/Origin headers. Do not share pairing URLs.
-- The browser authenticates `GET /api/v1/snapshot` and `GET /api/v1/children` using the token header. The paging request sends typed JSON path segments, scope, offset and size as URL-encoded query fields. POST and unknown routes are rejected. The token lives in a URL fragment, not an HTTP path.
+- The browser authenticates `GET /api/v1/snapshot`, `GET /api/v1/children`, `GET /api/v1/search` and `GET /api/v1/reveal` using the token header. The paging request sends typed JSON path segments, scope, offset and size as URL-encoded query fields. POST and unknown routes are rejected. The token lives in a URL fragment, not an HTTP path.
 - Game values are inspected **only on the Ren'Py interaction thread**. HTTP workers validate and queue primitive requests; the game timer resolves at most two per 250ms tick and serialises responses before the HTTP worker returns them. Nothing executes user-supplied Python expressions or writes game state.
 - Initial captures include shallow root pages only. Children are fetched on demand, **80 per request**, capped at **1,000 entries per branch**, **eight path levels** and **6,000 browser-loaded nodes**. HTTP response size is capped at **256 KiB** and the page-request queue holds at most eight jobs. The timer refreshes shallow roots about every 1.5 seconds. Overlay suppression may pause all requests.
 - Browser-local favourites are separate from native legacy favourites, can expire with a local-origin port change, and are not gameplay saves.
@@ -63,6 +63,7 @@ Alternatively, copy the `web/dist/` contents into `game/renpy_inspector_web/`. C
 - Install the Ren'Py 7 package in a real game. Press F8 once: local server launches, browser opens, snapshot appears and **no native inspector GUI** appears.
 - Press F8 a second time: browser opens the same URL, token and port. No second local server.
 - Change a variable in-game, then verify the browser updates automatically.
+- Search a name from the 100th root entry and a nested variable absent from the initial snapshot; click a hit and confirm its ancestors open, the result is highlighted and the virtual tree scrolls to it. Confirm partial-search warnings, stale-result handling, Escape, Enter, and unauthorised or malformed query rejection.
 - Expand deep tree branches and verify that the initial page arrives. Scroll toward the end and confirm additional pages load automatically without a "Load More" click; verify Ant Design only renders visible rows. Search, pin/unpin, open details and navigate Overview/Scripts.
 - Close and reopen the browser; gameplay and server should continue.
 - Try running with web files missing: transient diagnostic, no game crash.
@@ -74,3 +75,29 @@ Alternatively, copy the `web/dist/` contents into `game/renpy_inspector_web/`. C
 **Not yet confirmed:** Some heavily customised games may intercept F8 or suppress overlay screens. SDK lint does not prove in-game key capture or browser launch.
 
 **Additional PR #9 caveat:** Loaded child-page previews are cached in the browser; a parent changing in-game may require collapsing/reloading or a new session before all previously fetched descendant values reflect replacement objects. Direct save/load invalidates the game generation and discards cached pages. Automatic server-side change subscriptions and Compare are separate future work.
+
+
+## PR #13: bounded global search and reveal
+
+The popup searches across Store and Persistent using the read-only,
+authenticated `/api/v1/search` route. It is not a full index of Python
+objects: each request is processed by Ren'Py's interaction thread and
+bounded to 1,400 visited nodes, 30 results, five levels, at most 100
+children per non-root branch and 160 queued branch candidates. The
+initial Store/Persistent roots can inspect up to 1,000 visible names per
+root, even if the browser currently displays only 80. Search examines
+names/formatted paths rather than raw variable values. Private members
+and unsafe getters remain inaccessible.
+
+The optional `/api/v1/reveal` endpoint accepts **only typed paths**
+and re-validates the visible child descriptor at each step. The
+browser inserts the returned ancestor metadata into its tree and calls
+Ant Design's virtual `scrollTo` to show the match. Off-page matches
+do not force downloads of hundreds of preceding siblings. The normal
+pagination cursor and read-only snapshot continue unchanged.
+
+Browser search requests are debounced by 350ms and cancelled when the
+popup closes or the query changes; the server's bounded HTTP request
+queue and Ren'Py interaction-thread ownership remain unchanged.
+Search results are approximate and may be partial; no guarantee that
+all game objects or all possible nested properties are discoverable.

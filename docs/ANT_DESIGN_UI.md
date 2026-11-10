@@ -15,7 +15,7 @@ PR #8 reorganizes the external inspector around the navigational pattern of
 (commit `0f533358`), without copying its JavaScript-world introspection model:
 
 - **Overview / Variables / Scripts** are the top-level tabs.
-- **Variables** contains **Store / Persistent / Favourites / Compare**, search and the
+- **Variables** contains **Store / Persistent / Favourites / Compare**, global popup search and the
   full-width, virtualized Ant Design tree. The tree is the primary workspace.
 - Each row places `key: type` on the left, a bounded value preview on the right,
   and explicit Inspect and Star actions next to it. Clicking expandable names
@@ -56,3 +56,7 @@ The PR CI additionally runs Python 2.7/Python 3 tests, official Ren'Py
 7.4.11/7.8.7/8.4.1/8.5.3 lint and preview ZIP construction. Perform an
 interactive browser smoke test at narrow and wide widths with a live Ren'Py
 7/8 game before approving the UI. A successful build is not visual evidence.
+
+## PR #13: Global Search & Reveal
+
+The search icon or `/` opens a popover, not a permanent navigation row. Global search queries the bounded read-only game-thread API across Store and Persistent, independently of the shallow browser snapshot. Partial results are explicitly marked. A selected hit is revalidated through a typed-path reveal call, then materialised into the existing virtual tree and scrolled into view. No gameplay editing, unrestricted Python iteration or full-value search is introduced.
