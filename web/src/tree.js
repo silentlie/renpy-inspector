@@ -295,3 +295,52 @@ export function mergeRootSnapshot(previous, incoming) {
   }
   return { generation, scopes, roots };
 }
+
+
+/** Materialise only the typed path returned by the trusted game-thread bridge.
+ * Off-page results are inserted as breadcrumb nodes. Normal paging remains
+ * sequential from the current cursor; no 1,000-node eager fetch is required.
+ */
+export function integrateRevealChain(state, response) {
+  if (!state || response?.generation !== state.generation ||
+      !['store', 'persistent'].includes(response?.scope) ||
+      !Array.isArray(response.chain) || !response.chain.length ||
+      response.chain.length > 8) return state;
+  const scope = response.scope;
+  const keys = [];
+  for (let i = 0; i < response.chain.length; i += 1) {
+    const node = response.chain[i];
+    const decoded = typeof node?.key === 'string' ? decodeTreeKey(node.key) : null;
+    if (!decoded || decoded.scope !== scope || decoded.path.length !== i + 1 ||
+        !decoded.path.every((segment, n) =>
+          n < i ? JSON.stringify(segment) === JSON.stringify(keys[n]) : true)) return state;
+    keys.push(decoded.path[i]);
+  }
+  if (response.key !== response.chain[response.chain.length - 1].key) return state;
+  const weave = (siblings, depth) => {
+    const item = response.chain[depth];
+    const current = siblings ?? [];
+    const index = current.findIndex((entry) => entry.key === item.key);
+    const previous = index >= 0 ? current[index] : null;
+    const merged = previous ? preserveLoadedNode(item, previous) :
+      { ...item, children: [], loaded: false };
+    const next = depth < response.chain.length - 1
+      ? { ...merged, children: weave(merged.children, depth + 1) }
+      : merged;
+    if (index === -1) return [...current, next];
+    const updated = current.slice();
+    updated[index] = next;
+    return updated;
+  };
+  return {
+    ...state,
+    scopes: { ...state.scopes,
+      [scope]: weave(state.scopes?.[scope] ?? [], 0) },
+  };
+}
+
+/** The Tree may expand exactly the parent keys of a revealed path. */
+export function revealParentKeys(response) {
+  if (!Array.isArray(response?.chain)) return [];
+  return response.chain.slice(0, -1).map((node) => node.key);
+}

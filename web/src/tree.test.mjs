@@ -236,3 +236,60 @@ test('missing direct-watch value overrides a stale loaded tree preview', async (
   assert.equal(nodes[0].state, 'missing');
   assert.equal(nodes[0].children.length, 0);
 });
+
+
+import { integrateRevealChain, revealParentKeys } from './tree.js';
+
+test('search reveal materialises a deeply nested match beyond the first root page', () => {
+  const key = (steps) => JSON.stringify(['store', steps]);
+  const p = [['attribute', 'late_root']];
+  const q = [...p, ['key', 'stats']];
+  const r = [...q, ['key', 'hp']];
+  const chain = [
+    {key:key(p),name:'late_root',type:'dict',state:'value',expandable:true,children:[]},
+    {key:key(q),name:"['stats']",type:'dict',state:'value',expandable:true,children:[]},
+    {key:key(r),name:"['hp']",type:'int',state:'value',preview:'81',expandable:false,children:[]},
+  ];
+  const state={generation:4,scopes:{
+    store:[{key:key([['attribute','existing']]),name:'existing',children:[]}],
+    persistent:[],
+  },roots:{store:{nextOffset:80,more:true}}};
+  const result=integrateRevealChain(state,{
+    generation:4,scope:'store',key:key(r),chain,
+  });
+  assert.equal(result.scopes.store.length,2);
+  assert.equal(result.scopes.store[1].children[0].children[0].preview,'81');
+  assert.equal(result.roots.store.nextOffset,80);
+  assert.deepEqual(revealParentKeys({chain}),[key(p),key(q)]);
+  assert.deepEqual(result.scopes.persistent,[]);
+  const repeated=integrateRevealChain(result,{generation:4,scope:'store',key:key(r),chain});
+  assert.equal(repeated.scopes.store.length,2);
+});
+
+test('search reveal rejects stale epochs, malformed keys and fake path prefixes', () => {
+  const state={generation:8,scopes:{store:[],persistent:[]},roots:{}};
+  const key=(steps)=>JSON.stringify(['store',steps]);
+  const first={key:key([['attribute','a']]),expandable:true,children:[]};
+  const other={key:key([['attribute','b'],['key','child']]),children:[]};
+  const bad={scope:'store',generation:8,key:other.key,chain:[first,other]};
+  assert.equal(integrateRevealChain(state,bad),state);
+  assert.equal(integrateRevealChain(state,{...bad,generation:7}),state);
+  assert.equal(integrateRevealChain(state,{...bad,chain:[{key:'not JSON'}]}),state);
+});
+
+test('reveal does not overwrite an already expanded branch on a second lookup', () => {
+  const key=(steps)=>JSON.stringify(['store',steps]);
+  const path=[['attribute','owner']];
+  const parent={key:key(path),name:'owner',type:'dict',state:'value',expandable:true,
+    loaded:true,nextOffset:80,more:true,children:[
+      {key:key([...path,['key','existing']]),name:'existing',children:[]},
+    ]};
+  const next={key:key([...path,['key','new']]),name:'new',type:'int',state:'value',
+    preview:'17',expandable:false,children:[]};
+  const state={generation:1,scopes:{store:[parent],persistent:[]},roots:{}};
+  const result=integrateRevealChain(state,{generation:1,scope:'store',key:next.key,
+    chain:[{...parent,children:[]},next]});
+  assert.equal(result.scopes.store[0].children.length,2);
+  assert.equal(result.scopes.store[0].nextOffset,80);
+  assert.equal(result.scopes.store[0].loaded,true);
+});
