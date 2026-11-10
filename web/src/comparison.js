@@ -135,6 +135,7 @@ export function createChangeTracker({
   }
 
   return {
+    beginGeneration: adoptGeneration,
     observeValue, observePage,
     getChanges: () => events,
     getGeneration: () => generation,
