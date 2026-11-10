@@ -94,8 +94,9 @@ function preserveLoadedNode(newer, previous) {
   if (!previous) return newer;
   // A container can turn into a scalar or disappear between observations.
   // Keeping its old children would display fictitious state.
-  if (!newer.expandable || newer.state !== 'value' ||
-      (previous.type && newer.type !== previous.type)) {
+  if (newer.expandable === false ||
+      (newer.state && newer.state !== 'value') ||
+      (previous.type && newer.type && newer.type !== previous.type)) {
     return { ...newer, children: [], loaded: false, more: false,
       nextOffset: 0, capped: false };
   }
