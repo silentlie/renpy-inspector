@@ -197,7 +197,7 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
       preserveLoadedNode(item, oldSlice[i]?.key === item.key ? oldSlice[i] : undefined));
     if (keysStable) {
       // Keep already-loaded pages, unless the refreshed final page shrank.
-      const tail = page.items.length < pageSize ? [] :
+      const tail = !page.more || page.items.length < pageSize ? [] :
         before.slice(offset + page.items.length);
       const next = [...before.slice(0, offset), ...nextSlice, ...tail];
       const end = Math.max(nextEnd, metadata?.nextOffset ?? 0);

@@ -187,3 +187,19 @@ test('stale watched pages from a previous load are ignored', () => {
   const page={scope:'store',generation:6,offset:0,items:[]};
   assert.equal(refreshWatchedPage(state,page),state);
 });
+
+
+test('watched final page trims old loaded tails after a container shrinks', () => {
+  const old=Array.from({length:160},(_,i)=>({
+    key:String(i),type:'int',state:'value',expandable:false,preview:String(i),
+  }));
+  const state={generation:7,scopes:{store:[{key:'list',loaded:true,
+    nextOffset:160,more:true,children:old}]},roots:{}};
+  const page={scope:'store',generation:7,offset:0,next_offset:80,
+    more:false,capped:false,items:old.slice(0,80).map(n=>({...n,preview:'updated'}))};
+  const updated=refreshWatchedPage(state,page,'list');
+  assert.equal(updated.scopes.store[0].children.length,80);
+  assert.equal(updated.scopes.store[0].nextOffset,80);
+  assert.equal(updated.scopes.store[0].more,false);
+  assert.equal(updated.scopes.store[0].children[0].preview,'updated');
+});
