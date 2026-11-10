@@ -172,7 +172,7 @@ class HttpBridgeTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 401)
 
     def test_f8_launch_start_once_then_open_same_local_server(self):
-        with patch('renpy_inspector.bridge.webbrowser.open', return_value=True) as opened:
+        with patch('webbrowser.open', return_value=True) as opened:
             self.assertTrue(self.bridge.launch_or_open())
             first = self.bridge.url
             token = self.bridge.token
@@ -185,13 +185,13 @@ class HttpBridgeTests(unittest.TestCase):
     def test_f8_launch_reports_missing_assets_without_opening_browser(self):
         self.bridge.stop()
         os.remove(os.path.join(self.ui_dir, 'index.html'))
-        with patch('renpy_inspector.bridge.webbrowser.open') as opened:
+        with patch('webbrowser.open') as opened:
             self.assertFalse(self.bridge.launch_or_open())
             opened.assert_not_called()
         self.assertIn('index.html', self.bridge.error)
 
     def test_f8_launch_reports_browser_failures(self):
-        with patch('renpy_inspector.bridge.webbrowser.open', return_value=False):
+        with patch('webbrowser.open', return_value=False):
             self.assertFalse(self.bridge.launch_or_open())
         self.assertTrue(self.bridge.running)
         self.assertIn('Could not open browser', self.bridge.error)
