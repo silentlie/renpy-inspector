@@ -14,7 +14,7 @@ import {
   safeFavourites,
 } from './tree.js';
 import {
-  collectWatchedPages, nextWatchBatch, WATCH_INTERVAL_MS,
+  collectWatchedPages, combineScopedWatches, nextWatchBatch, WATCH_INTERVAL_MS,
 } from './watch.js';
 
 const { Text, Title, Paragraph } = Typography;
@@ -124,7 +124,7 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
   </span>;
 }
 
-function VariablePane({ scope, treePages, query, favourites, selected, onSelect, onFavourite,
+function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite,
   expanded, onExpand, onRequestPage, loadingPages, pageErrors }) {
   const viewportRef = useRef(null);
   const [height, setHeight] = useState(450);
@@ -147,8 +147,8 @@ function VariablePane({ scope, treePages, query, favourites, selected, onSelect,
   }, []);
 
   const nodes = useMemo(() => scope === 'favourites'
-    ? favouriteNodes(treePages?.scopes, favourites)
-    : treePages?.scopes?.[scope] ?? [], [scope, treePages, favourites]);
+    ? favouriteNodes(treePages?.scopes, favourites, watchValues)
+    : treePages?.scopes?.[scope] ?? [], [scope, treePages, favourites, watchValues]);
   const visible = useMemo(() => filteredTree(nodes, query), [nodes, query]);
   const favKeys = useMemo(() => new Set(favourites.map((x) => `${x.scope}:${x.key}`)), [favourites]);
   const hasQuery = Boolean(query.trim());
@@ -227,11 +227,64 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
   const [favourites, setFavourites] = useState(loadLocalFavourites);
+  const [favouritesReady, setFavouritesReady] = useState(false);
+  const [preferencesStatus, setPreferencesStatus] = useState('Connecting');
+  const preferenceWritesRef = useRef(Promise.resolve());
+  const [watchValues, setWatchValues] = useState({});
+  const valueLoadingRef = useRef(new Set());
   const requestCounter = useRef(0);
 
   useEffect(() => {
     try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favourites)); } catch { /* private browsing */ }
   }, [favourites]);
+
+  // Server preferences are per game, not per localhost port. Only import the
+  // browser's old localStorage pins once if no server preference file exists.
+  useEffect(() => {
+    if (!token) { setPreferencesStatus('Not paired'); return undefined; }
+    let disposed = false;
+    const bootstrap = async () => {
+      try {
+        const response = await fetch(bridge + '/api/v1/favourites', {
+          headers: { 'X-Inspector-Token': token }, cache: 'no-store', mode: 'cors',
+        });
+        if (!response.ok) throw new Error('Inspector storage HTTP ' + response.status);
+        const data = await response.json();
+        if (!disposed) {
+          setFavourites(data.initialized
+            ? safeFavourites(data.favourites)
+            : loadLocalFavourites());
+          setFavouritesReady(true);
+          setPreferencesStatus('Inspector save directory');
+        }
+      } catch (failure) {
+        if (!disposed) setPreferencesStatus('Local only: ' + (failure.message || 'Storage unavailable'));
+      }
+    };
+    bootstrap();
+    return () => { disposed = true; };
+  }, [token, bridge]);
+
+  // Serialize/debounce preference writes to prevent a slow earlier request
+  // from overwriting a later pin/unpin. Never write gameplay variables.
+  useEffect(() => {
+    if (!favouritesReady || !token) return undefined;
+    const timer = window.setTimeout(() => {
+      const entries = safeFavourites(favourites);
+      preferenceWritesRef.current = preferenceWritesRef.current.catch(() => {}).then(async () => {
+        const response = await fetch(bridge + '/api/v1/favourites', {
+          method: 'PUT', mode: 'cors',
+          headers: { 'X-Inspector-Token': token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: 1, favourites: entries }),
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        setPreferencesStatus('Inspector save directory');
+      }).catch((failure) => {
+        setPreferencesStatus('Local only: ' + (failure.message || 'Write failed'));
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [favourites, favouritesReady, token, bridge]);
 
   useEffect(() => {
     if (!token) { setConnection('unpaired'); return; }
@@ -329,11 +382,43 @@ export default function App() {
     }
   }, [bridge, token]);
 
+  const requestFavouriteValue = useCallback(async (job) => {
+    if (!token || !job || valueLoadingRef.current.has(job.key)) return;
+    const decoded = decodeTreeKey(job.key);
+    if (!decoded || decoded.scope !== job.scope || !decoded.path.length) return;
+    const expectedGeneration = treePagesRef.current?.generation;
+    if (expectedGeneration === undefined) return;
+    valueLoadingRef.current.add(job.key);
+    try {
+      const params = new URLSearchParams({
+        scope: job.scope, path: JSON.stringify(decoded.path),
+      });
+      const response = await fetch(bridge + '/api/v1/value?' + params, {
+        headers: { 'X-Inspector-Token': token },
+        method: 'GET', cache: 'no-store', mode: 'cors',
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      if (result.generation !== treePagesRef.current?.generation ||
+          expectedGeneration !== result.generation ||
+          result.node?.key !== job.key) return;
+      setWatchValues((old) => {
+        const before = old[job.key];
+        const node = result.node;
+        if (before && before.preview === node.preview && before.type === node.type &&
+            before.state === node.state && before.expandable === node.expandable) return old;
+        return { ...old, [job.key]: node };
+      });
+    } catch { /* A missing/paused game watch retries on the next scheduler turn. */ }
+    finally { valueLoadingRef.current.delete(job.key); }
+  }, [bridge, token]);
+
   // One scheduler for all expanded tree watches and independent favourites.
   // Never allocate a timer per virtualised row; browser/viewport changes only
   // change the current watch plan, not the shared scheduler's lifetime.
-  const watchJobs = useMemo(() => collectWatchedPages(
-    treePages, expanded, scope, section, favourites,
+  const watchJobs = useMemo(() => combineScopedWatches(
+    collectWatchedPages(treePages, expanded, scope, section, favourites),
+    favourites,
   ), [treePages, expanded, scope, section, favourites]);
   watchJobsRef.current = watchJobs;
   useEffect(() => {
@@ -342,14 +427,18 @@ export default function App() {
       const batch = nextWatchBatch(watchJobsRef.current, watchCursorRef.current);
       watchCursorRef.current = batch.next;
       for (const job of batch.jobs) {
-        requestPage(job.scope, job.parentKey, job.offset,
+        if (job.kind === 'value') requestFavouriteValue(job);
+        else requestPage(job.scope, job.parentKey, job.offset,
           { refresh: true, quiet: true });
       }
     }, WATCH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [connection, requestPage]);
+  }, [connection, requestPage, requestFavouriteValue]);
 
-  useEffect(() => { setPageErrors({}); }, [treePages?.generation]);
+  useEffect(() => {
+    setPageErrors({});
+    setWatchValues({});
+  }, [treePages?.generation]);
 
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
   const pinVariable = useCallback((chosenScope, key) => {
@@ -364,8 +453,10 @@ export default function App() {
   }, []);
   const activeNode = useMemo(() => {
     if (!selected) return null;
-    return flatten(treePages?.scopes?.[selected.scope] ?? []).get(selected.key) || null;
-  }, [treePages, selected]);
+    const captured = flatten(treePages?.scopes?.[selected.scope] ?? []).get(selected.key);
+    return (favourites.some((item) => item.key === selected.key) &&
+      watchValues[selected.key]) || captured || null;
+  }, [treePages, selected, watchValues, favourites]);
   const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
   const activeGame = snapshot?.game ?? {};
   const online = connection === 'online';
@@ -421,7 +512,8 @@ export default function App() {
             </Popover>}
             items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
               { key: 'favourites', label: `Favourites (${favourites.length})` }]} />
-          <VariablePane scope={scope} treePages={treePages} query={query} favourites={favourites}
+          <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
+            query={query} favourites={favourites}
             selected={selected} onSelect={selectNode} onFavourite={pinVariable}
             expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
             loadingPages={loadingPages} pageErrors={pageErrors} />
@@ -447,7 +539,10 @@ export default function App() {
               </span> },
               ...(error ? [{ key: 'error', label: 'Connection error', children: error }] : []),
               { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
-              { key: 'mode', label: 'Access', children: 'Read-only · authenticated local session · automatic updates' },
+              { key: 'mode', label: 'Access', children: 'Game state read-only · authenticated local session' },
+              { key: 'preferences', label: 'Favourite storage', children: preferencesStatus },
+              { key: 'watches', label: 'Favourites', children:
+                'Independent path watches · read-only values · persisted inspector settings' },
               { key: 'budget', label: 'Capture limits', children:
                 '80 per page · up to 1,000 per branch · 8 levels · 6,000 loaded nodes per browser' },
               { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?

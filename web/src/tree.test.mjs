@@ -23,8 +23,10 @@ test('reject invalid fragment token and foreign bridge origins', () => {
   assert.equal(readBridgeFragment('#token=' + 'a'.repeat(64)).token.length, 64);
 });
 test('invalid favorites are discarded and capped', () => {
-  const values = [{ scope: 'store', key: 'b' }, { scope: 'system', key: 'c' }, null];
-  assert.deepEqual(safeFavourites(values), [{ scope: 'store', key: 'b' }]);
+  const key = JSON.stringify(['store', [['attribute', 'player']]]);
+  const values = [{ scope: 'store', key }, { scope: 'system', key: 'c' },
+    { scope: 'store', key: 'b' }, { scope: 'store', key }, null];
+  assert.deepEqual(safeFavourites(values), [{ scope: 'store', key }]);
 });
 
 // A favourites view is a scoped tree, not a second permanent side panel.
@@ -202,4 +204,35 @@ test('watched final page trims old loaded tails after a container shrinks', () =
   assert.equal(updated.scopes.store[0].nextOffset,80);
   assert.equal(updated.scopes.store[0].more,false);
   assert.equal(updated.scopes.store[0].children[0].preview,'updated');
+});
+
+
+test('direct watch can render a favourite never present in the lazy tree', async () => {
+  const { favouriteNodes } = await import('./tree.js');
+  const key = JSON.stringify(['store', [['attribute', 'profile'], ['key', 'level']]]);
+  const nodes = favouriteNodes({ store: [], persistent: [] },
+    [{ scope: 'store', key }], { [key]: {
+      key, name: 'level', path: 'store.profile["level"]',
+      type: 'int', preview: '14', state: 'value', expandable: false,
+      children: [],
+    }});
+  assert.equal(nodes[0].preview, '14');
+  assert.equal(nodes[0].sourceKey, key);
+  assert.equal(nodes[0].favouriteScope, 'store');
+});
+
+test('missing direct-watch value overrides a stale loaded tree preview', async () => {
+  const { favouriteNodes } = await import('./tree.js');
+  const key = JSON.stringify(['persistent', [['attribute', 'flag']]]);
+  const original = { key, name: 'flag', type: 'dict',
+    preview: '3 items', state: 'value', expandable: true, children: [
+      { key:'oldchild', name:'old', children:[] },
+    ] };
+  const nodes = favouriteNodes({ store: [], persistent: [original] },
+    [{ scope: 'persistent', key }], { [key]: {
+      key, name:'flag', type:'missing', preview:'<missing>',
+      state:'missing', expandable:false, children:[],
+    }});
+  assert.equal(nodes[0].state, 'missing');
+  assert.equal(nodes[0].children.length, 0);
 });
