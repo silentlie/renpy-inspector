@@ -295,7 +295,7 @@ test('reveal does not overwrite an already expanded branch on a second lookup', 
 });
 
 
-import { mergeRootSnapshot, refreshWatchedPage } from './tree.js';
+
 
 test('off-page search reveal survives root snapshots and watched pagination', () => {
   const key=(steps)=>JSON.stringify(['store',steps]);
