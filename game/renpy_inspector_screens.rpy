@@ -3,7 +3,7 @@
 screen renpy_inspector_overlay():
     key "K_F8" action Function(renpy_inspector_open_external)
 
-    # Inspect game objects only on Ren'Py's interaction thread.
-    # The background HTTP server serves immutable cached JSON.
+    # Process bounded browser page requests on the Ren'Py interaction thread.
+    # HTTP threads queue data-only requests and never read gameplay objects.
     if renpy_inspector.bridge.running:
-        timer 1.5 repeat True action Function(renpy_inspector.bridge.publish, _update_screens=False)
+        timer 0.25 repeat True action Function(renpy_inspector.bridge.tick, _update_screens=False)

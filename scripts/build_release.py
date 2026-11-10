@@ -21,6 +21,7 @@ REQUIRED_FILES = (
     'game/renpy_inspector/compat.py',
     'game/renpy_inspector/bridge.py',
     'game/renpy_inspector/bridge_snapshot.py',
+    'game/renpy_inspector/bridge_paging.py',
 )
 ENGINES = {
     'renpy7': "Ren'Py 7.4.11 / 7.8.7 (Python 2.7)",
