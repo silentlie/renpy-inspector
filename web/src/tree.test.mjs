@@ -50,3 +50,65 @@ test('favourite render keys stay unique when a pinned child is also inside a pin
   assert.equal(items[0].children[0].sourceKey, 'b');
   assert.equal(items[1].sourceKey, 'b');
 });
+
+
+import {
+  decodeTreeKey, reconcilePageNodes, integrateChildPage,
+  asVirtualTreeNodes, appendPageNodes,
+} from './tree.js';
+
+test('typed tree keys reject private paths and synthetic rows', () => {
+  const key = JSON.stringify(['store', [['attribute', 'player'], ['index', 0]]]);
+  assert.deepEqual(decodeTreeKey(key), { scope: 'store', path: [['attribute', 'player'], ['index', 0]] });
+  assert.equal(decodeTreeKey('__page__:root:store'), null);
+  assert.equal(decodeTreeKey(JSON.stringify(['store', [['attribute', '__dict__']]])), null);
+  assert.equal(decodeTreeKey(JSON.stringify(['bad', []])), null);
+});
+
+test('virtualised tree has independent root and branch Load More rows', () => {
+  const parent = {
+    key: 'p', name: 'parent', expandable: true, loaded: true, more: true,
+    nextOffset: 80, children: [{ key: 'c', name: 'child', expandable: false, children: [] }],
+  };
+  const result = asVirtualTreeNodes([parent], 'store',
+    { store: { more: true, nextOffset: 80 } });
+  assert.equal(result[0].isLeaf, false);
+  assert.equal(result[0].children[1].isLoadMore, true);
+  assert.equal(result[0].children[1].parentKey, 'p');
+  assert.equal(result[1].isLoadMore, true);
+  assert.equal(result[1].parentKey, null);
+});
+
+test('page reconciliation preserves loaded descendants and stable keys', () => {
+  const before = [{ key: 'a', name: 'old', loaded: true,
+    children: [{ key: 'b', name: 'nested', children: [] }] },
+    { key: 'extra', name: 'paged', children: [] }];
+  const next = reconcilePageNodes(before, [{ key: 'a', name: 'new', children: [] }], true);
+  assert.equal(next[0].name, 'new');
+  assert.equal(next[0].children[0].key, 'b');
+  assert.equal(next[1].key, 'extra');
+  const merged = appendPageNodes(before, [{ key: 'a', name: 'updated', children: [] }]);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].children[0].key, 'b');
+});
+
+test('page responses with stale game generations are ignored', () => {
+  const state = { generation: 2, scopes: { store: [{ key: 'a', children: [] }] },
+    roots: { store: { more: false } } };
+  assert.equal(integrateChildPage(state, {
+    generation: 1, scope: 'store', items: [],
+  }), state);
+});
+
+test('child pages append and set next-cursor metadata', () => {
+  const state = { generation: 2,
+    scopes: { store: [{ key: 'a', children: [], expandable: true }] },
+    roots: { store: { more: false } } };
+  const result = integrateChildPage(state, {
+    scope: 'store', generation: 2, items: [{ key: 'b', children: [] }],
+    next_offset: 80, more: true, capped: false,
+  }, 'a');
+  assert.equal(result.scopes.store[0].loaded, true);
+  assert.equal(result.scopes.store[0].children[0].key, 'b');
+  assert.equal(result.scopes.store[0].more, true);
+});
