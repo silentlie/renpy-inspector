@@ -10,8 +10,8 @@ import {
 } from '@ant-design/icons';
 import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
-  integrateChildPage, keysOf, mergeRootSnapshot, readBridgeFragment, refreshWatchedPage,
-  safeFavourites,
+  integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
+  readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
 } from './tree.js';
 import {
   collectWatchedPages, combineScopedWatches, nextWatchBatch, WATCH_INTERVAL_MS,
@@ -126,8 +126,9 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
 }
 
 function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite,
-  expanded, onExpand, onRequestPage, loadingPages, pageErrors }) {
+  expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
   const viewportRef = useRef(null);
+  const treeRef = useRef(null);
   const [height, setHeight] = useState(450);
 
   useEffect(() => {
@@ -160,10 +161,17 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
     return asVirtualTreeNodes(visible, scope, treePages?.roots, !hasQuery);
   }, [visible, scope, treePages?.roots, hasQuery]);
 
+  useEffect(() => {
+    if (revealTarget?.scope !== scope || !treeRef.current) return undefined;
+    const frame = window.requestAnimationFrame(() =>
+      treeRef.current?.scrollTo?.({ key: revealTarget.key }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [revealTarget, scope, height]);
+
   return <section className="variable-pane" aria-label="Variable tree workspace">
     <div ref={viewportRef} className="variable-tree-viewport">
       {treeData.length ? <Tree
-        className="full-width-variable-tree" blockNode showLine={{ showLeafIcon: false }}
+        ref={treeRef} className="full-width-variable-tree" blockNode showLine={{ showLeafIcon: false }}
         switcherIcon={({ expanded: isExpanded }) => isExpanded ? <DownOutlined /> : <RightOutlined />}
         selectable={false} virtual height={height}
         treeData={treeData} expandedKeys={expandedKeys} autoExpandParent={hasQuery}
@@ -188,7 +196,8 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
           const pinned = favKeys.has(`${originScope}:${sourceKey}`);
           return <TreeRow node={{ ...node, expanded: expandedSet.has(node.key) }}
             isFavourite={pinned}
-            isActive={selected?.scope === originScope && selected?.key === sourceKey}
+            isActive={(selected?.scope === originScope && selected?.key === sourceKey) ||
+              (revealTarget?.scope === originScope && revealTarget?.key === sourceKey)}
             onToggle={hasQuery ? undefined : () => {
               const opening = !expandedSet.has(node.key);
               onExpand(scope, opening
@@ -266,6 +275,13 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef(null);
+  const [searchMatches, setSearchMatches] = useState({
+    query: '', items: [], limited: false, scanned: 0, busy: false, error: '',
+  });
+  const [revealBusy, setRevealBusy] = useState(false);
+  const [revealTarget, setRevealTarget] = useState(null);
+  const [revealError, setRevealError] = useState('');
+  const revealCounterRef = useRef(0);
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
   const [favourites, setFavourites] = useState(loadLocalFavourites);
@@ -517,6 +533,95 @@ export default function App() {
     setWatchValues({});
   }, [treePages?.generation]);
 
+  // Search is debounced, budgeted on the game thread and cancelled when closed.
+  useEffect(() => {
+    const term = query.trim();
+    if (!searchOpen || section !== 'variables' || !token || term.length < 2) {
+      setSearchMatches({ query: term, items: [], limited: false, scanned: 0,
+        busy: false, error: '' });
+      return undefined;
+    }
+    let active = true;
+    const controller = new AbortController();
+    setSearchMatches({ query: term, items: [], limited: false, scanned: 0,
+      busy: true, error: '' });
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ scope: 'all', q: term });
+        const response = await fetch(bridge + '/api/v1/search?' + params, {
+          method: 'GET', mode: 'cors', cache: 'no-store',
+          headers: { 'X-Inspector-Token': token }, signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(response.status === 503
+          ? 'Game is paused. Try again after resuming.'
+          : response.status === 429 ? 'Search queue busy. Retry shortly.'
+            : 'Search failed (HTTP ' + response.status + ')');
+        const result = await response.json();
+        if (!active || result.generation !== treePagesRef.current?.generation) return;
+        setSearchMatches({
+          query: term,
+          items: Array.isArray(result.results)
+            ? result.results.slice(0, 30).filter((item) => decodeTreeKey(item.key)) : [],
+          limited: Boolean(result.limited), scanned: result.scanned ?? 0,
+          busy: false, error: '',
+        });
+      } catch (reason) {
+        if (active && reason.name !== 'AbortError') {
+          setSearchMatches({ query: term, items: [], limited: false,
+            scanned: 0, busy: false, error: reason.message || 'Search unavailable' });
+        }
+      }
+    }, 350);
+    return () => { active = false; window.clearTimeout(timer); controller.abort(); };
+  }, [query, searchOpen, section, token, bridge, treePages?.generation]);
+
+  const revealResult = useCallback(async (item) => {
+    const decoded = decodeTreeKey(item?.key);
+    if (!decoded || !token || revealBusy) return;
+    const previous = treePagesRef.current;
+    if (!previous || !decoded.path.length) return;
+    setRevealBusy(true);
+    setRevealError('');
+    try {
+      const params = new URLSearchParams({
+        scope: decoded.scope, path: JSON.stringify(decoded.path),
+      });
+      const response = await fetch(bridge + '/api/v1/reveal?' + params, {
+        method: 'GET', mode: 'cors', cache: 'no-store',
+        headers: { 'X-Inspector-Token': token },
+      });
+      if (!response.ok) throw new Error(response.status === 404
+        ? 'Variable is no longer available in the current game state.'
+        : response.status === 503 ? 'Game paused. Resume and retry.'
+          : 'Could not reveal variable (HTTP ' + response.status + ')');
+      const data = await response.json();
+      if (data.generation !== previous.generation ||
+          data.generation !== treePagesRef.current?.generation ||
+          data.key !== item.key || data.scope !== decoded.scope) {
+        throw new Error('Game state changed. Search again.');
+      }
+      setTreePages((old) => {
+        const next = integrateRevealChain(old, data);
+        treePagesRef.current = next;
+        return next;
+      });
+      setExpanded((old) => ({
+        ...old, [decoded.scope]: Array.from(
+          new Set([...(old[decoded.scope] ?? []), ...revealParentKeys(data)])),
+      }));
+      setLastTreeScope(decoded.scope);
+      setScope(decoded.scope);
+      setSection('variables');
+      setSelected(null);
+      setRevealTarget({ scope: decoded.scope, key: item.key,
+        request: ++revealCounterRef.current });
+      setSearchOpen(false);
+      setQuery('');
+    } catch (reason) {
+      setRevealError(reason.message || 'Reveal unavailable');
+    } finally { setRevealBusy(false); }
+  }, [bridge, token, revealBusy]);
+
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
   const pinVariable = useCallback((chosenScope, key) => {
     if (!SCOPES.some((item) => item.key === chosenScope)) return;
@@ -583,16 +688,47 @@ export default function App() {
               onOpenChange={setSearchOpen}
               content={<div className="search-popover" role="search">
                 <Input ref={searchRef} prefix={<SearchOutlined />} allowClear size="middle"
-                  aria-label="Search captured variables" placeholder="Search captured variables"
-                  value={query} onChange={(event) => setQuery(event.target.value)}
+                  aria-label="Search variables across Store and Persistent"
+                  placeholder="Search variable names or paths"
+                  value={query} onChange={(event) => {
+                    setQuery(event.target.value);
+                    setRevealError('');
+                  }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Escape' || event.key === 'Enter') {
-                      event.stopPropagation();
-                      if (event.key === 'Escape') event.preventDefault();
-                      setSearchOpen(false);
+                    if (event.key === 'Escape') {
+                      event.stopPropagation(); event.preventDefault(); setSearchOpen(false);
+                    } else if (event.key === 'Enter' &&
+                      searchMatches.query === query.trim() && searchMatches.items.length) {
+                      event.stopPropagation(); event.preventDefault();
+                      revealResult(searchMatches.items[0]);
                     }
                   }} />
-                <Text type="secondary" className="search-hint">Filters captured nodes · Esc to close</Text>
+                <Text type="secondary" className="search-hint">
+                  Global bounded search · type at least two characters · Esc to close
+                </Text>
+                {query.trim().length >= 2 && <div className="remote-search-results"
+                  role="listbox" aria-label="Matching game variables">
+                  {searchMatches.busy && <div className="remote-search-status">
+                    <Spin size="small" /> Searching game state…</div>}
+                  {!searchMatches.busy && searchMatches.error &&
+                    <Text type="danger">{searchMatches.error}</Text>}
+                  {!searchMatches.busy && searchMatches.query === query.trim() &&
+                    searchMatches.items.map((match) =>
+                      <button type="button" className="remote-search-hit"
+                        role="option" aria-selected={false} key={match.key}
+                        disabled={revealBusy} onClick={() => revealResult(match)}>
+                        <span className="remote-search-path">{match.path}</span>
+                        <span className="remote-search-preview">{match.type} · {match.preview}</span>
+                      </button>)}
+                  {!searchMatches.busy && !searchMatches.error &&
+                    searchMatches.query === query.trim() && !searchMatches.items.length &&
+                    <Text type="secondary">No matches within the search budget.</Text>}
+                  {searchMatches.limited && <Text type="secondary" className="remote-search-warning">
+                    Partial results: depth, traversal and result counts are bounded.
+                    Narrow the term or expand a likely branch.
+                  </Text>}
+                  {revealError && <Text type="danger" role="alert">{revealError}</Text>}
+                </div>}
               </div>}>
               <Tooltip title={query ? 'Search active: ' + query : 'Search variables'}>
                 <Button className={query ? 'search-trigger search-trigger-active' : 'search-trigger'}
@@ -610,7 +746,8 @@ export default function App() {
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
                 expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
-                loadingPages={loadingPages} pageErrors={pageErrors} />}
+                loadingPages={loadingPages} pageErrors={pageErrors}
+                revealTarget={revealTarget} />}
         </div>}
         {section === 'overview' && <section className="info-page" aria-label="Runtime overview">
           <Text className="eyebrow">RUNTIME STATUS</Text>
@@ -624,7 +761,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.5 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.6 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :

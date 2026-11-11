@@ -64,13 +64,16 @@ export function collectWatchedPages(pages, expanded, activeScope, section, favou
         if (results.length >= limit) return;
         if (!open.has(node.key)) continue;
         if (node.loaded) {
-          pagesForChildren(viewed, node.key, node.children?.length ?? 0, add);
+          pagesForChildren(viewed, node.key,
+            node.nextOffset ?? (node.children?.filter((item) => !item.isRevealed).length ?? 0), add);
         }
         // A collapsed ancestor suspends its descendants' subscriptions.
         visit(node.children ?? []);
       }
     };
-    pagesForChildren(viewed, null, pages.scopes[viewed]?.length ?? 0, add);
+    pagesForChildren(viewed, null,
+      pages.roots?.[viewed]?.nextOffset ??
+        (pages.scopes[viewed]?.filter((item) => !item.isRevealed).length ?? 0), add);
     visit(pages.scopes[viewed] ?? []);
   }
   return results;

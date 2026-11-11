@@ -202,8 +202,16 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
   const offset = page.offset;
   const nextEnd = offset + page.items.length;
   const replace = (before, metadata) => {
-    if (offset > before.length) return null;
-    const oldSlice = before.slice(offset, offset + pageSize);
+    // Search-revealed off-page breadcrumbs are outside the sequential
+    // pagination range. Never misidentify them as offset-page members.
+    const revealed = before.filter((node) => node.isRevealed);
+    const sequential = before.filter((node) => !node.isRevealed);
+    if (offset > sequential.length) return null;
+    const oldSlice = sequential.slice(offset, offset + pageSize);
+    const keepRevealed = (loaded) => {
+      const seen = new Set(loaded.map((node) => node.key));
+      return [...loaded, ...revealed.filter((node) => !seen.has(node.key))];
+    };
     const keysStable = oldSlice.length >= page.items.length &&
       page.items.every((item, i) => oldSlice[i].key === item.key) &&
       (page.items.length === pageSize || !page.more);
@@ -212,14 +220,14 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
     if (keysStable) {
       // Keep already-loaded pages, unless the refreshed final page shrank.
       const tail = !page.more || page.items.length < pageSize ? [] :
-        before.slice(offset + page.items.length);
-      const next = [...before.slice(0, offset), ...nextSlice, ...tail];
+        sequential.slice(offset + page.items.length);
+      const next = keepRevealed([...sequential.slice(0, offset), ...nextSlice, ...tail]);
       const end = tail.length ? Math.max(nextEnd, metadata?.nextOffset ?? 0) : nextEnd;
       return { nodes: next, meta: { nextOffset: end,
         more: tail.length ? metadata?.more ?? page.more : page.more,
         capped: page.capped } };
     }
-    return { nodes: [...before.slice(0, offset), ...nextSlice],
+    return { nodes: keepRevealed([...sequential.slice(0, offset), ...nextSlice]),
       meta: { nextOffset: nextEnd, more: page.more, capped: page.capped } };
   };
   if (parentKey === null) {
@@ -294,4 +302,53 @@ export function mergeRootSnapshot(previous, incoming) {
     }
   }
   return { generation, scopes, roots };
+}
+
+
+/** Materialise only the typed path returned by the trusted game-thread bridge.
+ * Off-page results are inserted as breadcrumb nodes. Normal paging remains
+ * sequential from the current cursor; no 1,000-node eager fetch is required.
+ */
+export function integrateRevealChain(state, response) {
+  if (!state || response?.generation !== state.generation ||
+      !['store', 'persistent'].includes(response?.scope) ||
+      !Array.isArray(response.chain) || !response.chain.length ||
+      response.chain.length > 8) return state;
+  const scope = response.scope;
+  const keys = [];
+  for (let i = 0; i < response.chain.length; i += 1) {
+    const node = response.chain[i];
+    const decoded = typeof node?.key === 'string' ? decodeTreeKey(node.key) : null;
+    if (!decoded || decoded.scope !== scope || decoded.path.length !== i + 1 ||
+        !decoded.path.every((segment, n) =>
+          n < i ? JSON.stringify(segment) === JSON.stringify(keys[n]) : true)) return state;
+    keys.push(decoded.path[i]);
+  }
+  if (response.key !== response.chain[response.chain.length - 1].key) return state;
+  const weave = (siblings, depth) => {
+    const item = response.chain[depth];
+    const current = siblings ?? [];
+    const index = current.findIndex((entry) => entry.key === item.key);
+    const previous = index >= 0 ? current[index] : null;
+    const merged = previous ? preserveLoadedNode(item, previous) :
+      { ...item, children: [], loaded: false, isRevealed: true };
+    const next = depth < response.chain.length - 1
+      ? { ...merged, children: weave(merged.children, depth + 1) }
+      : merged;
+    if (index === -1) return [...current, next];
+    const updated = current.slice();
+    updated[index] = next;
+    return updated;
+  };
+  return {
+    ...state,
+    scopes: { ...state.scopes,
+      [scope]: weave(state.scopes?.[scope] ?? [], 0) },
+  };
+}
+
+/** The Tree may expand exactly the parent keys of a revealed path. */
+export function revealParentKeys(response) {
+  if (!Array.isArray(response?.chain)) return [];
+  return response.chain.slice(0, -1).map((node) => node.key);
 }
