@@ -109,7 +109,7 @@ class ScriptCoreTests(unittest.TestCase):
     def test_label_budget_and_offset(self):
         self.api.names = ['chapter_%04d' % n for n in range(4200)]
         self.api.files = {name: ('game/script.rpy', n % 80 + 1)
-                          for name in self.api.names}
+                          for n, name in enumerate(self.api.names)}
         result = list_labels(self.api, self.temp.name, 'chapter')
         self.assertTrue(result['limited'])
         self.assertLessEqual(result['scanned'], MAX_LABEL_SCAN)
@@ -148,17 +148,22 @@ class ScriptHttpTests(unittest.TestCase):
             ('/api/v1/source', {'file': 'script.rpy', 'line': '5'}),
         ]:
             result = []
+            calls_before = len(self.api.calls)
             worker = threading.Thread(target=lambda: result.append(self.fetch(path, params)))
             worker.start()
             time.sleep(.12)
-            self.assertEqual(self.api.calls, [])
+            self.assertEqual(len(self.api.calls), calls_before)
             self.assertEqual(len(self.bridge.pending_pages), 1)
             self.bridge.tick()
             worker.join(4)
             self.assertFalse(worker.is_alive())
             self.assertEqual(result[0][0], 200)
+            if path == '/api/v1/scripts':
+                self.assertEqual(len(self.api.calls), calls_before + 1)
+                self.assertEqual(self.api.calls[-1], threading.current_thread().name)
+            else:
+                self.assertEqual(len(self.api.calls), calls_before)
         self.assertEqual(len(self.api.calls), 1)  # source reading doesn't query labels
-        self.assertEqual(self.api.calls[0], threading.current_thread().name)
 
     def test_endpoint_auth_and_input_rejection(self):
         self.assertEqual(self.fetch('/api/v1/scripts',
