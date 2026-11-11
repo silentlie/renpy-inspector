@@ -141,6 +141,28 @@ object members, children beyond per-branch budgets and changes occurring
 between searches may not appear. Real-game Ren'Py 7/8 smoke testing is
 required before merging.
 
+## Milestone: PR #14 — Script Navigation (v0.6.7 experimental)
+
+- Search user-facing labels and game-relative filenames from a bounded Ren'Py
+  get_all_labels()/script.lookup() index, paginated at 40 labels. Scan up to
+  4,000 candidate labels and report a partial index when capped.
+- Show current file and line via renpy.get_filename_line() and best-effort
+  return-stack summary, without misrepresenting return labels as the current
+  call stack or change causes.
+- Add a full-height Scripts workspace: independently scrolling label index,
+  search, selected location, Copy location, and a source window centered on a
+  selected label or current statement.
+- Read at most 21 lines, 240 characters each from game-owned .rpy files up to
+  1 MiB. Reject path traversal and symlinks leaving the game directory; do
+  not expose arbitrary files or attempt to decode .rpyc source.
+- Use only authenticated GET requests, a bounded game-thread queue, and the
+  existing F8-only game integration. No gameplay jump/warp, labels execution,
+  write APIs or external editor launch.
+- Test Python 2.7/3, SDK lint Ren'Py 7/8, frontend responsiveness, compiled-only
+  games, missing source and invalid path handling; package v0.6.7 previews.
+- **Merge gate:** green CI plus interactive script index/source checks in a
+  real Ren'Py 7 and 8 game, save/load and FPS verification.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
