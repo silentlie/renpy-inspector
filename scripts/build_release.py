@@ -23,6 +23,7 @@ REQUIRED_FILES = (
     'game/renpy_inspector/bridge_snapshot.py',
     'game/renpy_inspector/bridge_paging.py',
     'game/renpy_inspector/bridge_search.py',
+    'game/renpy_inspector/bridge_scripts.py',
     'game/renpy_inspector/browser_favourites.py',
 )
 ENGINES = {
