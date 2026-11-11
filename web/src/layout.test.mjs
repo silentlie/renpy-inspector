@@ -138,3 +138,14 @@ test('global search stays inside popup and reveals through the virtual Tree', ()
   assert.match(jsx, /role="listbox" aria-label="Matching game variables"/);
   assert.doesNotMatch(jsx, /permanent-search-toolbar|new WebSocket/);
 });
+
+
+test('Scripts tab provides independent label navigation and read-only source viewer', () => {
+  assert.match(jsx, /import ScriptPane from '.\/ScriptPane\.jsx'/);
+  assert.match(jsx, /section === 'scripts' && <ScriptPane token=\{token\}/);
+  assert.doesNotMatch(jsx, /Full source browsing is not supported/);
+  assert.match(css, /\.script-workspace \{ display:grid;/);
+  assert.match(css, /\.script-label-list \{ flex:1 1 auto;/);
+  assert.match(css, /\.script-source-pane \{ min-width:0;min-height:0;/);
+  assert.match(css, /@media \(max-width:670px\)/);
+});

@@ -17,6 +17,7 @@ import {
   collectWatchedPages, combineScopedWatches, nextWatchBatch, WATCH_INTERVAL_MS,
 } from './watch.js';
 import { createChangeTracker, comparisonText } from './comparison.js';
+import ScriptPane from './ScriptPane.jsx';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
@@ -761,7 +762,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.6 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.7 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -783,15 +784,8 @@ export default function App() {
             ]} />
           </Card>
         </section>}
-        {section === 'scripts' && <section className="info-page" aria-label="Script context">
-          <Text className="eyebrow">SCRIPT CONTEXT</Text>
-          <Title level={3}>Scripts</Title>
-          <Paragraph type="secondary">Available script location metadata is shown below. Full source browsing is not supported by the external bridge.</Paragraph>
-          <Card className="overview-card"><Descriptions column={1} size="small" items={[
-            { key: 'file', label: 'Script file', children: activeGame.filename || 'Not exposed by game runtime' },
-            { key: 'line', label: 'Line', children: activeGame.line || 'Unavailable' },
-          ]} /></Card>
-        </section>}
+        {section === 'scripts' && <ScriptPane token={token} bridge={bridge}
+          activeGame={activeGame} generation={treePages?.generation} />}
       </main>
       <Drawer title="Variable details" className="inspector-detail-drawer" placement="right"
         width="min(520px, 94vw)" open={Boolean(selected)} onClose={() => setSelected(null)}>
