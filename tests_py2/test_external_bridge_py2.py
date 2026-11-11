@@ -96,7 +96,7 @@ class BridgePy2Tests(unittest.TestCase):
                 def lookup(self, name):
                     return Node()
             class Engine(object):
-                game = type('Game', (), {'script': Script()})()
+                game = type(str('Game'), (), {'script': Script()})()
                 def get_all_labels(self):
                     return set(['start', '_internal'])
             result = list_labels(Engine(), game_dir, 'start')
