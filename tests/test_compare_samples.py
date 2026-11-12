@@ -44,7 +44,7 @@ class PrimitiveCompareCaptureTests(unittest.TestCase):
 
     def test_child_and_direct_favourite_reads_share_exact_samples(self):
         page = build_tree_page(self.providers, 'store', (('attribute', 'player'),), 0, 80)
-        bio = next(n for n in page['items'] if n['name'] == "'bio'")
+        bio = next(n for n in page['items'] if n['name'] == "['bio']")
         self.assertEqual(bio['compare_sample']['text'], 'first\nsecond')
         value = build_tree_value(self.providers, 'store',
                                  (('attribute', 'player'), ('key', 'bio')))
