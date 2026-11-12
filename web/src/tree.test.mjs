@@ -458,3 +458,25 @@ test('copyable typed paths retain uncapped names and safely quote keys', () => {
   ]])), 'store.info["' + veryLong + '"]');
   assert.equal(formatTypedPath('not a typed path'), '');
 });
+
+
+test('typed member paths decode and format distinctly from dictionary keys or list indexes', () => {
+  const path = JSON.stringify(['store', [['attribute', 'flags'], ['member', 42]]]);
+  assert.deepEqual(decodeTreeKey(path).path[1], ['member', 42]);
+  assert.equal(formatTypedPath(path), 'store.flags{42}');
+  assert.equal(formatTypedPath(JSON.stringify(['store', [
+    ['attribute', 'flags'], ['key', 42],
+  ]])), 'store.flags[key:42]');
+  assert.equal(formatTypedPath(JSON.stringify(['store', [
+    ['attribute', 'flags'], ['index', 42],
+  ]])), 'store.flags[42]');
+  assert.equal(decodeTreeKey(JSON.stringify(['store', [
+    ['attribute', 'flags'], ['member', {}],
+  ]])), null);
+  assert.equal(decodeTreeKey(JSON.stringify(['store', [
+    ['attribute', 'flags'], ['member', 'X'.repeat(257)],
+  ]])), null);
+  assert.equal(decodeTreeKey(JSON.stringify(['store', [
+    ['attribute', 'flags'], ['member', 9007199254740992],
+  ]])), null);
+});
