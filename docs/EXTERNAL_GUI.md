@@ -1,6 +1,6 @@
 # External Ant Design workspace
 
-**PR #15 experimental lifecycle correctness (v0.6.8).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #14 script navigation was merged in v0.6.7. PR #15 adds cache-only invalidation after load/default processing, including rollback. Live Ren'Py 7/8 lifecycle tests are still required.
+**PR #15 experimental lifecycle correctness (v0.6.8).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #14 script navigation was merged in v0.6.7. PR #15 adds cache-only invalidation after load/default processing, including rollback. For older engines lacking after-default callbacks, a conservative in_rollback() check runs on new interactions where available. Live Ren'Py 7/8 lifecycle tests are still required.
 
 ## Install and launch
 
