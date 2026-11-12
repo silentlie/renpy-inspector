@@ -109,3 +109,57 @@ test('virtualised expanded collection loads subsequent pages, then resets on loa
   await expect(page.getByRole('button', { name: 'Inspect inventory' })).toBeVisible();
   await expect(page.locator('.variable-row-active')).toHaveCount(0);
 });
+
+
+// Full values use a separate authenticated game-thread job. Small previews,
+// automatic watches and Compare remain unchanged.
+test('full value drawer loads multiline text on demand and caps oversized strings', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Inspect story_text' }).click();
+  await expect(page.getByRole('region', { name: 'Full value inspection' })).toBeVisible();
+  await expect(page.getByLabel('Full variable value')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show full value' }).click();
+  const full = page.getByLabel('Full variable value');
+  await expect(full).toHaveText('Line one\nLine two: ☃');
+  await expect(page.getByRole('button', { name: 'Copy Value' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Copy Path' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Refresh full value' }).click();
+  await expect(full).toHaveText('Line one\nLine two: ☃');
+
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Inspect large_text' }).click();
+  await page.getByRole('button', { name: 'Show full value' }).click();
+  await expect(page.getByLabel('Full variable value')).toHaveText('L'.repeat(16384));
+  await expect(page.getByText(/Truncated: 16,384-character budget/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy Value' })).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Inspect player_stats' }).click();
+  await page.getByRole('button', { name: 'Show full value' }).click();
+  await expect(page.getByRole('status').filter({
+    hasText: 'Full value is available only for built-in primitives',
+  })).toBeVisible();
+  await expect(page.getByLabel('Full variable value')).toHaveCount(0);
+});
+
+test('full value API rejects unauthorised, foreign and non-GET requests', async ({ page, game }) => {
+  const params = new URLSearchParams({
+    scope: 'store', path: JSON.stringify([['attribute', 'story_text']]),
+  });
+  const endpoint = game.origin + '/api/v1/full-value?' + params;
+  expect((await page.request.get(endpoint)).status()).toBe(401);
+  expect((await page.request.get(endpoint, {
+    headers: { 'X-Inspector-Token': game.token, Origin: 'https://evil.invalid' },
+  })).status()).toBe(403);
+  expect((await page.request.post(endpoint, {
+    headers: { 'X-Inspector-Token': game.token },
+  })).status()).toBe(405);
+  const response = await page.request.get(endpoint, {
+    headers: { 'X-Inspector-Token': game.token },
+  });
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body.kind).toBe('string');
+  expect(body.truncated).toBe(false);
+  expect(body.text).toBe('Line one\nLine two: ☃');
+});

@@ -119,6 +119,21 @@ uses two versions for expensive graphical execution. On failure, CI saves
 the engine log, browser screenshot and Playwright trace as artifacts.
 These are correctness tests, not FPS benchmarks.
 
+## PR #22: On-demand full-value inspection
+
+The browser details drawer has a **Show full value** action. It sends one
+authenticated `GET /api/v1/full-value` request for the selected typed path
+through the existing Ren'Py game-thread queue. Requests are never made from
+ordinary tree polling, independent favourite watches or Compare.
+
+Browser E2E tests verify a complete multiline/Unicode string, 16,384-character
+truncation and disabled incomplete-value copying, unsupported objects and
+HTTP authentication/Origin/method rejection. Python 2/3 tests verify safe
+path resolution and that custom object repr/str/properties are not invoked.
+The graphical SDK tests additionally read an actual Ren'Py Store integer
+using the new route. These tests do not assert that arbitrary game objects
+or strings beyond the budget can be fully captured.
+
 ## What the synthetic suite does *not* test
 
 The **synthetic bridge suite alone** is not a real Ren'Py runtime E2E test. The synthetic fixture

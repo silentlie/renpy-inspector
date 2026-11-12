@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites } from './tree.js';
+import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites, formatTypedPath } from './tree.js';
 
 const sample = [
   { key: 'a', name: 'player', path: 'store.player', type: 'dict', preview: '2 items', children: [
@@ -443,4 +443,18 @@ test('older root pagination reply does not undo a structural shrink', () => {
     captured_at: 100, offset: 80, items: [{key: 'vanished'}],
     next_offset: 81, more: true}, null);
   assert.equal(stale, state);
+});
+
+test('copyable typed paths retain uncapped names and safely quote keys', () => {
+  assert.equal(formatTypedPath(JSON.stringify(['store', [
+    ['attribute', 'player'], ['key', 'has space'], ['index', 2],
+  ]])), 'store.player["has space"][2]');
+  assert.equal(formatTypedPath(JSON.stringify(['persistent', [
+    ['attribute', 'flags'], ['key', true], ['key', null],
+  ]])), 'persistent.flags[True][None]');
+  const veryLong = 'a'.repeat(400);
+  assert.equal(formatTypedPath(JSON.stringify(['store', [
+    ['attribute', 'info'], ['key', veryLong],
+  ]])), 'store.info["' + veryLong + '"]');
+  assert.equal(formatTypedPath('not a typed path'), '');
 });

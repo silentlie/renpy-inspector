@@ -21,6 +21,7 @@ import {
 import { createChangeTracker, comparisonText } from './comparison.js';
 import { classifyGeneration } from './lifecycle.js';
 import ScriptPane from './ScriptPane.jsx';
+import FullValuePanel from './FullValuePanel.jsx';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
@@ -817,7 +818,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.3 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.4 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -878,6 +879,9 @@ export default function App() {
             </Tooltip>
           </div>
           <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
+          <FullValuePanel key={JSON.stringify([treePages?.generation, selected.scope, selected.key])}
+            selection={selected} generation={treePages?.generation}
+            bridge={bridge} token={token} />
           {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
           <div className="detail-history">
             <div className="detail-history-header">
@@ -892,8 +896,9 @@ export default function App() {
               <Text type="secondary">No sampled changes for this variable yet.</Text>}
           </div>
           <Paragraph type="secondary" className="detail-disclaimer">
-            This is a bounded, read-only snapshot preview. Compare records sampled
-            previews, not complete values. Expand branches and scroll to request more pages.
+            This is a bounded, read-only snapshot preview. Full primitive values can be
+            requested on demand, within a strict character budget. Compare
+            continues to record sampled previews, not complete values.
           </Paragraph>
         </>}
       </Drawer>
