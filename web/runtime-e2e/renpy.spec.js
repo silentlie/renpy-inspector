@@ -138,6 +138,38 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       const node = result.scopes?.store?.find((item) => item.name === 'e2e_value');
       return { result, value: node?.preview };
     };
+    const getChildren = async (name, offset = 0) => {
+      const params = new URLSearchParams({
+        scope: 'store', path: JSON.stringify([['attribute', name]]),
+        offset: String(offset), size: '80',
+      });
+      const response = await page.request.get(origin + '/api/v1/children?' + params, {
+        headers, timeout: 7000,
+      });
+      expect(response.status()).toBe(200);
+      return response.json();
+    };
+    const storedFavourites = async () => {
+      const response = await page.request.get(origin + '/api/v1/favourites', {
+        headers, timeout: 5000,
+      });
+      expect(response.status()).toBe(200);
+      return (await response.json()).favourites ?? [];
+    };
+    const revealVariable = async (name) => {
+      await page.getByRole('tab', { name: 'Variables', exact: true }).click();
+      await page.getByRole('tab', { name: 'Store', exact: true }).click();
+      await page.getByRole('button', { name: 'Search variables' }).click();
+      await page.getByRole('textbox', {
+        name: 'Search variables across Store and Persistent',
+      }).fill(name);
+      const hits = page.getByRole('listbox', { name: 'Matching game variables' });
+      const match = hits.getByRole('option').filter({ hasText: name }).first();
+      await expect(match).toBeVisible();
+      await match.click();
+      await expect(page.getByRole('button', { name: 'Inspect ' + name, exact: true }))
+        .toBeVisible();
+    };
     await expect.poll(async () => (await gameValue()).value, { timeout: 10000 })
       .toBe('1');
     // This is an actual running Ren'Py interpreter, not the synthetic fixture.
@@ -152,15 +184,13 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // A real Ren'Py Store has hundreds of engine-owned root variables. Ant
     // virtualisation correctly keeps e2e_value out of the initial viewport.
     // Use the actual bounded search/reveal flow to scroll to the game value.
-    await page.getByRole('button', { name: 'Search variables' }).click();
-    await page.getByRole('textbox', {
-      name: 'Search variables across Store and Persistent',
-    }).fill('e2e_value');
-    const hits = page.getByRole('listbox', { name: 'Matching game variables' });
-    await expect(hits.getByRole('option').first()).toBeVisible();
-    await hits.getByRole('option').first().click();
-    await expect(page.getByRole('button', { name: 'Inspect e2e_value' }))
-      .toBeVisible();
+    await revealVariable('e2e_value');
+    await page.getByRole('button', { name: 'Add e2e_value to favourites' }).click();
+    const valueKey = JSON.stringify(['store', [['attribute', 'e2e_value']]]);
+    await expect.poll(async () => (await storedFavourites()).some(
+      (pin) => pin.scope === 'store' && pin.key === valueKey
+    ), { timeout: 15000 }).toBeTruthy();
+    await expect(page.getByRole('tab', { name: /Favourites \(1\)/ })).toBeVisible();
     await page.getByRole('tab', { name: 'Overview' }).click();
     await expect(page.getByText('Connected', { exact: true })).toBeVisible();
 
@@ -192,6 +222,20 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect.poll(async () => (await getSnapshot()).generation,
       { timeout: 10000 }).toBeGreaterThan(beforeLoad);
 
+    // The pin lives in inspector-owned preferences, not Ren'Py save state.
+    await page.getByRole('tab', { name: /Favourites \(1\)/ }).click();
+    const pinnedValue = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^e2e_value$/ }),
+    }).locator('.variable-preview');
+    await expect(pinnedValue).toHaveText('2', { timeout: 15000 });
+    await page.reload();
+    await expect(page.getByRole('tab', { name: /Favourites \(1\)/ })).toBeVisible();
+    await page.getByRole('tab', { name: /Favourites \(1\)/ }).click();
+    await expect(pinnedValue).toHaveText('2', { timeout: 15000 });
+    expect((await storedFavourites()).some(
+      (pin) => pin.scope === 'store' && pin.key === valueKey
+    )).toBeTruthy();
+
     // Ren'Py's real rollback hotkey. Its exact checkpoint placement is
     // engine-specific, so require a game-generation invalidation and verify
     // that the resulting preview remains a valid game-owned value.
@@ -205,6 +249,82 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // virtual-tree scroll state. Check connection, not an off-screen row.
     await page.getByRole('tab', { name: 'Overview' }).click();
     await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+    // Exercise a 170-item *actual Ren'Py Store list*, not a mock collection.
+    // A virtual list must request offset 80 when scrolled into view.
+    await revealVariable('e2e_inventory');
+    const inventory = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^e2e_inventory$/ }),
+    });
+    const listPath = JSON.stringify([['attribute', 'e2e_inventory']]);
+    let secondPageObserved = false;
+    page.on('response', (response) => {
+      if (response.status() !== 200) return;
+      const url = new URL(response.url());
+      if (url.pathname === '/api/v1/children' &&
+          url.searchParams.get('path') === listPath &&
+          url.searchParams.get('offset') === '80') secondPageObserved = true;
+    });
+    await inventory.locator('.variable-label-expandable').click();
+    await expect.poll(async () => (await getChildren('e2e_inventory')).items.length,
+      { timeout: 15000 }).toBe(80);
+    const treeViewport = page.locator('.ant-tree-list-holder').first();
+    await expect.poll(async () => {
+      // Virtual rows may put the collection anywhere in the full Store tree.
+      // Sweep the viewport until its child-page sentinel enters view.
+      await treeViewport.evaluate((element) => {
+        if (element.scrollTop + element.clientHeight + 4 >= element.scrollHeight) {
+          element.scrollTop = 0;
+        } else {
+          element.scrollTop += Math.max(230, element.clientHeight * 0.75);
+        }
+      });
+      return secondPageObserved;
+    }, { timeout: 24000, intervals: [250, 350, 400] }).toBeTruthy();
+    expect((await getChildren('e2e_inventory', 80)).items.length).toBe(80);
+
+    // SetVariable runs on the actual engine's interaction thread.
+    // Its shorter list must retire old offset pages in the browser.
+    await key(window, 'F6');
+    await expect.poll(async () => (await getChildren('e2e_inventory')).items.length,
+      { timeout: 16000 }).toBe(12);
+    expect((await getChildren('e2e_inventory', 80)).items).toHaveLength(0);
+    await expect(inventory.locator('.variable-preview')).toHaveText('12 items',
+      { timeout: 18000 });
+
+    // Replace a previously expanded dict with an int in the SAME generation.
+    // The tree must not resurrect children sampled before replacement.
+    await revealVariable('e2e_container');
+    const containerRow = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
+    });
+    await containerRow.locator('.variable-label-expandable').click();
+    await expect(page.getByRole('button', { name: 'Inspect hp', exact: true }))
+      .toBeVisible();
+    await page.getByRole('button', { name: 'Add hp to favourites' }).click();
+    await expect(page.getByRole('tab', { name: /Favourites \(2\)/ })).toBeVisible();
+    await key(window, 'F7');
+    await expect(containerRow.locator('.variable-preview')).toHaveText('7',
+      { timeout: 18000 });
+    await expect(containerRow.locator('.variable-label-expandable')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Inspect hp', exact: true }))
+      .toHaveCount(0);
+
+    // The same durable nested pin must now resolve to <missing>, not an old 10.
+    const hpKey = JSON.stringify(['store', [
+      ['attribute', 'e2e_container'], ['key', 'hp'],
+    ]]);
+    await expect.poll(async () => (await storedFavourites()).some(
+      (pin) => pin.scope === 'store' && pin.key === hpKey
+    ), { timeout: 15000 }).toBeTruthy();
+    await page.getByRole('tab', { name: /Favourites \(2\)/ }).click();
+    const hpPinned = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^hp$/ }),
+    }).locator('.variable-preview');
+    await expect(hpPinned).toHaveText('<missing>', { timeout: 18000 });
+    await page.reload();
+    await page.getByRole('tab', { name: /Favourites \(2\)/ }).click();
+    await expect(hpPinned).toHaveText('<missing>', { timeout: 18000 });
+
     await page.screenshot({ path: join(results, 'runtime-inspector.png') });
   } catch (error) {
     try {
