@@ -46,7 +46,8 @@ class SourceSearchTests(unittest.TestCase):
         self.assertEqual(len(result['matches']), 3)
         self.assertEqual({row['file'] for row in result['matches']},
                          {'script.rpy', 'chapters/story.rpy'})
-        self.assertEqual(result['matches'][0]['file'], 'chapters/story.rpy')
+        # os.walk enumerates top-level files before nested directories.
+        self.assertEqual(result['matches'][0]['file'], 'script.rpy')
         self.assertTrue(all('sword' in row['text'].lower()
                             for row in result['matches']))
         self.assertLessEqual(result['scanned_bytes'], 256 * 1024)
