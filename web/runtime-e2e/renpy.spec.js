@@ -339,6 +339,13 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
     });
     await containerRow.locator('.variable-label-expandable').click();
+    // Ensure its first nested child is mounted in the virtual viewport.
+    await containerRow.evaluate((element) => {
+      const holder = element.closest('.ant-tree-list-holder');
+      if (!holder) throw new Error('Virtual tree viewport is missing');
+      holder.scrollTop += element.getBoundingClientRect().top -
+        holder.getBoundingClientRect().top - 12;
+    });
     await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toBeVisible();
     await page.getByRole('button', { name: /Add.*hp.*to favourites/i }).click();
