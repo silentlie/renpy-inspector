@@ -20,6 +20,43 @@ MAX_DEPTH = 8
 MAX_FULL_VALUE_CHARS = 16384
 MAX_FULL_INTEGER_BITS = 4096
 
+# Small exact primitive samples captured together with preview metadata.
+# Larger values continue to require explicit /full-value inspection.
+MAX_COMPARE_SAMPLE_CHARS = 256
+MAX_COMPARE_INTEGER_BITS = 512
+
+
+def comparison_sample(value):
+    """Bounded, exact scalar text for change history; never use game repr.
+
+    Strings are captured in their entirety only below the limit. Python 2
+    byte strings require strict UTF-8, not replacement decoding. For other
+    types only exact built-in primitives are accepted. No object methods run.
+    """
+    kind = type(value)
+    try:
+        if kind in string_types:
+            if len(value) > MAX_COMPARE_SAMPLE_CHARS:
+                return None
+            if kind is binary_type:
+                text = value.decode('utf-8')  # reject lossy conversions
+            else:
+                text = to_text(value)
+            if len(text) > MAX_COMPARE_SAMPLE_CHARS:
+                return None
+            return {'text': text}
+        if kind is bool:
+            return {'text': 'True' if value else 'False'}
+        if value is None:
+            return {'text': 'None'}
+        if kind in integer_types and value.bit_length() <= MAX_COMPARE_INTEGER_BITS:
+            return {'text': str(value)}
+        if kind is float:
+            return {'text': repr(value)}
+    except (ValueError, TypeError, UnicodeError, OverflowError):
+        return None
+    return None
+
 
 def validate_tree_request(scope, raw_path, offset, size):
     """Accept only typed, bounded root-relative paths and paging parameters."""
@@ -89,7 +126,7 @@ def build_tree_page(providers, scope, path, offset, size):
                 value, is_cycle=is_cycle)
         except Exception:
             state, type_name, preview, expandable = 'error', 'error', '<unavailable>', False
-        items.append({
+        item = {
             'key': json.dumps([scope, child_path], ensure_ascii=True, separators=(',', ':')),
             'name': _safe_text(label, 90),
             'path': _safe_text(format_location(scope, child_path), 230),
@@ -98,7 +135,12 @@ def build_tree_page(providers, scope, path, offset, size):
             'state': _safe_text(state, 18),
             'expandable': bool(expandable),
             'children': [],
-        })
+        }
+        if state == 'value' and not is_cycle:
+            sample = comparison_sample(value)
+            if sample is not None:
+                item['compare_sample'] = sample
+        items.append(item)
     next_offset = offset + len(items)
     more = next_offset < MAX_BRANCH and (next_offset < len(visible) or truncated)
     capped = next_offset >= MAX_BRANCH and truncated
@@ -195,6 +237,10 @@ def build_tree_value(providers, scope, path):
         'expandable': bool(expandable),
         'children': [],
     }
+    if not missing and state == 'value' and not is_cycle:
+        sample = comparison_sample(value)
+        if sample is not None:
+            node['compare_sample'] = sample
     return {'protocol': 1, 'scope': scope, 'node': node}
 
 
