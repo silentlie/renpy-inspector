@@ -226,6 +226,17 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
 
     await page.goto(rawUrl);
     await expect(page.getByRole('tab', { name: 'Variables' })).toBeVisible();
+    // Search the disposable game's actual on-disk .rpy text through the
+    // authenticated queue and open the matching source excerpt.
+    await page.getByRole('tab', { name: 'Scripts' }).click();
+    await page.getByText('Source text', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search source text' }).fill('e2e_value');
+    const runtimeSourceMatch = page.getByRole('region', { name: 'Source text matches' })
+      .getByRole('button', { name: /Open source match script\.rpy:/ }).first();
+    await expect(runtimeSourceMatch).toBeVisible({ timeout: 12000 });
+    await runtimeSourceMatch.click();
+    await expect(page.locator('.script-source-heading')).toContainText('script.rpy:');
+    await page.getByRole('tab', { name: 'Variables' }).click();
     // Exercise direct typed-path lookup through the production browser and
     // actual Ren'Py SDK, not merely the synthetic bridge fixture.
     await page.getByRole('button', { name: 'Search variables' }).click();

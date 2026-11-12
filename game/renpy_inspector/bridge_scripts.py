@@ -165,3 +165,198 @@ def source_excerpt(game_dir, filename, line):
     except (IOError, OSError):
         return {'protocol': 1, 'available': False, 'file': filename,
                 'line': line, 'lines': [], 'reason': 'Source .rpy not installed'}
+
+
+# Literal, read-only source search is deliberately bounded per game-thread
+# request. Results are not an index of all possible .rpy files or references.
+SOURCE_SEARCH_PAGE_SIZE = 20
+SOURCE_SEARCH_MAX_FILES = 120
+SOURCE_SEARCH_MAX_DIRS = 80
+SOURCE_SEARCH_DEPTH = 6
+SOURCE_SEARCH_MAX_FILE_BYTES = 128 * 1024
+SOURCE_SEARCH_PAGE_BYTES = 256 * 1024
+SOURCE_SEARCH_PAGE_FILES = 12
+
+
+def validate_source_search_request(query, cursor, size):
+    """Reject expressions and oversized / malformed pagination inputs."""
+    if not isinstance(query, string_types):
+        raise ValueError('invalid source search term')
+    query = query.strip()
+    if not 2 <= len(query) <= 64 or any(ord(char) < 32 for char in query):
+        raise ValueError('invalid source search term')
+    if type(size) is not int or not 1 <= size <= SOURCE_SEARCH_PAGE_SIZE:
+        raise ValueError('invalid source search size')
+    if not isinstance(cursor, string_types) or len(cursor) > 24:
+        raise ValueError('invalid source search cursor')
+    parts = cursor.split(':')
+    if (len(parts) != 2 or not all(p.isdigit() and 1 <= len(p) <= 8 for p in parts)):
+        raise ValueError('invalid source search cursor')
+    file_index, line_index = int(parts[0]), int(parts[1])
+    if file_index > SOURCE_SEARCH_MAX_FILES or line_index > MAX_SOURCE_LINE:
+        raise ValueError('source search cursor exceeds limits')
+    return query, file_index, line_index, size
+
+
+def _source_search_files(game_dir):
+    """List only game-owned .rpy paths, never engine files or inspector code.
+
+    Enumeration is bounded by both visited directory and eligible file counts.
+    Per-file realpath checks and no-follow-symlink rules prevent traversal.
+    """
+    if not game_dir or not os.path.isdir(game_dir):
+        return [], False
+    root = os.path.realpath(game_dir)
+    files = []
+    limited = False
+    directories = 0
+    try:
+        for directory, subdirs, names in os.walk(root, followlinks=False):
+            directories += 1
+            if directories > SOURCE_SEARCH_MAX_DIRS:
+                limited = True
+                break
+            rel_dir = os.path.relpath(directory, root)
+            depth = 0 if rel_dir == '.' else rel_dir.count(os.sep) + 1
+            if depth >= SOURCE_SEARCH_DEPTH:
+                if subdirs:
+                    limited = True
+                subdirs[:] = []
+            else:
+                excluded = []
+                for name in subdirs:
+                    candidate = os.path.join(directory, name)
+                    if (name.startswith('.') or name.startswith('renpy_inspector') or
+                            name in ('saves', '__pycache__') or os.path.islink(candidate)):
+                        excluded.append(name)
+                subdirs[:] = sorted(name for name in subdirs if name not in excluded)
+            for name in sorted(names):
+                if not name.lower().endswith('.rpy') or name.startswith('renpy_inspector'):
+                    continue
+                full = os.path.join(directory, name)
+                if os.path.islink(full) or not os.path.isfile(full):
+                    limited = True
+                    continue
+                real = os.path.realpath(full)
+                if not real.startswith(root + os.sep):
+                    limited = True
+                    continue
+                rel = os.path.relpath(real, root).replace(os.sep, '/')
+                if _script_file(rel, root) != rel or len(rel) > 230:
+                    limited = True
+                    continue
+                files.append((rel, real))
+                if len(files) >= SOURCE_SEARCH_MAX_FILES:
+                    limited = True
+                    break
+            if len(files) >= SOURCE_SEARCH_MAX_FILES:
+                break
+    except (IOError, OSError):
+        limited = True
+    # Directory walk order is deterministic but not necessarily global file
+    # order. The same list is rebuilt for each continuation in a query.
+    return files, limited
+
+
+def _source_match_preview(line, position, query_length):
+    """Return a bounded source fragment that actually contains the hit."""
+    start = max(0, position - 75)
+    end = min(len(line), max(start + MAX_SOURCE_LINE_LENGTH, position + query_length))
+    text = line[start:end].strip('\r\n')
+    if start:
+        text = '\u2026' + text
+    if end < len(line):
+        text += '\u2026'
+    return _safe_text(text, MAX_SOURCE_LINE_LENGTH + 2)
+
+
+def search_source_text(game_dir, query, cursor='0:0', size=SOURCE_SEARCH_PAGE_SIZE):
+    """Search literal .rpy text with a strict per-call I/O and output budget.
+
+    Only call on the Ren'Py game thread through the authenticated queue. A
+    cursor is an untrusted file-index:line-index pair, not a filesystem path.
+    No regex, Python code evaluation, reads outside gamedir, or writes.
+    """
+    query, file_index, line_index, size = validate_source_search_request(
+        query, cursor, size)
+    files, limited = _source_search_files(game_dir)
+    if not files:
+        return {'protocol': 1, 'query': query, 'matches': [],
+                'cursor': None, 'more': False, 'limited': limited,
+                'available': False,
+                'reason': 'No game-owned .rpy source files available',
+                'scanned_files': 0, 'scanned_bytes': 0}
+
+    hits = []
+    visited = 0
+    scanned_bytes = 0
+    needle = query.lower()
+    index = file_index
+    start_line = line_index
+    while index < len(files) and visited < SOURCE_SEARCH_PAGE_FILES:
+        filename, full = files[index]
+        try:
+            # Read one bounded file, never open unbounded or follow symlinks.
+            if os.path.islink(full):
+                limited = True
+                index += 1
+                start_line = 0
+                continue
+            # Check the size before opening so a directory containing many
+            # oversized .rpy files does not force a megabyte-scale read.
+            size_on_disk = os.path.getsize(full)
+            visited += 1
+            if size_on_disk > SOURCE_SEARCH_MAX_FILE_BYTES:
+                limited = True
+                index += 1
+                start_line = 0
+                continue
+            remaining = SOURCE_SEARCH_PAGE_BYTES - scanned_bytes
+            if scanned_bytes and size_on_disk > remaining:
+                # Rescan this file on a fresh game-thread request.
+                visited -= 1
+                break
+            with io.open(full, 'rb') as stream:
+                # A one-byte sentinel catches growth since stat without
+                # ever materialising an unbounded file or response.
+                raw = stream.read(min(SOURCE_SEARCH_MAX_FILE_BYTES + 1, remaining + 1))
+            scanned_bytes += len(raw)
+            if len(raw) > SOURCE_SEARCH_MAX_FILE_BYTES:
+                limited = True
+                index += 1
+                start_line = 0
+                continue
+            if len(raw) > remaining:
+                # File changed during the read. Do not interpret an
+                # incomplete prefix as an exhaustive source match.
+                visited -= 1
+                break
+            lines = raw.decode('utf-8', 'replace').splitlines()
+            for line_number in range(start_line, min(len(lines), MAX_SOURCE_LINE)):
+                text = lines[line_number]
+                position = text.lower().find(needle)
+                if position < 0:
+                    continue
+                hits.append({'file': filename, 'line': line_number + 1,
+                             'text': _source_match_preview(text, position, len(query))})
+                if len(hits) >= size:
+                    next_line = line_number + 1
+                    next_cursor = ('{}:{}'.format(index, next_line)
+                                   if next_line < len(lines)
+                                   else '{}:0'.format(index + 1))
+                    return {'protocol': 1, 'query': query,
+                            'matches': hits, 'cursor': next_cursor,
+                            'more': bool(index + 1 < len(files) or next_line < len(lines)),
+                            'limited': limited, 'available': True,
+                            'scanned_files': visited, 'scanned_bytes': scanned_bytes}
+            if len(lines) > MAX_SOURCE_LINE:
+                limited = True
+        except (IOError, OSError, UnicodeError):
+            limited = True
+        index += 1
+        start_line = 0
+    more = index < len(files)
+    return {'protocol': 1, 'query': query, 'matches': hits,
+            'cursor': '{}:0'.format(index) if more else None,
+            'more': more, 'limited': limited, 'available': True,
+            'scanned_files': visited, 'scanned_bytes': scanned_bytes}

@@ -291,6 +291,7 @@ export default function App() {
   const [revealError, setRevealError] = useState('');
   const revealCounterRef = useRef(0);
   const [selected, setSelected] = useState(null);
+  const [findRequest, setFindRequest] = useState(null);
   const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
   const [favourites, setFavourites] = useState(loadLocalFavourites);
   const [favouritesReady, setFavouritesReady] = useState(false);
@@ -703,6 +704,22 @@ export default function App() {
     const captured = flatten(treePages?.scopes?.[selected.scope] ?? []).get(selected.key);
     return watchValues[selected.key] || captured || null;
   }, [treePages, selected, watchValues]);
+  const findReferences = useCallback(() => {
+    const decoded = decodeTreeKey(selected?.key);
+    if (!decoded?.path?.length) return;
+    // Search source for a literal identifier/key, not a semantic read/write
+    // graph. Select the nearest meaningful string segment from this path.
+    const candidate = [...decoded.path].reverse().find(([kind, value]) =>
+      (kind === 'attribute' || kind === 'key') &&
+      typeof value === 'string' && value.length >= 2);
+    if (!candidate) return;
+    setFindRequest({ id: Date.now(), term: candidate[1].slice(0, 64) });
+    setSelected(null);
+    setSection('scripts');
+  }, [selected]);
+  const canFindReferences = Boolean(decodeTreeKey(selected?.key)?.path?.some(
+    ([kind, value]) => (kind === 'attribute' || kind === 'key') &&
+      typeof value === 'string' && value.length >= 2));
   const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
   const selectedHistory = selected ? changes.filter((entry) => entry.key === selected.key).slice(0, 20) : [];
   const inspectChange = useCallback((change) => {
@@ -843,7 +860,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.5 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.6 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -878,7 +895,8 @@ export default function App() {
           </Card>
         </section>}
         {section === 'scripts' && <ScriptPane token={token} bridge={bridge}
-          activeGame={activeGame} generation={treePages?.generation} />}
+          activeGame={activeGame} generation={treePages?.generation}
+          findRequest={findRequest} />}
       </main>
       <Drawer title="Variable details" className="inspector-detail-drawer" placement="right"
         width="min(520px, 94vw)" open={Boolean(selected)} onClose={() => setSelected(null)}>
@@ -904,6 +922,11 @@ export default function App() {
             </Tooltip>
           </div>
           <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
+          <Button size="small" icon={<SearchOutlined />}
+            aria-label="Find references in Scripts" disabled={!canFindReferences}
+            onClick={findReferences}>
+            Find references in Scripts
+          </Button>
           <FullValuePanel key={JSON.stringify([treePages?.generation, selected.scope, selected.key])}
             selection={selected} generation={treePages?.generation}
             bridge={bridge} token={token} />

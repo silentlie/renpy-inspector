@@ -324,6 +324,27 @@ required before merging.
 - **Non-goals:** arbitrary Python expression execution, unrestricted root scans,
   editing or locking values, and cross-game automatic search indexes.
 
+## Milestone: PR #24 — Bounded .rpy source text search (v0.7.6 experimental)
+
+- Retain the existing Scripts label/filename index and small source excerpts.
+  Add a Source text mode for literal case-insensitive matching across .rpy
+  files owned by the current game, including files without indexed labels.
+- Add a cursor-based, authenticated GET-only source search routed through
+  the same bounded Ren'Py game-thread queue. No arbitrary regex or Python
+  expressions, mutation of game state, requests outside game/, symlink
+  traversal or unrestricted filesystem exposure.
+- Bound each job to 12 files, 256 KiB of source content, 128 KiB per file,
+  at most 20 matches and 120 candidate files across the search. Exclude
+  inspector files and report unsupported/partial results clearly.
+- Open a matching file/line using the existing safe source-excerpt endpoint.
+  Include a Find References action on the variable details drawer, performing
+  literal text search for the selected key, not claiming semantic references.
+- Test safe file discovery, traversal/symlink/large-file rejection, pagination
+  and read budgets, Python 2/3, authentication and generation invalidation,
+  real browser UI and real Ren'Py 7/8 engine graphical E2E.
+- No change to the F8-only browser integration, gameplay writes, polling or
+  Inspector 1.5-second snapshot sampling. Not an FPS benchmark.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

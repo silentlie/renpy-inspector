@@ -72,8 +72,12 @@ def main():
         scriptdir = Path(temp) / 'game'
         scriptdir.mkdir()
         (scriptdir / 'script.rpy').write_text(
-            'label start:\n    "A game fixture"\n\nlabel chapter_two:\n'
-            '    "Next scene"\n', encoding='utf-8')
+            'label start:\n    "A game fixture"\n'
+            '    $ score = 2\n\nlabel chapter_two:\n'
+            '    "Next scene: score should be visible"\n', encoding='utf-8')
+        (scriptdir / 'references.rpy').write_text(
+            'label secondary:\n    # score is referenced here\n'
+            '    $ player_stats["hp"] = score\n', encoding='utf-8')
         bridge.configure_script_runtime(MockRenpy(), str(scriptdir))
         bridge.start()
         if not bridge.running:

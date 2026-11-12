@@ -153,6 +153,28 @@ dictionary keys. E.g. `store.player.stats` differs from
 Python `eval`, nor an unbounded name/value search; missing, private and
 inaccessible members remain inaccessible.
 
+## PR #24: Bounded source-text search and literal references
+
+Scripts adds a Source text mode with case-insensitive literal .rpy matching,
+cursor-based Continue search, and file/line opening through the existing
+bounded excerpt route. The selected variable's Find references in Scripts
+action launches the same text search for its last public name/key. These
+are textual mentions, including possible comments/strings, not a semantic
+read/write graph. Non-.rpy, compiled-only and unscanned files are not inferred.
+
+The new authenticated `GET /api/v1/source-search?q=&cursor=0:0&size=20`
+endpoint executes on the game interaction thread, with an explicit 12-file,
+256 KiB per-job and 128 KiB per-file scan cap, 120 candidate-file limit,
+shallow directory bounds and a 20-match response cap. Large source files
+are skipped with a partial-coverage marker instead of freezing gameplay;
+a continuation cursor allows the UI to search more slices explicitly.
+
+Python 2/3 tests check UTF-8, case-insensitive search, cursor boundaries,
+oversized files and symlinks, input rejection, authentication and load
+invalidation. Browser/bridge E2E checks both Scripts modes, source excerpts,
+Find References and method/Origin protection; graphical Ren'Py 7.8.7 and
+8.5.3 E2E checks a real .rpy text lookup.
+
 ## What the synthetic suite does *not* test
 
 The **synthetic bridge suite alone** is not a real Ren'Py runtime E2E test. The synthetic fixture

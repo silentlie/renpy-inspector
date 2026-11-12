@@ -233,3 +233,58 @@ test('exact path reports missing keys and rejects unsafe expressions in the popu
   await input.press('Enter');
   expect(revealRequests).toBe(0);
 });
+
+
+test('source text search finds literal matches in multiple .rpy files and opens excerpts', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('tab', { name: 'Scripts' }).click();
+  await page.getByText('Source text', { exact: true }).click();
+  const input = page.getByRole('textbox', { name: 'Search source text' });
+  await input.fill('score');
+  const results = page.getByRole('region', { name: 'Source text matches' });
+  await expect(results.getByRole('button', { name: 'Open source match references.rpy:3' })).toBeVisible();
+  await expect(results.getByRole('button', { name: 'Open source match script.rpy:3' })).toBeVisible();
+  await results.getByRole('button', { name: 'Open source match references.rpy:3' }).click();
+  await expect(page.locator('.script-source-heading')).toContainText('references.rpy:3');
+  await expect(page.locator('.script-source-line.script-source-active')).toContainText('score');
+  await expect(results.getByText(/Literal, case-insensitive text matches/)).toBeVisible();
+  await page.getByText('Labels', { exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Script labels' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Search script labels or filenames' })).toBeVisible();
+});
+
+test('Find References from variable details opens source text search without editing gameplay', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Inspect score' }).click();
+  await page.getByRole('button', { name: 'Find references in Scripts' }).click();
+  await expect(page.getByRole('tab', { name: 'Scripts' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('textbox', { name: 'Search source text' })).toHaveValue('score');
+  const results = page.getByRole('region', { name: 'Source text matches' });
+  await expect(results.getByRole('button', { name: 'Open source match script.rpy:3' })).toBeVisible();
+  await results.getByRole('button', { name: 'Open source match script.rpy:3' }).click();
+  await expect(page.locator('.script-source-heading')).toContainText('script.rpy:3');
+});
+
+test('source search is authenticated, read-only and rejects traversal-like cursors', async ({ page, game }) => {
+  const url = game.origin + '/api/v1/source-search?' +
+    new URLSearchParams({ q: 'score', cursor: '0:0', size: '20' });
+  expect((await page.request.get(url)).status()).toBe(401);
+  expect((await page.request.get(url, {
+    headers: { 'X-Inspector-Token': game.token, Origin: 'https://foreign.invalid' },
+  })).status()).toBe(403);
+  expect((await page.request.post(url, {
+    headers: { 'X-Inspector-Token': game.token },
+  })).status()).toBe(405);
+  const valid = await page.request.get(url, {
+    headers: { 'X-Inspector-Token': game.token },
+  });
+  expect(valid.ok()).toBeTruthy();
+  const body = await valid.json();
+  expect(body.available).toBe(true);
+  expect(body.matches.some((item) => item.file === 'references.rpy')).toBe(true);
+  const invalid = game.origin + '/api/v1/source-search?' +
+    new URLSearchParams({ q: 'score', cursor: '../../secret.rpy', size: '20' });
+  expect((await page.request.get(invalid, {
+    headers: { 'X-Inspector-Token': game.token },
+  })).status()).toBe(400);
+});

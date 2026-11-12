@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Empty, Input, Spin, Tag, Typography } from 'antd';
+import { Button, Empty, Input, Segmented, Spin, Tag, Typography } from 'antd';
 import { CopyOutlined, SearchOutlined } from '@ant-design/icons';
 import { appendScriptLabels, normaliseGameScriptFile, safeScriptLine } from './scripts.js';
+import SourceTextResults from './SourceTextResults.jsx';
 
 const { Text, Title } = Typography;
 const PAGE_SIZE = 40;
@@ -9,8 +10,9 @@ const PAGE_SIZE = 40;
 /** Read-only browser navigation over game-owned Ren'Py script metadata.
  * Selecting a source location never changes the game's execution point.
  */
-export default function ScriptPane({ token, bridge, activeGame, generation }) {
+export default function ScriptPane({ token, bridge, activeGame, generation, findRequest }) {
   const [filter, setFilter] = useState('');
+  const [mode, setMode] = useState('labels');
   const [page, setPage] = useState({ query: '', offset: 0 });
   const [labels, setLabels] = useState([]);
   const [nextOffset, setNextOffset] = useState(0);
@@ -29,7 +31,7 @@ export default function ScriptPane({ token, bridge, activeGame, generation }) {
     { name: 'Current statement', file: currentFile, line: currentLine } : null;
 
   useEffect(() => {
-    if (!token) return undefined;
+    if (mode !== 'labels' || !token) return undefined;
     let active = true;
     const controller = new AbortController();
     setBusy(true);
@@ -61,7 +63,7 @@ export default function ScriptPane({ token, bridge, activeGame, generation }) {
       }
     }, page.offset ? 0 : 260);
     return () => { active = false; window.clearTimeout(timer); controller.abort(); };
-  }, [token, bridge, page.query, page.offset, generation]);
+  }, [token, bridge, page.query, page.offset, generation, mode]);
 
   useEffect(() => {
     if (!selected || !token) { setSource(null); return undefined; }
@@ -91,6 +93,13 @@ export default function ScriptPane({ token, bridge, activeGame, generation }) {
     return () => { active = false; window.clearTimeout(timer); controller.abort(); };
   }, [selected?.file, selected?.line, bridge, token, generation]);
 
+  useEffect(() => {
+    if (!findRequest?.id || !findRequest?.term) return;
+    setMode('source');
+    setFilter(findRequest.term.slice(0, 64));
+    setSelected(null);
+  }, [findRequest?.id]);
+
   const filteredCount = useMemo(() => labels.length, [labels.length]);
   const openLocation = (entry) => {
     if (!entry || !normaliseGameScriptFile(entry.file) || !safeScriptLine(entry.line)) return;
@@ -108,9 +117,17 @@ export default function ScriptPane({ token, bridge, activeGame, generation }) {
       <div className="script-navigation-header">
         <Text className="eyebrow">SCRIPT INDEX</Text>
         <Title level={4}>Scripts</Title>
-        <Text type="secondary">Search labels and filenames. Navigation does not jump the running game.</Text>
+        <Text type="secondary">
+          Search labels or literal .rpy source text. Navigation never jumps the running game.
+        </Text>
+        <Segmented size="small" block value={mode}
+          aria-label="Script search mode"
+          onChange={(value) => { setMode(value); setSelected(null); }}
+          options={[{ label: 'Labels', value: 'labels' },
+            { label: 'Source text', value: 'source' }]} />
         <Input prefix={<SearchOutlined />} allowClear size="middle"
-          aria-label="Search script labels or filenames" placeholder="Find label or .rpy file"
+          aria-label={mode === 'source' ? 'Search source text' : 'Search script labels or filenames'}
+          placeholder={mode === 'source' ? 'Find literal text in .rpy files' : 'Find label or .rpy file'}
           value={filter} maxLength={64}
           onChange={(event) => changeFilter(event.target.value)} />
         <div className="script-current">
@@ -122,7 +139,12 @@ export default function ScriptPane({ token, bridge, activeGame, generation }) {
           <Text type="secondary">Return stack: {activeGame.return_depth}
             {activeGame.return_labels ? ' · ' + activeGame.return_labels : ''}</Text>}
       </div>
-      <div className="script-label-list" role="region" aria-label="Script labels">
+      <div className="script-label-list" role="region"
+        aria-label={mode === 'source' ? 'Source text matches' : 'Script labels'}>
+        {mode === 'source'
+          ? <SourceTextResults token={token} bridge={bridge}
+              generation={generation} query={filter} onOpen={openLocation} />
+          : <>
         {labels.map((item) => <button type="button" className={
           'script-label-item' + (selected?.name === item.name ? ' script-label-active' : '')
         } key={item.name + item.file + item.line}
@@ -144,6 +166,7 @@ export default function ScriptPane({ token, bridge, activeGame, generation }) {
         {!!filteredCount && <Text type="secondary" className="script-result-count">
           {filteredCount} listed
         </Text>}
+        </>}
       </div>
     </div>
     <div className="script-source-pane" role="region" aria-label="Script source context">

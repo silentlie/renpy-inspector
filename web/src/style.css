@@ -208,3 +208,10 @@ html, body { overscroll-behavior: none; }
   .script-source-heading { padding:8px 10px; }
   .script-source-lines { padding:5px; }
 }
+
+/* Source text search is confined to the existing Scripts workspace. */
+.script-text-hit { align-items:stretch; min-width:0; }
+.script-text-snippet { color:#a6bdd8; font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;
+  white-space:pre-wrap; overflow-wrap:anywhere; }
+.script-search-disclaimer { display:block; padding:10px 11px; font-size:11px;
+  line-height:1.5; border-bottom:1px solid #2b3f58; }
