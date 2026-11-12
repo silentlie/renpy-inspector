@@ -22,7 +22,7 @@ class ReleaseBuilderTests(unittest.TestCase):
 
     def test_zip_contains_only_installable_sources(self):
         package = self.root / "game" / "renpy_inspector"
-        (package / "extra.py").write_text("# extra\n", encoding="utf-8")
+        # A stray historical Python module must never enter the installer.
         (package / "extra.pyc").write_bytes(b"bytecode")
         (package / "__pycache__").mkdir()
         (package / "__pycache__" / "inspection.pyc").write_bytes(b"bytecode")
@@ -35,7 +35,7 @@ class ReleaseBuilderTests(unittest.TestCase):
             self.assertIsNone(zf.testzip())
             self.assertEqual(
                 zf.namelist(),
-                sorted([*REQUIRED_FILES, "game/renpy_inspector/extra.py"]) + ["COMPATIBILITY.txt"],
+                sorted(REQUIRED_FILES) + ["COMPATIBILITY.txt"],
             )
             self.assertEqual(zf.read(REQUIRED_FILES[0]), f"# {REQUIRED_FILES[0]}\n".encode())
         self.assertEqual(
@@ -65,6 +65,34 @@ class ReleaseBuilderTests(unittest.TestCase):
         for version in ["v0.2", "v0.2.0-dev", "../oops", "v0.2.0/other", ""]:
             with self.subTest(version=version), self.assertRaises(ValueError):
                 build_release(version, self.out, self.root)
+
+    def test_rejects_extra_source_modules_and_legacy_overlay_files(self):
+        package = self.root / 'game' / 'renpy_inspector'
+        extra = package / 'unexpected.py'
+        extra.write_text('# should not ship\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Unlisted inspector source'):
+            build_release('v0.7.0', self.out, self.root)
+        extra.unlink()
+        legacy = self.root / 'game' / 'renpy_inspector_tree.rpy'
+        legacy.write_text('screen renpy_inspector_drawer():\n    pass\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'renpy_inspector_tree.rpy'):
+            build_release('v0.7.0', self.out, self.root)
+
+    def test_rejects_incomplete_or_symlinked_web_assets(self):
+        ui = self.root / 'game' / 'renpy_inspector_web'
+        (ui / 'assets').mkdir(parents=True)
+        (ui / 'index.html').write_text('<html></html>', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'JS and CSS'):
+            build_release('v0.7.0', self.out, self.root, require_web=True)
+        (ui / 'assets' / 'index.js').write_text('console.log(1)', encoding='utf-8')
+        (ui / 'assets' / 'index.css').write_text('body{}', encoding='utf-8')
+        build_release('v0.7.0', self.out, self.root, require_web=True)
+        try:
+            (ui / 'assets' / 'evil.js').symlink_to(ui / 'assets' / 'index.js')
+        except (OSError, NotImplementedError):
+            return
+        with self.assertRaisesRegex(ValueError, 'regular file'):
+            build_release('v0.7.0', self.out, self.root, require_web=True)
 
     def test_unknown_engine_is_rejected(self):
         with self.assertRaises(ValueError):

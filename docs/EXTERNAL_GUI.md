@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #16 experimental performance instrumentation (v0.6.9).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #15 lifecycle correctness is now merged. Background watch requests are capped at two in flight and scheduled fairly; Overview shows sampled game-thread queue/scan timing. CI synthetic benchmarks do not establish live-game frame rate.
+**PR #17 experimental release hardening (v0.7.0).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #16 bounded background polling and diagnostics are merged. PR #17 adds installer integrity and legacy-upgrade checks; see [release checklist](RELEASE_CHECKLIST.md).
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental performance build, get the engine-specific preview ZIP from [PR #16](https://github.com/silentlie/renpy-inspector/pull/16) once CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental release-hardening build, get the engine-specific preview ZIP from [PR #17](https://github.com/silentlie/renpy-inspector/pull/17) once CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
@@ -18,7 +18,7 @@
    <game root>/game/renpy_inspector_web/assets/index-*.css
    ```
 
-5. Launch the game. Press **F8** to start the loopback service and open the Ant Design UI in the default browser.
+5. Optionally run `python scripts/check_install.py "/path/to/game root"` from a source checkout to detect nested extraction, missing bundles and orphan legacy inspector files (read-only). Launch the game. Press **F8** to start the loopback service and open the Ant Design UI in the default browser.
 6. Press **F8** again to reopen the existing session. No native drawer, Settings screen or Inspector tab is shown.
 7. To stop the local server, exit the game. Closing the browser does not stop the service.
 

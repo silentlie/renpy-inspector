@@ -57,6 +57,11 @@ a conservative interaction-time rollback probe is used if
 `renpy.in_rollback()` is available. Detection is not guaranteed in
 games that suppress both engine callbacks and interactions.
 
+For PR #17, follow the [release/upgrade acceptance checklist](RELEASE_CHECKLIST.md)
+and verify both installable ZIP files before distribution. The optional
+`scripts/check_install.py` diagnoses extraction and leftover legacy source
+problems without modifying game files or saves.
+
 For PR #16, use [the performance test protocol](PERFORMANCE.md) to compare
 live frame-time distributions, queue backpressure and watch freshness against
 a clean-game baseline. Synthetic CI measurements are not FPS tests.
