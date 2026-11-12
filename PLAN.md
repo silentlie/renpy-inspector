@@ -202,6 +202,23 @@ required before merging.
   baseline. CI synthetic timings are diagnostic evidence, not live acceptance.
 - Full measurement protocol: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
+## Milestone: PR #17 — Installability and release reliability (v0.7.0 experimental)
+
+- Fail closed when a release accidentally includes old inspector-native
+  Ren'Py screens or unknown Python source modules. Require built JS/CSS.
+- Verify pre-release ZIPs for SHA256, safe archive paths, missing payload,
+  compiled browser references and Ren'Py 7/8 byte-for-byte parity.
+- Add tests for incomplete/tampered archives, stale native UI files,
+  incorrect installation nesting and missing browser bundles.
+- Provide a read-only installation checker and actionable upgrade checklist.
+- Align the main release series to v0.7.x; validate merged prerelease ZIPs
+  before publication. Preserve F8-only browser architecture and read-only data.
+- Do not require more FPS micro-optimisation without an observed regression.
+- **Merge gate:** all CI jobs green, engine-specific preview artifacts verify,
+  and interactive Ren'Py 7/8 F8, live reads, save/load, rollback and
+  upgrade-game smoke. Manual coverage must be identified if incomplete.
+- Full checklist: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
