@@ -17,6 +17,7 @@ class FullValueCompatTests(unittest.TestCase):
         self.store.text = u'First line\nSecond: \u2603'
         self.store.large = u'x' * (MAX_FULL_VALUE_CHARS + 1)
         self.store.bytes_text = 'ascii\nsecond'
+        self.store.invalid_bytes = '\xff\xfe'
         self.store.value = 15
         self.store.player = {'score': 4}
         self.store.huge = 1 << 4097
@@ -30,6 +31,9 @@ class FullValueCompatTests(unittest.TestCase):
         self.assertEqual(self.get_value(('attribute', 'bytes_text'))['text'], u'ascii\nsecond')
         self.assertEqual(self.get_value(('attribute', 'player'), ('key', 'score'))['text'], '4')
         self.assertEqual(self.get_value(('attribute', 'value'))['kind'], 'number')
+        invalid = self.get_value(('attribute', 'invalid_bytes'))
+        self.assertEqual(invalid['kind'], 'unsupported')
+        self.assertIsNone(invalid['text'])
 
     def test_truncation_missing_and_unsafe_objects(self):
         result = self.get_value(('attribute', 'large'))
