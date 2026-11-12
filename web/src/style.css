@@ -129,8 +129,20 @@ html, body { overscroll-behavior: none; }
 .compare-context { margin:3px 0 7px;font-size:11px; }
 .compare-values { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px; }
 .compare-values > div { display:flex;flex-direction:column;gap:3px;min-width:0; }
-.compare-values code,.detail-history-entry code { display:block;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;
-  color:#c4d9f3;background:#111e30;border-radius:4px;padding:5px 7px;overflow-wrap:anywhere; }
+.compare-sample,.detail-history-samples pre { display:block;margin:0;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;
+  color:#c4d9f3;background:#111e30;border-radius:4px;padding:7px;
+  overflow-wrap:anywhere;white-space:pre-wrap;max-height:220px;overflow-y:auto; }
+.compare-controls { display:flex;flex:1 1 100%;align-items:center;gap:8px;flex-wrap:wrap; }
+.compare-controls .ant-input-affix-wrapper { width:min(260px,100%); }
+.compare-controls .ant-select { min-width:126px; }
+.compare-controls .ant-checkbox-wrapper { white-space:nowrap; }
+.compare-focused { display:flex;gap:8px;align-items:center;flex:1 1 100%;min-width:0; }
+.compare-focused .ant-typography { overflow-wrap:anywhere;min-width:0; }
+.compare-count { font-size:11px; }
+.compare-actions { display:flex;align-items:center;flex-wrap:wrap;gap:8px; }
+.detail-history-header { align-items:center;flex-wrap:wrap; }
+.detail-history-samples { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px; }
+.detail-history-samples > div { min-width:0; }
 .compare-inspect { padding-left:0!important;margin-top:3px; }
 .compare-empty { margin:45px 0; }
 .detail-history { margin-top:18px;border-top:1px solid #293b51;padding-top:12px; }
