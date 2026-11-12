@@ -253,7 +253,7 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // observes rollback. A late React reset would close an in-flight search.
     // Reload the real authenticated session before starting new UI actions.
     await page.reload();
-    await expect(page.getByRole('tab', { name: /Favourites \\(1\\)/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Favourites \(1\)/ })).toBeVisible();
     // Exercise a 170-item *actual Ren'Py Store list*, not a mock collection.
     // A virtual list must request offset 80 when scrolled into view.
     await revealVariable('e2e_inventory');
