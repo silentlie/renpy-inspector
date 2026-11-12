@@ -129,7 +129,7 @@ function preserveLoadedNode(newer, previous) {
   return {
     ...newer,
     // A shallower root refresh cannot erase the latest child-page timestamp.
-    sampledAt: previous.sampledAt,
+    sampledAt: sampleAt(previous.sampledAt, newer.sampledAt),
     children: previous.loaded ? previous.children ?? [] :
       reconcilePageNodes(previous.children ?? [], newer.children ?? []),
     loaded: Boolean(previous.loaded),
@@ -189,12 +189,15 @@ export function integrateChildPage(state, page, parentKey = null) {
   const scope = page.scope;
   const children = state.scopes[scope] ?? [];
   const meta = { nextOffset: page.next_offset, more: page.more, capped: page.capped };
+  const items = page.items.map((item) => ({
+    ...item, sampledAt: sampleAt(item.sampledAt, page.captured_at),
+  }));
   if (parentKey === null) {
     const previous = state.roots?.[scope];
     if (staleSample(previous?.sampledAt, page.captured_at)) return state;
     return {
       ...state,
-      scopes: { ...state.scopes, [scope]: appendPageNodes(children, page.items) },
+      scopes: { ...state.scopes, [scope]: appendPageNodes(children, items) },
       roots: { ...state.roots, [scope]: {
         ...meta, sampledAt: sampleAt(previous?.sampledAt, page.captured_at),
       } },
@@ -202,10 +205,11 @@ export function integrateChildPage(state, page, parentKey = null) {
   }
   let accepted = false;
   const updated = updateNode(children, parentKey, (node) => {
-    if (staleSample(node.sampledAt, page.captured_at)) return node;
+    if (node.expandable === false ||
+        staleSample(node.sampledAt, page.captured_at)) return node;
     accepted = true;
     return {
-      ...node, loaded: true, children: appendPageNodes(node.children, page.items),
+      ...node, loaded: true, children: appendPageNodes(node.children, items),
       ...meta, sampledAt: sampleAt(node.sampledAt, page.captured_at),
     };
   });
@@ -242,7 +246,9 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
       page.items.every((item, i) => oldSlice[i].key === item.key) &&
       (page.items.length === pageSize || !page.more);
     const nextSlice = page.items.map((item, i) =>
-      preserveLoadedNode(item, oldSlice[i]?.key === item.key ? oldSlice[i] : undefined));
+      preserveLoadedNode({
+        ...item, sampledAt: sampleAt(item.sampledAt, page.captured_at),
+      }, oldSlice[i]?.key === item.key ? oldSlice[i] : undefined));
     if (keysStable) {
       // Keep already-loaded pages, unless the refreshed final page shrank.
       const tail = !page.more || page.items.length < pageSize ? [] :
@@ -269,7 +275,8 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
   }
   let changed = false;
   const updated = updateNode(state.scopes?.[scope] ?? [], parentKey, (node) => {
-    if (staleSample(node.sampledAt, page.captured_at)) return node;
+    if (node.expandable === false ||
+        staleSample(node.sampledAt, page.captured_at)) return node;
     const output = replace(node.children ?? [], node);
     if (!output) return node;
     changed = true;
@@ -313,7 +320,9 @@ export function mergeRootSnapshot(previous, incoming) {
   const scopes = {};
   const roots = {};
   for (const scope of ['store', 'persistent']) {
-    const next = incoming?.scopes?.[scope] ?? [];
+    const next = (incoming?.scopes?.[scope] ?? []).map((node) => ({
+      ...node, sampledAt: sampleAt(node.sampledAt, incoming?.captured_at),
+    }));
     const initial = incoming?.root_pages?.[scope] ??
       { next_offset: next.length, more: false, capped: false };
     const rootMeta = {
