@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #19 browser/bridge E2E automation (v0.7.2).** The inspector still uses the F8-only native hotkey and a separate browser. PR #19 adds production browser-to-real-Python-bridge tests with a synthetic game-thread fixture; actual Ren'Py engine F8/save/load/rollback remain manual. See [E2E testing](E2E_TESTING.md).
+**PR #20 graphical engine E2E (v0.7.3).** Native Ren'Py 7.8.7 and 8.5.3 SDK test games now exercise F8, browser startup, save/load, rollback and live Store values under Xvfb. Other versions and customised game overlays remain unverified automatically. See [E2E testing](E2E_TESTING.md).
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental browser E2E build, get the engine-specific preview ZIP from [PR #19](https://github.com/silentlie/renpy-inspector/pull/19) once CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #20](https://github.com/silentlie/renpy-inspector/pull/20) once CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 

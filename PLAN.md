@@ -253,6 +253,23 @@ required before merging.
   engine smoke or explicit disclosure of missing real-engine automation.
 - Details: [docs/E2E_TESTING.md](docs/E2E_TESTING.md).
 
+## Milestone: PR #20 — Graphical Ren'Py engine E2E (v0.7.3 experimental)
+
+- Run the official Ren'Py 7.8.7 and 8.5.3 SDKs under Linux Xvfb,
+  loading an isolated game with the actual F8-only inspector integration.
+- Inject real keyboard events with xdotool, capture the system browser URL,
+  and attach Playwright Chromium to the authenticated localhost service.
+- Assert F8 start/reopen, actual Ren'Py Store updates from advancing
+  dialogue, and generation invalidation from native FileSave/FileLoad and
+  PageUp rollback in disposable fixture-only shortcuts.
+- Collect engine logs, screenshots and Playwright traces on failures.
+  Require native-engine E2E CI to pass before preview packaging.
+- Preserve fast browser/bridge synthetic E2E and four SDK-version lint jobs.
+- State coverage limits: Linux SDK graphical smoke covers two versions,
+  not all host games/OS overlays or exact FPS behavior.
+- **Merge gate:** full CI green, native engine test logs reviewed and
+  real game compatibility gaps documented in docs/E2E_TESTING.md.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
