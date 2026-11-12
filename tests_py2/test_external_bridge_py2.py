@@ -19,6 +19,7 @@ from renpy_inspector.controller import Inspector
 from renpy_inspector.bridge_paging import build_tree_value
 from renpy_inspector.browser_favourites import BrowserFavouritesStore
 from renpy_inspector.bridge_search import build_search_results, build_reveal_chain, validate_search_request
+from renpy_inspector.bridge_scripts import list_labels, source_excerpt
 
 
 class BridgePy2Tests(unittest.TestCase):
@@ -82,6 +83,29 @@ class BridgePy2Tests(unittest.TestCase):
         self.assertEqual(chain['chain'][-1]['preview'], '42')
         with self.assertRaises(ValueError):
             validate_search_request('store', '__\nimport__')
+
+    def test_readonly_script_navigation_py2(self):
+        game_dir = tempfile.mkdtemp(prefix='inspector-scripts-py2-')
+        try:
+            with open(os.path.join(game_dir, 'script.rpy'), 'wb') as stream:
+                stream.write(b'label start:\n    "Hello."\n')
+            class Node(object):
+                filename = 'game/script.rpy'
+                linenumber = 1
+            class Script(object):
+                def lookup(self, name):
+                    return Node()
+            class Engine(object):
+                game = type(str('Game'), (), {'script': Script()})()
+                def get_all_labels(self):
+                    return set(['start', '_internal'])
+            result = list_labels(Engine(), game_dir, 'start')
+            self.assertEqual(len(result['labels']), 1)
+            self.assertEqual(result['labels'][0]['file'], 'script.rpy')
+            source = source_excerpt(game_dir, 'script.rpy', 1)
+            self.assertTrue(source['available'])
+        finally:
+            shutil.rmtree(game_dir)
 
     def test_service_starts_and_stops_without_game(self):
         folder = tempfile.mkdtemp(prefix='bridge-py2-')

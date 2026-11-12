@@ -28,6 +28,8 @@ from .bridge_paging import (build_tree_page, build_lazy_snapshot,
                             build_tree_value, validate_tree_request)
 from .bridge_search import (build_search_results, build_reveal_chain,
                             validate_search_request)
+from .bridge_scripts import (list_labels, source_excerpt,
+                             validate_label_request, validate_source_request)
 from .browser_favourites import (BrowserFavouritesStore,
                                  MAX_PREFERENCE_BYTES, validate_favourites)
 from .compat import monotonic_time
@@ -83,7 +85,8 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if urlsplit(self.path).path in (
                 '/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
-                '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
+                '/api/v1/scripts', '/api/v1/source') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -137,7 +140,8 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         path = urlsplit(self.path).path
         if path in ('/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
-                    '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal'):
+                    '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
+                    '/api/v1/scripts', '/api/v1/source'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
@@ -164,6 +168,10 @@ class _Handler(BaseHTTPRequestHandler):
                     expected_fields = ('scope', 'path', 'offset', 'size')
                 elif path == '/api/v1/search':
                     expected_fields = ('scope', 'q')
+                elif path == '/api/v1/scripts':
+                    expected_fields = ('q', 'offset', 'size')
+                elif path == '/api/v1/source':
+                    expected_fields = ('file', 'line')
                 else:
                     expected_fields = ('scope', 'path')
                 if set(fields) != set(expected_fields):
@@ -174,6 +182,15 @@ class _Handler(BaseHTTPRequestHandler):
                     arguments = validate_search_request(
                         fields['scope'][0], fields['q'][0])
                     job_kind = 'search'
+                elif path == '/api/v1/scripts':
+                    offset = int(fields['offset'][0]) if fields['offset'][0].isdigit() else -1
+                    size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
+                    arguments = validate_label_request(fields['q'][0], offset, size)
+                    job_kind = 'scripts'
+                elif path == '/api/v1/source':
+                    line = int(fields['line'][0]) if fields['line'][0].isdigit() else -1
+                    arguments = validate_source_request(fields['file'][0], line)
+                    job_kind = 'source'
                 else:
                     raw_path = json.loads(fields['path'][0])
                 if path == '/api/v1/children':
@@ -240,6 +257,8 @@ class InspectorBridge(object):
         self.thread = None
         self.token = None
         self.favourites_store = None
+        self.script_runtime = None
+        self.script_game_dir = None
         self.error = ''
         self.generation = 0
         self.pending_pages = []
@@ -261,6 +280,11 @@ class InspectorBridge(object):
     def configure_favourites_directory(self, savedir):
         """Called during game init; no gameplay state is stored in preferences."""
         self.favourites_store = BrowserFavouritesStore(savedir) if savedir else None
+
+    def configure_script_runtime(self, renpy_api, game_dir):
+        """Bind trusted engine APIs and the game-owned source directory."""
+        self.script_runtime = renpy_api
+        self.script_game_dir = game_dir
 
     @property
     def running(self):
@@ -352,7 +376,7 @@ class InspectorBridge(object):
         with self.lock:
             if not self.running or len(self.pending_pages) >= 8:
                 return None
-            if kind not in ('page', 'value', 'search', 'reveal'):
+            if kind not in ('page', 'value', 'search', 'reveal', 'scripts', 'source'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -388,6 +412,10 @@ class InspectorBridge(object):
                         result = build_search_results(self.inspector._providers, *job['args'])
                     elif job['kind'] == 'reveal':
                         result = build_reveal_chain(self.inspector._providers, *job['args'])
+                    elif job['kind'] == 'scripts':
+                        result = list_labels(self.script_runtime, self.script_game_dir, *job['args'])
+                    elif job['kind'] == 'source':
+                        result = source_excerpt(self.script_game_dir, *job['args'])
                     else:
                         result = build_tree_page(self.inspector._providers, *job['args'])
                     # Timestamp when the game-thread read actually occurred.

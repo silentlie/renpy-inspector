@@ -1,8 +1,8 @@
 # External Ant Design interface: SugarCube-inspired PR #8
 
-> **PR #12 development:** v0.6.4 is the published baseline. Draft PR #12 adds
-> bounded, browser-session Change History and Compare. Use its v0.6.5
-> preview installers to test new behaviour; the code is not yet on `main`.
+> **PR #14 development:** v0.6.6 is the published baseline. Draft PR #14 adds
+> bounded label browsing, script search and safe source excerpts in the Scripts
+> tab. Use its v0.6.7 preview installers to test the feature.
 
 ## F8-only game integration
 
@@ -26,8 +26,10 @@ PR #8 reorganizes the external inspector around the navigational pattern of
   resolved independently by the authenticated, read-only path API; missing favourites remain
   visible and can be unpinned. **Compare** has a separate scrollable workspace and
   never consumes space in the normal variable tree.
-- Scripts shows only the safely available runtime file/line fields. The bridge
-  does not expose SugarCube/Twine source or Ren'Py source text.
+- **Scripts** provides a searchable, paginated label index, current execution
+  location and return-stack summary. Selecting a label displays game-owned
+  `.rpy` excerpts when source files are installed. It never executes labels or
+  changes Ren'Py's control flow.
 
 ## Deliberate safety boundaries
 

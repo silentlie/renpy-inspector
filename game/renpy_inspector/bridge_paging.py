@@ -120,7 +120,7 @@ def build_lazy_snapshot(providers, game_info=None):
         'root_pages': {}, 'game': {},
     }
     if isinstance(game_info, dict):
-        for name in ('game', 'version', 'filename', 'line'):
+        for name in ('game', 'version', 'filename', 'line', 'return_depth', 'return_labels'):
             value = game_info.get(name)
             if type(value) in (int, float) or isinstance(value, string_types):
                 result['game'][name] = _safe_text(value)

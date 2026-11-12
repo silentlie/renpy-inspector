@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #9 experimental paging workflow.** The browser remains the entire inspector UI. Ren'Py provides only F8 plus a read-only page-request/snapshot timer. The v0.6.1 release remains the stable baseline.
+**PR #14 experimental script navigation.** The browser remains the entire inspector UI and F8 is the only in-game control. Use the v0.6.7 PR preview for script navigation; v0.6.6 is the previously published baseline.
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For experimental paging, get the engine-specific preview ZIP from [PR #9](https://github.com/silentlie/renpy-inspector/pull/9). For the prior implementation, use the v0.6.1 release.
+2. For experimental script navigation, get the engine-specific preview ZIP from [PR #14](https://github.com/silentlie/renpy-inspector/pull/14). For the prior implementation, use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
@@ -101,3 +101,39 @@ popup closes or the query changes; the server's bounded HTTP request
 queue and Ren'Py interaction-thread ownership remain unchanged.
 Search results are approximate and may be partial; no guarantee that
 all game objects or all possible nested properties are discoverable.
+
+
+## PR #14: Scripts workspace
+
+The Scripts tab exposes a bounded index of game labels and their compiled
+runtime metadata using Ren'Py's get_all_labels() and script.lookup(). Search
+matches label names and game-relative .rpy filenames, with 40 results per
+page and a maximum of 4,000 eligible label names inspected. Engine/internal
+labels, absolute source paths outside the game, and unsafe file types
+are not exposed. A partial-index notice appears when the scan is capped.
+
+Selecting a label shows its file and line, then requests a read-only window
+of 10 source lines on either side (up to 21 lines and 240 characters each).
+This optional excerpt is available only if a source .rpy exists within
+config.gamedir and is no larger than 1 MiB. Paths are canonicalised before
+opening; traversal, symlinks leaving game/, non-.rpy files, and malformed
+line numbers are rejected. In compiled-only games, label metadata remains
+available but the source viewer reports that the file was not installed.
+
+The current statement's filename and line are surfaced from
+renpy.get_filename_line() when available. Return-stack information is a
+summary of return destinations, not a Python call stack or an exact current
+label. Clicking View current navigates within the browser only. Copy
+location copies file:line for an external editor. **There is no gameplay
+jump, warp, save mutation, arbitrary file browser, or script execution.**
+
+The HTTP server queues label/source requests just like child-page requests,
+and only the Ren'Py interaction thread reads engine metadata or source files.
+All requests require the existing loopback Host/Origin and session token
+checks. Up to two queued requests are serviced per 250ms tick.
+
+Manual smoke: inspect a normal label, a local label, and a game containing
+only .rpyc files. Search across multiple .rpy files; click View current,
+copy a source location, and verify gameplay remains in the same statement.
+Verify that source is unavailable for protected files outside the game,
+and that search remains responsive under a large label set.

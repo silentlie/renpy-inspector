@@ -6,6 +6,7 @@ init -100 python:
     # Resolve the external UI from the real game directory, not __file__.
     # On some Ren'Py loaders the package import path is not a disk folder.
     renpy_inspector.bridge.configure_game_directory(config.gamedir)
+    renpy_inspector.bridge.configure_script_runtime(renpy, config.gamedir)
 
     if "renpy_inspector_overlay" not in config.overlay_screens:
         config.overlay_screens.append("renpy_inspector_overlay")
