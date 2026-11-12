@@ -1,9 +1,9 @@
 # External Ant Design interface: SugarCube-inspired PR #8
 
-> **PR #16 development:** Script navigation (PR #14) and lifecycle hardening
-> (PR #15) have merged. Draft PR #16 adds fair bounded background watches and
-> sampled queue diagnostics without adding permanent tree controls. Test with
-> v0.6.9 preview installers; see [performance protocol](PERFORMANCE.md).
+> **PR #17 development:** PR #16 performance diagnostics are merged.
+> Draft PR #17 improves release ZIP verification, upgrade safety and
+> installation checks without changing the two-level browser layout.
+> Test the v0.7.0 preview using [the release checklist](RELEASE_CHECKLIST.md).
 
 ## F8-only game integration
 
