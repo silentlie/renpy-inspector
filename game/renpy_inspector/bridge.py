@@ -28,8 +28,9 @@ from .bridge_paging import (build_tree_page, build_lazy_snapshot,
                             build_tree_value, build_full_value, validate_tree_request)
 from .bridge_search import (build_search_results, build_reveal_chain,
                             validate_search_request)
-from .bridge_scripts import (list_labels, source_excerpt,
-                             validate_label_request, validate_source_request)
+from .bridge_scripts import (list_labels, source_excerpt, search_source_text,
+                             validate_label_request, validate_source_request,
+                             validate_source_search_request)
 from .browser_favourites import (BrowserFavouritesStore,
                                  MAX_PREFERENCE_BYTES, validate_favourites)
 from .compat import monotonic_time
@@ -86,7 +87,8 @@ class _Handler(BaseHTTPRequestHandler):
         if urlsplit(self.path).path in (
                 '/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
                 '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
-                '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source',
+                '/api/v1/source-search') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -141,7 +143,8 @@ class _Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in ('/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
                     '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
-                    '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source'):
+                    '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source',
+                    '/api/v1/source-search'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
@@ -172,6 +175,8 @@ class _Handler(BaseHTTPRequestHandler):
                     expected_fields = ('q', 'offset', 'size')
                 elif path == '/api/v1/source':
                     expected_fields = ('file', 'line')
+                elif path == '/api/v1/source-search':
+                    expected_fields = ('q', 'cursor', 'size')
                 else:
                     expected_fields = ('scope', 'path')
                 if set(fields) != set(expected_fields):
@@ -191,6 +196,12 @@ class _Handler(BaseHTTPRequestHandler):
                     line = int(fields['line'][0]) if fields['line'][0].isdigit() else -1
                     arguments = validate_source_request(fields['file'][0], line)
                     job_kind = 'source'
+                elif path == '/api/v1/source-search':
+                    size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
+                    query, file_index, line_index, size = validate_source_search_request(
+                        fields['q'][0], fields['cursor'][0], size)
+                    arguments = (query, '{}:{}'.format(file_index, line_index), size)
+                    job_kind = 'source_search'
                 else:
                     raw_path = json.loads(fields['path'][0])
                 if path == '/api/v1/children':
@@ -386,7 +397,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source'):
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -430,6 +441,8 @@ class InspectorBridge(object):
                         result = list_labels(self.script_runtime, self.script_game_dir, *job['args'])
                     elif job['kind'] == 'source':
                         result = source_excerpt(self.script_game_dir, *job['args'])
+                    elif job['kind'] == 'source_search':
+                        result = search_source_text(self.script_game_dir, *job['args'])
                     else:
                         result = build_tree_page(self.inspector._providers, *job['args'])
                     # Timestamp when the game-thread read actually occurred.
