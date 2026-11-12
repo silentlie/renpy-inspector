@@ -151,7 +151,7 @@ jobs:
       - name: Install Xvfb input automation
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xvfb xauth xdotool libgl1-mesa-dri libglu1-mesa fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends xvfb xauth xdotool scrot libgl1-mesa-dri libglu1-mesa fonts-dejavu-core
       - name: Prepare disposable runtime game and browser assets
         run: |
           python scripts/prepare_fixture.py "$RUNNER_TEMP/runtime-game"
