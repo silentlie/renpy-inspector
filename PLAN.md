@@ -270,6 +270,23 @@ required before merging.
 - **Merge gate:** full CI green, native engine test logs reviewed and
   real game compatibility gaps documented in docs/E2E_TESTING.md.
 
+## Milestone: PR #21 — Real-engine state mutation E2E (test-only)
+
+- Extend the existing graphical Ren'Py 7.8.7 / 8.5.3 matrix, not the
+  synthetic fixture alone, to cover virtualised 170-item child pagination,
+  real interaction-thread shrink to 12 items, and removal of obsolete pages.
+- Replace an expanded dictionary with a scalar in the same game generation
+  and verify old descendants disappear from the browser.
+- Pin a Store value and nested `hp` child in the actual browser, verify
+  inspector-owned preference persistence through native save/load and page
+  reload, and confirm that a now-missing child is not shown as stale data.
+- Test fixture game mutations use only isolated native SetVariable shortcuts;
+  the inspector API remains read-only for gameplay state. No FPS benchmark.
+- No production UI, protocol or package-version change for this testing-only
+  milestone; preview packaging remains gated by the graphical E2E matrix.
+- **Merge gate:** both real SDK test jobs green, plus existing synthetic,
+  Python 2/3, SDK lint, frontend and packaging jobs.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
