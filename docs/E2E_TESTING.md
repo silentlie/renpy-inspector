@@ -197,6 +197,30 @@ Real Ren'Py SDK E2E asserts exact small primitive metadata from a running
 Ren'Py 7.8.7 or 8.5.3 Store. Native F8, save/load, rollback and ZIP package
 verification remain mandatory.
 
+## PR #26: Bounded set and frozenset inspection
+
+Set/frozenset nodes are expandable for safe built-in scalar members. The
+typed path segment `["member", value]` identifies a member by its stable
+value, not by a positional index. Copy Path writes
+`store.flags{"open"}` / `store.flags{42}` / `store.flags{True}`;
+the search popup parses the same notation, without evaluating expressions.
+Unlike dictionary keys and list indices, member paths survive hash-table
+iteration-order changes and can be pinned or revealed directly.
+
+Python 2/3 tests check bounded built-in enumeration, Unicode/invalid-byte
+rejection, omitted hostile objects (no object repr/getters), frozen
+collections, missing-member recovery, safe favourite serialization, and
+global search/reveal/full-value integration. Browser-to-bridge E2E expands
+scalar members, reveals a frozenset value, pins a live set member through
+removal/readdition, and verifies read-only HTTP rejection. Real graphical
+Ren'Py 7.8.7/8.5.3 E2E inspects an actual Store set via the game-thread API.
+
+Only built-in strings (at most 256 characters), safe integers, booleans and
+None are exposed as set members. Python set iteration is always bounded;
+unsupported objects are counted but not evaluated. Partial collections
+display a coverage warning rather than an endless Next page cursor.
+No gameplay writes, editing or extra polling were introduced.
+
 ## What the synthetic suite does *not* test
 
 The **synthetic bridge suite alone** is not a real Ren'Py runtime E2E test. The synthetic fixture
