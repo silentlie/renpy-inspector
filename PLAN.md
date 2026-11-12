@@ -183,6 +183,25 @@ required before merging.
   simulated callbacks do not establish that every customised game's overlay
   allows the callback and tick to run.
 
+## Milestone: PR #16 — Bounded polling and performance evidence (v0.6.9 experimental)
+
+- Cap concurrent **background** page and favourite watches to two, skipping
+  requests already in flight while preserving fair round-robin scheduling.
+  Do not change the transport or add per-row timers; interactive requests
+  still use the existing authenticated, eight-job game-thread queue.
+- Surface primitive-only, snapshot-sampled diagnostics in Overview: root
+  scan duration, pending/peak/rejected queue jobs, completion counts, latest
+  queue wait and game-thread request duration.
+- Add reproducible Python 3 synthetic microbenchmarks for shallow root,
+  nested child page and independent favourite value; record response bytes
+  and median/p95/max timing in CI artifacts without inventing FPS claims.
+- Run Python 2/3 regression and four Ren'Py SDK lint targets plus dual-engine
+  preview packaging. Keep F8-only browser UI and gameplay data read-only.
+- **Merge gate:** green CI, real-game Ren'Py 7/8 FPS, frame-time percentile,
+  scrolling, overlay pause and queue-burst smoke against an unmodified game
+  baseline. CI synthetic timings are diagnostic evidence, not live acceptance.
+- Full measurement protocol: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
