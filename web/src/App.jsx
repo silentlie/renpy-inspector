@@ -358,6 +358,7 @@ export default function App() {
   const trackerRef = useRef(createChangeTracker());
   const gameContextRef = useRef({});
   const [changes, setChanges] = useState([]);
+  const [comparisonFocus, setComparisonFocus] = useState(null);
   const publishChanges = useCallback(() => {
     setChanges(trackerRef.current.getChanges());
   }, []);
@@ -437,6 +438,7 @@ export default function App() {
             // Discard browser-only state attached to the previous game epoch.
             // Favourites are typed paths and deliberately survive to re-resolve.
             setSelected(null);
+            setComparisonFocus(null);
             setExpanded({ store: [], persistent: [], favourites: [] });
             setWatchValues({});
             loadingRef.current.clear();
@@ -692,9 +694,9 @@ export default function App() {
 
   const revealResult = useCallback(async (item, exact = false) => {
     const decoded = decodeTreeKey(item?.key);
-    if (!decoded || !token || revealBusy) return;
+    if (!decoded || !token || revealBusy) return false;
     const previous = treePagesRef.current;
-    if (!previous || !decoded.path.length) return;
+    if (!previous || !decoded.path.length) return false;
     setRevealBusy(true);
     setRevealError('');
     try {
@@ -738,8 +740,10 @@ export default function App() {
         request: ++revealCounterRef.current });
       setSearchOpen(false);
       setQuery('');
+      return true;
     } catch (reason) {
       setRevealError(reason.message || 'Reveal unavailable');
+      return false;
     } finally { setRevealBusy(false); }
   }, [bridge, token, revealBusy]);
 
@@ -777,6 +781,14 @@ export default function App() {
       typeof value === 'string' && value.length >= 2));
   const selectedPinned = Boolean(selected && favourites.some((x) => x.scope === selected.scope && x.key === selected.key));
   const selectedHistory = selected ? changes.filter((entry) => entry.key === selected.key).slice(0, 20) : [];
+  const viewSelectedHistory = useCallback(() => {
+    if (!selected) return;
+    setComparisonFocus(selected.key);
+    setSelected(null);
+    setSearchOpen(false);
+    setQuery('');
+    setScope('compare');
+  }, [selected]);
   const inspectChange = useCallback((change) => {
     const parsed = decodeTreeKey(change.key);
     if (!parsed || parsed.scope !== change.scope) return;
@@ -895,7 +907,10 @@ export default function App() {
               { key: 'favourites', label: `Favourites (${favourites.length})` },
               { key: 'compare', label: `Compare (${changes.length})` }]} />
           {scope === 'compare'
-            ? <ComparePane changes={changes} onClear={clearHistory} onInspect={inspectChange} />
+            ? <ComparePane changes={changes} favourites={favourites}
+                focusedKey={comparisonFocus} onResetFocus={() => setComparisonFocus(null)}
+                onClear={clearHistory} onInspect={inspectChange}
+                onReveal={revealResult} />
             : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
@@ -941,7 +956,7 @@ export default function App() {
               { key: 'watches', label: 'Favourites', children:
                 'Independent path watches · read-only values · persisted inspector settings' },
               { key: 'compare', label: 'Compare', children:
-                'Last 100 observed preview changes · session-only · resets after game load' },
+                'Last 100 sampled transitions · exact small built-in scalar values, otherwise previews · resets after game load' },
               { key: 'budget', label: 'Capture limits', children:
                 '80 per page · up to 1,000 per branch · 8 levels · 6,000 loaded nodes per browser' },
               { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?
@@ -990,18 +1005,32 @@ export default function App() {
             <div className="detail-history-header">
               <Text strong>Observed history</Text>
               <Text type="secondary">{selectedHistory.length} recent changes</Text>
+              <Button size="small" onClick={viewSelectedHistory}
+                aria-label="View variable history in Compare">View in Compare</Button>
             </div>
             {selectedHistory.length ? selectedHistory.map((change) =>
               <div key={change.id} className="detail-history-entry">
-                <Text type="secondary">{new Date(change.capturedAt * 1000).toLocaleTimeString()} · {change.kind}</Text>
-                <code>{comparisonText(change.before)} → {comparisonText(change.after)}</code>
+                <Text type="secondary">
+                  Sampled {new Date(change.capturedAt * 1000).toLocaleTimeString()} · {change.kind}
+                </Text>
+                <div className="detail-history-samples">
+                  <div><Text type="secondary">Before · {change.before.precision === 'exact'
+                    ? 'exact scalar' : 'preview/status'}</Text>
+                    <pre>{comparisonText(change.before)}</pre></div>
+                  <div><Text type="secondary">After · {change.after.precision === 'exact'
+                    ? 'exact scalar' : 'preview/status'}</Text>
+                    <pre>{comparisonText(change.after)}</pre></div>
+                </div>
               </div>) :
-              <Text type="secondary">No sampled changes for this variable yet.</Text>}
+              <Text type="secondary">
+                No sampled changes for this variable in the last 100 events.
+              </Text>}
           </div>
           <Paragraph type="secondary" className="detail-disclaimer">
-            This is a bounded, read-only snapshot preview. Full primitive values can be
-            requested on demand, within a strict character budget. Compare
-            continues to record sampled previews, not complete values.
+            This is a bounded, read-only snapshot. Full primitive values can be
+            requested on demand. Compare records small exact scalar samples and
+            explicitly labels preview-only observations. It does not capture
+            every mutation or reconstruct earlier values after the fact.
           </Paragraph>
         </>}
       </Drawer>
