@@ -22,6 +22,7 @@ import { createChangeTracker, comparisonText } from './comparison.js';
 import { classifyGeneration } from './lifecycle.js';
 import ScriptPane from './ScriptPane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
+import { parseExactPath } from './exact-path.js';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
@@ -284,6 +285,7 @@ export default function App() {
   const [searchMatches, setSearchMatches] = useState({
     query: '', items: [], limited: false, scanned: 0, busy: false, error: '',
   });
+  const exactPath = useMemo(() => parseExactPath(query), [query]);
   const [revealBusy, setRevealBusy] = useState(false);
   const [revealTarget, setRevealTarget] = useState(null);
   const [revealError, setRevealError] = useState('');
@@ -593,7 +595,7 @@ export default function App() {
   // Search is debounced, budgeted on the game thread and cancelled when closed.
   useEffect(() => {
     const term = query.trim();
-    if (!searchOpen || section !== 'variables' || !token || term.length < 2) {
+    if (!searchOpen || section !== 'variables' || !token || term.length < 2 || exactPath !== null) {
       setSearchMatches({ query: term, items: [], limited: false, scanned: 0,
         busy: false, error: '' });
       return undefined;
@@ -630,9 +632,9 @@ export default function App() {
       }
     }, 350);
     return () => { active = false; window.clearTimeout(timer); controller.abort(); };
-  }, [query, searchOpen, section, token, bridge, treePages?.generation]);
+  }, [query, exactPath, searchOpen, section, token, bridge, treePages?.generation]);
 
-  const revealResult = useCallback(async (item) => {
+  const revealResult = useCallback(async (item, exact = false) => {
     const decoded = decodeTreeKey(item?.key);
     if (!decoded || !token || revealBusy) return;
     const previous = treePagesRef.current;
@@ -648,13 +650,17 @@ export default function App() {
         headers: { 'X-Inspector-Token': token },
       });
       if (!response.ok) throw new Error(response.status === 404
-        ? 'Variable is no longer available in the current game state.'
+        ? exact
+          ? 'Exact path not found or not visible. Use .name for object attributes and ["key"] for dictionary entries.'
+          : 'Variable is no longer available in the current game state.'
         : response.status === 503 ? 'Game paused. Resume and retry.'
           : 'Could not reveal variable (HTTP ' + response.status + ')');
       const data = await response.json();
+      const canonical = decodeTreeKey(data.key);
       if (data.generation !== previous.generation ||
           data.generation !== treePagesRef.current?.generation ||
-          data.key !== item.key || data.scope !== decoded.scope) {
+          data.scope !== decoded.scope ||
+          !canonical || JSON.stringify(canonical.path) !== JSON.stringify(decoded.path)) {
         throw new Error('Game state changed. Search again.');
       }
       setTreePages((old) => {
@@ -670,7 +676,9 @@ export default function App() {
       setScope(decoded.scope);
       setSection('variables');
       setSelected(null);
-      setRevealTarget({ scope: decoded.scope, key: item.key,
+      // The server may encode non-ASCII keys as \u escapes; use its canonical
+      // typed key to match the actual tree node rendered after reveal.
+      setRevealTarget({ scope: decoded.scope, key: data.key,
         request: ++revealCounterRef.current });
       setSearchOpen(false);
       setQuery('');
@@ -746,7 +754,7 @@ export default function App() {
               content={<div className="search-popover" role="search">
                 <Input ref={searchRef} prefix={<SearchOutlined />} allowClear size="middle"
                   aria-label="Search variables across Store and Persistent"
-                  placeholder="Search variable names or paths"
+                  placeholder='Search or enter store.player["hp"]'
                   value={query} onChange={(event) => {
                     setQuery(event.target.value);
                     setRevealError('');
@@ -754,6 +762,9 @@ export default function App() {
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') {
                       event.stopPropagation(); event.preventDefault(); setSearchOpen(false);
+                    } else if (event.key === 'Enter' && exactPath?.key) {
+                      event.stopPropagation(); event.preventDefault();
+                      revealResult(exactPath, true);
                     } else if (event.key === 'Enter' &&
                       searchMatches.query === query.trim() && searchMatches.items.length) {
                       event.stopPropagation(); event.preventDefault();
@@ -761,9 +772,23 @@ export default function App() {
                     }
                   }} />
                 <Text type="secondary" className="search-hint">
-                  Global bounded search · type at least two characters · Esc to close
+                  Search names or enter an exact store/persistent path · Enter to reveal · Esc to close
                 </Text>
-                {query.trim().length >= 2 && <div className="remote-search-results"
+                {exactPath !== null && <div className="exact-path-results"
+                  aria-label="Exact variable path">
+                  {exactPath.error
+                    ? <Text type="danger" role="alert">{exactPath.error}</Text>
+                    : <>
+                      <Text type="secondary">Direct typed-path lookup · bypasses the global search budget</Text>
+                      <Button size="small" block loading={revealBusy}
+                        aria-label="Reveal exact variable path"
+                        onClick={() => revealResult(exactPath, true)}>
+                        Reveal {query.trim()}
+                      </Button>
+                    </>}
+                  {revealError && <Text type="danger" role="alert">{revealError}</Text>}
+                </div>}
+                {exactPath === null && query.trim().length >= 2 && <div className="remote-search-results"
                   role="listbox" aria-label="Matching game variables">
                   {searchMatches.busy && <div className="remote-search-status">
                     <Spin size="small" /> Searching game state…</div>}
