@@ -25,7 +25,7 @@ except ImportError:
 
 from .bridge_snapshot import PROTOCOL, encode_snapshot
 from .bridge_paging import (build_tree_page, build_lazy_snapshot,
-                            build_tree_value, validate_tree_request)
+                            build_tree_value, build_full_value, validate_tree_request)
 from .bridge_search import (build_search_results, build_reveal_chain,
                             validate_search_request)
 from .bridge_scripts import (list_labels, source_excerpt,
@@ -86,7 +86,7 @@ class _Handler(BaseHTTPRequestHandler):
         if urlsplit(self.path).path in (
                 '/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
                 '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
-                '/api/v1/scripts', '/api/v1/source') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -141,7 +141,7 @@ class _Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in ('/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
                     '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
-                    '/api/v1/scripts', '/api/v1/source'):
+                    '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
@@ -198,13 +198,14 @@ class _Handler(BaseHTTPRequestHandler):
                     size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
                     arguments = validate_tree_request(fields['scope'][0], raw_path, offset, size)
                     job_kind = 'page'
-                elif path == '/api/v1/value' or path == '/api/v1/reveal':
+                elif path in ('/api/v1/value', '/api/v1/reveal', '/api/v1/full-value'):
                     scope, path_parts, unused_offset, unused_size = validate_tree_request(
                         fields['scope'][0], raw_path, 0, 1)
                     if not path_parts:
                         raise ValueError('inspection needs a path')
                     arguments = (scope, path_parts)
-                    job_kind = 'value' if path == '/api/v1/value' else 'reveal'
+                    job_kind = ('value' if path == '/api/v1/value' else
+                                'reveal' if path == '/api/v1/reveal' else 'full_value')
             except (ValueError, TypeError, KeyError):
                 self._send(400, b'Invalid tree request', origin=origin)
                 return
@@ -385,7 +386,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'search', 'reveal', 'scripts', 'source'):
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -417,7 +418,9 @@ class InspectorBridge(object):
                 if not valid:
                     status, result = 409, {'error': 'Game state changed'}
                 else:
-                    if job['kind'] == 'value':
+                    if job['kind'] == 'full_value':
+                        result = build_full_value(self.inspector._providers, *job['args'])
+                    elif job['kind'] == 'value':
                         result = build_tree_value(self.inspector._providers, *job['args'])
                     elif job['kind'] == 'search':
                         result = build_search_results(self.inspector._providers, *job['args'])
