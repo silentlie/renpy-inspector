@@ -19,6 +19,16 @@ def install(store_provider, persistent_provider, restart_interaction, savedir=No
     bridge.configure_favourites_directory(savedir)
 
 
+def reset_lifecycle():
+    """Invalidate read-only caches after load or default-state restoration.
+
+    Ren'Py runs after_default_callbacks following rollback as well as during
+    startup/load. These callbacks never change gameplay variables or saves.
+    """
+    inspector.reset()
+    bridge.invalidate()
+
+
 def register_named_store(name, provider):
     """Configure a read-only root, for example from a Ren'Py init python block."""
     inspector.register_named_store(name, provider)
