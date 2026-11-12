@@ -103,7 +103,7 @@ export function decodeTreeKey(key) {
        (s[0] === 'member' && (
          (typeof s[1] === 'string' && s[1].length <= 256) ||
          typeof s[1] === 'boolean' || s[1] === null ||
-         Number.isSafeInteger(s[1]))))) return null;
+         Number.isSafeInteger(s[1])))))) return null;
     return { scope: pair[0], path: pair[1] };
   } catch { return null; }
 }
