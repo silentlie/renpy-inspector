@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #24 Source Text Search (v0.7.6).** Scripts now supports bounded literal .rpy text lookup and Find References from variables. **PR #23 Direct Path Navigation (v0.7.5)** remains available. Exact store/persistent typed paths now navigate within the existing search popup, without evaluating Python. **PR #22 Full Value Inspector (v0.7.4)** also remains supported. The details drawer now provides bounded, on-demand primitive value inspection, including multiline text and explicit copy actions. **PR #20 graphical engine E2E (v0.7.3)** also remains supported. Native Ren'Py 7.8.7 and 8.5.3 SDK test games now exercise F8, browser startup, save/load, rollback and live Store values under Xvfb. Other versions and customised game overlays remain unverified automatically. See [E2E testing](E2E_TESTING.md).
+**PR #25 Enhanced Compare & History (v0.7.7).** Small exact scalar captures and filtered, precision-labelled Compare histories now work in the existing read-only browser. **PR #24 Source Text Search (v0.7.6)** remains available. Scripts now supports bounded literal .rpy text lookup and Find References from variables. **PR #23 Direct Path Navigation (v0.7.5)** remains available. Exact store/persistent typed paths now navigate within the existing search popup, without evaluating Python. **PR #22 Full Value Inspector (v0.7.4)** also remains supported. The details drawer now provides bounded, on-demand primitive value inspection, including multiline text and explicit copy actions. **PR #20 graphical engine E2E (v0.7.3)** also remains supported. Native Ren'Py 7.8.7 and 8.5.3 SDK test games now exercise F8, browser startup, save/load, rollback and live Store values under Xvfb. Other versions and customised game overlays remain unverified automatically. See [E2E testing](E2E_TESTING.md).
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #24](https://github.com/silentlie/renpy-inspector/pull/24) once CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #25](https://github.com/silentlie/renpy-inspector/pull/25) once CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
