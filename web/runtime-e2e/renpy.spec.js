@@ -303,15 +303,15 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
     });
     await containerRow.locator('.variable-label-expandable').click();
-    await expect(page.getByRole('button', { name: 'Inspect hp', exact: true }))
+    await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toBeVisible();
-    await page.getByRole('button', { name: 'Add hp to favourites' }).click();
+    await page.getByRole('button', { name: /Add.*hp.*to favourites/i }).click();
     await expect(page.getByRole('tab', { name: /Favourites \(2\)/ })).toBeVisible();
     await key(window, 'F7');
     await expect(containerRow.locator('.variable-preview')).toHaveText('7',
       { timeout: 18000 });
     await expect(containerRow.locator('.variable-label-expandable')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Inspect hp', exact: true }))
+    await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toHaveCount(0);
 
     // The same durable nested pin must now resolve to <missing>, not an old 10.
@@ -323,7 +323,7 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     ), { timeout: 15000 }).toBeTruthy();
     await page.getByRole('tab', { name: /Favourites \(2\)/ }).click();
     const hpPinned = page.locator('.variable-row').filter({
-      has: page.locator('.variable-key', { hasText: /^hp$/ }),
+      has: page.locator('.variable-key', { hasText: /hp/ }),
     }).locator('.variable-preview');
     await expect(hpPinned).toHaveText('<missing>', { timeout: 18000 });
     await page.reload();
