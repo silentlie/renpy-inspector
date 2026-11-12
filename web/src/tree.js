@@ -104,6 +104,18 @@ export function decodeTreeKey(key) {
   } catch { return null; }
 }
 
+/** Guard against reordering of independently completed HTTP samples.
+ * Timestamps are captured on Ren'Py's game thread, not on arrival in React.
+ * Missing stamps keep compatibility with older bridges/test fixtures.
+ */
+function staleSample(last, incoming) {
+  return Number.isFinite(last) && Number.isFinite(incoming) && incoming < last;
+}
+
+function sampleAt(last, incoming) {
+  return Number.isFinite(incoming) ? incoming : last;
+}
+
 function preserveLoadedNode(newer, previous) {
   if (!previous) return newer;
   // A container can turn into a scalar or disappear between observations.
@@ -116,6 +128,8 @@ function preserveLoadedNode(newer, previous) {
   }
   return {
     ...newer,
+    // A shallower root refresh cannot erase the latest child-page timestamp.
+    sampledAt: previous.sampledAt,
     children: previous.loaded ? previous.children ?? [] :
       reconcilePageNodes(previous.children ?? [], newer.children ?? []),
     loaded: Boolean(previous.loaded),
@@ -175,15 +189,27 @@ export function integrateChildPage(state, page, parentKey = null) {
   const scope = page.scope;
   const children = state.scopes[scope] ?? [];
   const meta = { nextOffset: page.next_offset, more: page.more, capped: page.capped };
-  if (parentKey === null) return {
-    ...state,
-    scopes: { ...state.scopes, [scope]: appendPageNodes(children, page.items) },
-    roots: { ...state.roots, [scope]: meta },
-  };
-  const updated = updateNode(children, parentKey, (node) => ({
-    ...node, loaded: true, children: appendPageNodes(node.children, page.items), ...meta,
-  }));
-  if (updated === children) return state;
+  if (parentKey === null) {
+    const previous = state.roots?.[scope];
+    if (staleSample(previous?.sampledAt, page.captured_at)) return state;
+    return {
+      ...state,
+      scopes: { ...state.scopes, [scope]: appendPageNodes(children, page.items) },
+      roots: { ...state.roots, [scope]: {
+        ...meta, sampledAt: sampleAt(previous?.sampledAt, page.captured_at),
+      } },
+    };
+  }
+  let accepted = false;
+  const updated = updateNode(children, parentKey, (node) => {
+    if (staleSample(node.sampledAt, page.captured_at)) return node;
+    accepted = true;
+    return {
+      ...node, loaded: true, children: appendPageNodes(node.children, page.items),
+      ...meta, sampledAt: sampleAt(node.sampledAt, page.captured_at),
+    };
+  });
+  if (!accepted) return state;
   return { ...state, scopes: { ...state.scopes, [scope]: updated } };
 }
 
@@ -231,18 +257,24 @@ export function refreshWatchedPage(state, page, parentKey = null, pageSize = 80)
       meta: { nextOffset: nextEnd, more: page.more, capped: page.capped } };
   };
   if (parentKey === null) {
-    const output = replace(state.scopes?.[scope] ?? [], state.roots?.[scope]);
+    const previous = state.roots?.[scope];
+    if (staleSample(previous?.sampledAt, page.captured_at)) return state;
+    const output = replace(state.scopes?.[scope] ?? [], previous);
     if (!output) return state;
     return { ...state,
       scopes: { ...state.scopes, [scope]: output.nodes },
-      roots: { ...state.roots, [scope]: output.meta } };
+      roots: { ...state.roots, [scope]: {
+        ...output.meta, sampledAt: sampleAt(previous?.sampledAt, page.captured_at),
+      } } };
   }
   let changed = false;
   const updated = updateNode(state.scopes?.[scope] ?? [], parentKey, (node) => {
+    if (staleSample(node.sampledAt, page.captured_at)) return node;
     const output = replace(node.children ?? [], node);
     if (!output) return node;
     changed = true;
-    return { ...node, children: output.nodes, loaded: true, ...output.meta };
+    return { ...node, children: output.nodes, loaded: true, ...output.meta,
+      sampledAt: sampleAt(node.sampledAt, page.captured_at) };
   });
   if (!changed) return state;
   return { ...state, scopes: { ...state.scopes, [scope]: updated } };
@@ -291,16 +323,27 @@ export function mergeRootSnapshot(previous, incoming) {
     if (previous && previous.generation === generation) {
       const oldNodes = previous.scopes?.[scope] ?? [];
       const oldMeta = previous.roots?.[scope];
-      const stablePrefix = next.every((node, i) => oldNodes[i]?.key === node.key);
-      const wholeRoot = !rootMeta.more && !oldMeta?.more;
+      if (staleSample(oldMeta?.sampledAt, incoming?.captured_at)) {
+        scopes[scope] = oldNodes;
+        roots[scope] = oldMeta;
+        continue;
+      }
+      const oldSequential = oldNodes.filter((node) => !node.isRevealed);
+      const stablePrefix = next.every((node, i) => oldSequential[i]?.key === node.key);
+      // A newly complete root must trim previously paginated rows even if
+      // the earlier snapshot still advertised more pages.
       const structuralChange = !stablePrefix ||
-        (wholeRoot && oldNodes.length !== next.length);
+        (!rootMeta.more && oldSequential.length !== next.length);
       scopes[scope] = reconcilePageNodes(oldNodes, next, !structuralChange);
-      roots[scope] = !structuralChange && (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset
-        ? oldMeta : rootMeta;
+      const keepCursor = !structuralChange && rootMeta.more &&
+        (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset;
+      roots[scope] = {
+        ...(keepCursor ? oldMeta : rootMeta),
+        sampledAt: sampleAt(oldMeta?.sampledAt, incoming?.captured_at),
+      };
     } else {
       scopes[scope] = next;
-      roots[scope] = rootMeta;
+      roots[scope] = { ...rootMeta, sampledAt: incoming?.captured_at };
     }
   }
   return { generation, scopes, roots };
