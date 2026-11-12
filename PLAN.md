@@ -163,6 +163,25 @@ required before merging.
 - **Merge gate:** green CI plus interactive script index/source checks in a
   real Ren'Py 7 and 8 game, save/load and FPS verification.
 
+## Milestone: PR #15 — Lifecycle correctness (v0.6.8 experimental)
+
+- Register one cache-only restoration callback for `after_load_callbacks` and
+  `after_default_callbacks`. Ren'Py documents default processing after
+  rollback, save loads, and game startup. Duplicate callbacks during load may
+  advance the epoch twice; this is harmless and remains intentionally fail-safe.
+- Clear Python inspector caches, increment the browser bridge generation,
+  invalidate queued work with HTTP 409, and force the next game-thread tick
+  to publish a fresh read-only snapshot. Never touch gameplay variables.
+- Enforce monotonic epochs in browser tree and Compare tracking. Clear
+  selection, expanded page state, old watch previews and transient search on
+  restore, while retaining typed path favourites for independent re-resolution.
+- Run Python 2/3 tests for queued work and restored snapshots, and browser tests
+  for stale out-of-order epochs and change-history reset.
+- **Merge gate:** green dual-engine CI **and** real-game Ren'Py 7/8 save/load,
+  rollback, new-game, queued-request, favourites and FPS smoke. Tests of
+  simulated callbacks do not establish that every customised game's overlay
+  allows the callback and tick to run.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
