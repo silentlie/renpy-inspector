@@ -302,19 +302,35 @@ def search_source_text(game_dir, query, cursor='0:0', size=SOURCE_SEARCH_PAGE_SI
                 index += 1
                 start_line = 0
                 continue
-            with io.open(full, 'rb') as stream:
-                raw = stream.read(SOURCE_SEARCH_MAX_FILE_BYTES + 1)
+            # Check the size before opening so a directory containing many
+            # oversized .rpy files does not force a megabyte-scale read.
+            size_on_disk = os.path.getsize(full)
             visited += 1
+            if size_on_disk > SOURCE_SEARCH_MAX_FILE_BYTES:
+                limited = True
+                index += 1
+                start_line = 0
+                continue
+            remaining = SOURCE_SEARCH_PAGE_BYTES - scanned_bytes
+            if scanned_bytes and size_on_disk > remaining:
+                # Rescan this file on a fresh game-thread request.
+                visited -= 1
+                break
+            with io.open(full, 'rb') as stream:
+                # A one-byte sentinel catches growth since stat without
+                # ever materialising an unbounded file or response.
+                raw = stream.read(min(SOURCE_SEARCH_MAX_FILE_BYTES + 1, remaining + 1))
+            scanned_bytes += len(raw)
             if len(raw) > SOURCE_SEARCH_MAX_FILE_BYTES:
                 limited = True
                 index += 1
                 start_line = 0
                 continue
-            if scanned_bytes and scanned_bytes + len(raw) > SOURCE_SEARCH_PAGE_BYTES:
-                # Rescan the next file in a new job instead of exceeding a
-                # single engine-thread read budget.
+            if len(raw) > remaining:
+                # File changed during the read. Do not interpret an
+                # incomplete prefix as an exhaustive source match.
+                visited -= 1
                 break
-            scanned_bytes += len(raw)
             lines = raw.decode('utf-8', 'replace').splitlines()
             for line_number in range(start_line, min(len(lines), MAX_SOURCE_LINE)):
                 text = lines[line_number]
