@@ -7,7 +7,7 @@ from types import ModuleType
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'game'))
 from renpy_inspector.bridge_paging import (
-    MAX_COMPARE_SAMPLE_CHARS, MAX_COMPARE_INTEGER_BITS,
+    MAX_COMPARE_SAMPLE_CHARS, MAX_COMPARE_INTEGER_BITS, MAX_COMPARE_PAGE_BYTES,
     build_lazy_snapshot, build_tree_page, build_tree_value, comparison_sample,
 )
 
@@ -51,6 +51,20 @@ class PrimitiveCompareCaptureTests(unittest.TestCase):
         self.assertEqual(value['node']['compare_sample']['text'], 'first\nsecond')
         self.assertNotIn('compare_sample', build_tree_value(self.providers, 'store',
             (('attribute', 'player'), ('key', 'nonexistent')))['node'])
+
+    def test_exact_scalar_metadata_has_per_page_byte_budget(self):
+        store = ModuleType('large_store')
+        for index in range(80):
+            setattr(store, 'field_%03d' % index, 'A' * MAX_COMPARE_SAMPLE_CHARS)
+        page = build_tree_page(
+            {'store': lambda: store, 'persistent': lambda: {}},
+            'store', (), 0, 80)
+        samples = [n['compare_sample'] for n in page['items']
+                   if 'compare_sample' in n]
+        self.assertTrue(samples)
+        self.assertLess(len(samples), 80)
+        self.assertLessEqual(sum(len(json.dumps(item, ensure_ascii=True))
+                                 for item in samples), MAX_COMPARE_PAGE_BYTES)
 
     def test_never_runs_arbitrary_repr_or_property_for_compare_sample(self):
         class Hostile:
