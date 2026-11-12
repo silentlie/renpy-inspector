@@ -8,7 +8,7 @@ introspection, hostile extension types cannot be made completely safe.
 from __future__ import unicode_literals
 
 from itertools import islice
-from .compat import integer_types, string_types, iter_keys, fold_text, to_text
+from .compat import integer_types, string_types, iter_keys, fold_text, to_text, binary_type
 from types import ModuleType, FunctionType, BuiltinFunctionType, MethodType
 
 
@@ -33,7 +33,10 @@ def _safe_set_member(value):
         # Python 2 str can contain invalid UTF-8. Never expose a lossy or
         # unroundtrippable typed path for such a member.
         try:
-            value.encode('utf-8') if hasattr(value, 'encode') else value.decode('utf-8')
+            if typ is binary_type:
+                value.decode('utf-8')
+            else:
+                value.encode('utf-8')
         except UnicodeError:
             return False
     return True
