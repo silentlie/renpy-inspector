@@ -125,9 +125,80 @@ jobs:
             web/test-results/
           if-no-files-found: ignore
 
+  real-renpy-e2e:
+    # Unlike the synthetic bridge suite, this boots real Ren'Py SDK binaries
+    # and sends F8/Space/F5/F9/PageUp to a graphical game under Xvfb.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        renpy-version: ['7.8.7', '8.5.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build production UI and browser automation
+        run: |
+          cd web
+          npm install --no-audit --no-fund
+          npm run build
+          npx playwright install --with-deps chromium
+      - name: Install Xvfb input automation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb xauth xdotool libgl1-mesa-dri libglu1-mesa fonts-dejavu-core
+      - name: Prepare disposable runtime game and browser assets
+        run: |
+          python scripts/prepare_fixture.py "$RUNNER_TEMP/runtime-game"
+          cp tests/fixtures/renpy-runtime-script.rpy "$RUNNER_TEMP/runtime-game/game/script.rpy"
+          mkdir -p "$RUNNER_TEMP/runtime-game/game/renpy_inspector_web"
+          cp -R web/dist/. "$RUNNER_TEMP/runtime-game/game/renpy_inspector_web/"
+          python scripts/check_install.py "$RUNNER_TEMP/runtime-game"
+      - name: Download actual Ren'Py SDK
+        env:
+          RENPY_VERSION: ${{ matrix.renpy-version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fLSs --retry 3 --retry-delay 3 \
+            -o renpy-sdk.tar.bz2 \
+            "https://www.renpy.org/dl/${RENPY_VERSION}/renpy-${RENPY_VERSION}-sdk.tar.bz2"
+          tar -xjf renpy-sdk.tar.bz2
+          sdk_script="$(find "$RUNNER_TEMP" -mindepth 2 -maxdepth 3 -name renpy.sh -type f -print -quit)"
+          test -n "$sdk_script"
+          echo "RENPY_SDK_SCRIPT=$sdk_script" >> "$GITHUB_ENV"
+      - name: Drive actual Ren'Py F8, HTTP snapshots, browser, save/load, rollback
+        env:
+          RENPY_E2E_PROJECT: ${{ runner.temp }}/runtime-game
+          RENPY_VERSION: ${{ matrix.renpy-version }}
+          RENPY_E2E_OUTPUT: ${{ runner.temp }}/runtime-e2e-evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c \
+            'cd web && npm run test:e2e:engine'
+      - name: Retain native engine logs and Playwright traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-renpy-e2e-${{ matrix.renpy-version }}
+          path: |
+            ${{ runner.temp }}/runtime-e2e-evidence/
+            web/playwright-runtime-report/
+            web/test-results/runtime-playwright/
+            ${{ runner.temp }}/runtime-game/traceback.txt
+            ${{ runner.temp }}/runtime-game/log.txt
+          if-no-files-found: ignore
+
   preview-packages:
     if: github.event_name == 'pull_request'
-    needs: [python3-tests, python2-tests, renpy-sdk-lint, ant-design-ui, browser-bridge-e2e]
+    needs: [python3-tests, python2-tests, renpy-sdk-lint, ant-design-ui, browser-bridge-e2e, real-renpy-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -142,16 +213,16 @@ jobs:
           path: game/renpy_inspector_web
       - name: Build both installable preview packages
         run: |
-          python scripts/build_release.py v0.7.2 --engine both --require-web
+          python scripts/build_release.py v0.7.3 --engine both --require-web
           python scripts/verify_release.py \
-            dist/renpy-inspector-v0.7.2-renpy7.zip \
-            dist/renpy-inspector-v0.7.2-renpy8.zip
+            dist/renpy-inspector-v0.7.3-renpy7.zip \
+            dist/renpy-inspector-v0.7.3-renpy8.zip
           cd dist
           sha256sum -c *.sha256
       - name: Upload experimental Ren'Py 7 and 8 ZIPs
         uses: actions/upload-artifact@v4
         with:
-          name: renpy-inspector-v0.7.2-preview
+          name: renpy-inspector-v0.7.3-preview
           path: |
             dist/*.zip
             dist/*.sha256
