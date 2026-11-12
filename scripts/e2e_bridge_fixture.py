@@ -53,7 +53,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='renpy-inspector-e2e-') as temp:
         store = ModuleType('store')
         store.score = 2
-        store.story_text = 'Line one\\nLine two: \\u2603'.replace('\\\\n', '\\n')
+        store.story_text = 'Line one\nLine two: \u2603'
         store.large_text = 'L' * 17000
         store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
         store.inventory = list(range(170))
