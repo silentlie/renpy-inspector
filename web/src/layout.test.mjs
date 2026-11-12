@@ -85,7 +85,8 @@ test('tree descendants and variable labels cannot widen the page', () => {
 
 test('SugarCube-style subscriptions use one bounded shared scheduler', () => {
   assert.match(jsx, /collectWatchedPages/);
-  assert.match(jsx, /nextWatchBatch/);
+  assert.match(jsx, /nextEligibleWatchBatch/);
+  assert.match(jsx, /MAX_BACKGROUND_IN_FLIGHT/);
   assert.match(jsx, /WATCH_INTERVAL_MS/);
   assert.match(jsx, /window\.setInterval\(\(\) => \{/);
   assert.match(jsx, /refreshWatchedPage\(prior, data, parentKey/);
