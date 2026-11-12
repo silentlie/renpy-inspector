@@ -143,15 +143,20 @@ def source_excerpt(game_dir, filename, line):
     if not full.startswith(root + os.sep) or not full.lower().endswith('.rpy'):
         raise ValueError('script path leaves game directory')
     try:
-        if os.path.getsize(full) > MAX_SOURCE_BYTES:
+        # Bound bytes on the opened file, not only a preceding stat(). A file
+        # can grow or be replaced between a size check and a line iterator;
+        # even one enormous line would otherwise allocate unbounded memory.
+        with io.open(full, 'rb') as stream:
+            raw = stream.read(MAX_SOURCE_BYTES + 1)
+        if len(raw) > MAX_SOURCE_BYTES:
             return {'protocol': 1, 'available': False, 'file': filename,
                     'line': line, 'lines': [], 'reason': 'Source file exceeds read limit'}
         start = max(1, line - SOURCE_CONTEXT)
         stop = line + SOURCE_CONTEXT
-        with io.open(full, 'r', encoding='utf-8', errors='replace') as stream:
-            lines = [{'line': index, 'text': text[:MAX_SOURCE_LINE_LENGTH]}
-                     for index, text in enumerate(islice(stream, stop), 1)
-                     if index >= start]
+        content = raw.decode('utf-8', 'replace')
+        lines = [{'line': index, 'text': text[:MAX_SOURCE_LINE_LENGTH]}
+                 for index, text in enumerate(islice(content.splitlines(True), stop), 1)
+                 if index >= start]
         if not lines or line > lines[-1]['line']:
             return {'protocol': 1, 'available': False, 'file': filename,
                     'line': line, 'lines': [], 'reason': 'Line is not in available source'}
