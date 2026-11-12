@@ -11,11 +11,14 @@ init -100 python:
     if "renpy_inspector_overlay" not in config.overlay_screens:
         config.overlay_screens.append("renpy_inspector_overlay")
 
-    if renpy_inspector.inspector.reset not in config.after_load_callbacks:
-        config.after_load_callbacks.append(renpy_inspector.inspector.reset)
-
-    if renpy_inspector.bridge.invalidate not in config.after_load_callbacks:
-        config.after_load_callbacks.append(renpy_inspector.bridge.invalidate)
+    # after_load covers explicit save loads. after_default also runs after
+    # rollback (and at startup); invalidate before the next browser capture.
+    # Both use the same cache-only callback. No gameplay values are written.
+    if renpy_inspector.reset_lifecycle not in config.after_load_callbacks:
+        config.after_load_callbacks.append(renpy_inspector.reset_lifecycle)
+    defaults_callbacks = getattr(config, "after_default_callbacks", None)
+    if defaults_callbacks is not None and renpy_inspector.reset_lifecycle not in defaults_callbacks:
+        defaults_callbacks.append(renpy_inspector.reset_lifecycle)
 
     renpy_inspector.install(
         lambda: renpy.store,
