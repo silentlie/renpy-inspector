@@ -304,6 +304,26 @@ required before merging.
 - **Deferred:** direct path expression navigation, source text search, richer
   comparison values, safe object traversal and any editing/undo/locks.
 
+## Milestone: PR #23 — Direct typed-path navigation (v0.7.5 experimental)
+
+- Extend the compact existing search popup, never add a toolbar/footer/sidebar,
+  with an exact path mode for `store` and `persistent` paths.
+- Parse attribute, dictionary-key and list-index segments deterministically
+  into validated typed paths. Support JSON/Python-style quoted keys, bool/None
+  dictionary keys and explicit `[key:42]` integer-key notation.
+- Keep global fuzzy search unchanged for ordinary queries. Exact paths bypass
+  its 1,400-visited-node limit by reusing the current authenticated, queued
+  read-only `/api/v1/reveal` endpoint to inspect only a verified ancestor chain.
+- Materialise unopened/off-page ancestors and scroll to the target. Fail
+  explicitly on private syntax, malformed expressions, non-visible paths,
+  response generation changes and unsupported depth/key budgets.
+- Make Copy Path an exact roundtrip, including Unicode and integer dict keys,
+  rather than confusing list indexes with mapping keys.
+- Run JS grammar/roundtrip tests, browser-to-bridge E2E for nested and off-page
+  values and invalid syntax, real Ren'Py 7/8 graphical tests, and ZIP packaging.
+- **Non-goals:** arbitrary Python expression execution, unrestricted root scans,
+  editing or locking values, and cross-game automatic search indexes.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
