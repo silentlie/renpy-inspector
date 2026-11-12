@@ -134,6 +134,25 @@ The graphical SDK tests additionally read an actual Ren'Py Store integer
 using the new route. These tests do not assert that arbitrary game objects
 or strings beyond the budget can be fully captured.
 
+## PR #23: Exact typed-path navigation
+
+The same search popup recognises `store.` and `persistent.` paths. Plain
+names still use bounded fuzzy search, while exact paths become validated
+typed segments passed to the existing `/api/v1/reveal` job queue. UI results
+scroll to a revealed row without downloading all intermediate pages.
+
+The JS tests exercise escaped/Unicode mapping keys, integer mapping keys,
+list indexes, scope switching, limits and malformed expressions. Chromium
+tests verify deep reveal, navigation to an initially off-page list entry,
+persistent dictionary keys and safe errors. Real Ren'Py 7.8.7/8.5.3 graphical
+tests perform an exact Store reveal alongside F8 and native save/load.
+
+Dot notation is an object/module attribute; quoted brackets indicate
+dictionary keys. E.g. `store.player.stats` differs from
+`store.player["stats"]` if `player` is a dictionary. This is **not**
+Python `eval`, nor an unbounded name/value search; missing, private and
+inaccessible members remain inaccessible.
+
 ## What the synthetic suite does *not* test
 
 The **synthetic bridge suite alone** is not a real Ren'Py runtime E2E test. The synthetic fixture
