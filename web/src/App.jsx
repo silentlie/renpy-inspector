@@ -12,6 +12,7 @@ import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
   integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
   readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
+  staleSample,
 } from './tree.js';
 import {
   collectWatchedPages, combineScopedWatches, nextEligibleWatchBatch,
@@ -294,6 +295,7 @@ export default function App() {
   const preferenceWritesRef = useRef(Promise.resolve());
   const [watchValues, setWatchValues] = useState({});
   const valueLoadingRef = useRef(new Set());
+  const watchCaptureRef = useRef(new Map());
   const trackerRef = useRef(createChangeTracker());
   const gameContextRef = useRef({});
   const [changes, setChanges] = useState([]);
@@ -381,6 +383,7 @@ export default function App() {
             loadingRef.current.clear();
             setLoadingPages(new Set());
             valueLoadingRef.current.clear();
+            watchCaptureRef.current.clear();
             watchCursorRef.current = 0;
             watchPendingRef.current.clear();
             setPageErrors({});
@@ -517,6 +520,13 @@ export default function App() {
       if (result.generation !== treePagesRef.current?.generation ||
           expectedGeneration !== result.generation ||
           result.node?.key !== job.key) return;
+      // HTTP completion order is not Ren'Py capture order. Do not regress a
+      // pinned value after a newer game-thread sample of the same location.
+      const previousCapture = watchCaptureRef.current.get(job.key);
+      if (staleSample(previousCapture, result.captured_at)) return;
+      if (Number.isFinite(result.captured_at)) {
+        watchCaptureRef.current.set(job.key, result.captured_at);
+      }
       trackerRef.current.observeValue({
         scope: job.scope, node: result.node, generation: result.generation,
         capturedAt: result.captured_at, game: gameContextRef.current,
@@ -576,6 +586,7 @@ export default function App() {
   useEffect(() => {
     setPageErrors({});
     setWatchValues({});
+    watchCaptureRef.current.clear();
   }, [treePages?.generation]);
 
   // Search is debounced, budgeted on the game thread and cancelled when closed.
@@ -806,7 +817,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.0 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.1 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :

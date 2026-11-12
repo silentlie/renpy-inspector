@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #17 experimental release hardening (v0.7.0).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #16 bounded background polling and diagnostics are merged. PR #17 adds installer integrity and legacy-upgrade checks; see [release checklist](RELEASE_CHECKLIST.md).
+**PR #18 experimental tree freshness (v0.7.1).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #17 release hardening is merged. PR #18 rejects stale same-generation page/favourite samples and removes stale root tails when a previously paginated collection shrinks; see [tree freshness](TREE_FRESHNESS.md).
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental release-hardening build, get the engine-specific preview ZIP from [PR #17](https://github.com/silentlie/renpy-inspector/pull/17) once CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental tree-freshness build, get the engine-specific preview ZIP from [PR #18](https://github.com/silentlie/renpy-inspector/pull/18) once CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 

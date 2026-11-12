@@ -219,6 +219,24 @@ required before merging.
   upgrade-game smoke. Manual coverage must be identified if incomplete.
 - Full checklist: [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
 
+## Milestone: PR #18 — Same-generation tree freshness (v0.7.1 experimental)
+
+- Order root, child-page and independent favourite samples by their
+  Ren'Py interaction-thread capture timestamps, not HTTP completion order.
+- Reject stale page replies for a parent or root after newer captures, and
+  avoid resurrecting child pages beneath scalar or missing containers.
+- Trim previously loaded root tails and obsolete off-page breadcrumbs when
+  the complete root now contains fewer entries.
+- Preserve fresher descendants across shallow-root snapshots while keeping
+  the same virtualised browser layout, bounds, two-in-flight background cap,
+  authenticated HTTP protocol and read-only semantics.
+- Run JS out-of-order/shrink regression tests and all Python 2/3, Ren'Py SDK,
+  frontend build and dual-engine preview checks.
+- **Merge gate:** CI green plus manual rapid mutation, paging, save/load and
+  rollback smoke in Ren'Py 7 and 8; document limitations of preview-only
+  detection when same-type objects are replaced without visible changes.
+- Details: [docs/TREE_FRESHNESS.md](docs/TREE_FRESHNESS.md).
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

@@ -329,3 +329,118 @@ test('off-page search reveal survives root snapshots and watched pagination', ()
   assert.equal(updated.scopes.store[160].key,target.key);
   assert.equal(updated.roots.store.nextOffset,160);
 });
+
+import { staleSample } from './tree.js';
+
+test('completed root snapshots retire paged tails and off-page breadcrumbs', () => {
+  const source = Array.from({length: 160}, (_, i) => ({
+    key: 'k' + i, name: 'item ' + i, type: 'int', state: 'value',
+    preview: '' + i, expandable: false, children: [],
+  }));
+  const previous = {generation: 9, scopes: {store: [...source, {
+    key: 'reveal', isRevealed: true, type: 'int', state: 'value', children: [],
+  }], persistent: []}, roots: {store: {
+    nextOffset: 160, more: true, sampledAt: 100,
+  }}};
+  const incoming = {generation: 9, captured_at: 150,
+    scopes: {store: source.slice(0, 30), persistent: []},
+    root_pages: {store: {next_offset: 30, more: false, capped: false}}};
+  const after = mergeRootSnapshot(previous, incoming);
+  assert.equal(after.scopes.store.length, 30);
+  assert.equal(after.scopes.store[29].key, 'k29');
+  assert.equal(after.roots.store.nextOffset, 30);
+  assert.equal(after.roots.store.more, false);
+  assert.equal(after.roots.store.sampledAt, 150);
+});
+
+test('older HTTP page samples cannot rewind a later tree sample', () => {
+  const key = JSON.stringify(['store', [['attribute', 'bag']]]);
+  const item = (preview) => ({
+    key: JSON.stringify(['store', [['attribute', 'bag'], ['key', 'item']]]),
+    type: 'int', state: 'value', expandable: false, preview, children: [],
+  });
+  const root = mergeRootSnapshot(null, {generation: 7, captured_at: 100,
+    scopes: {store: [{key, type: 'dict', state: 'value', expandable: true, children: []}],
+      persistent: []},
+    root_pages: {store: {next_offset: 1, more: false}}});
+  const recent = integrateChildPage(root, {scope: 'store', generation: 7,
+    captured_at: 130, items: [item('new')], offset: 0,
+    next_offset: 1, more: false, capped: false}, key);
+  assert.equal(recent.scopes.store[0].children[0].preview, 'new');
+  assert.equal(recent.scopes.store[0].sampledAt, 130);
+  const old = refreshWatchedPage(recent, {scope: 'store', generation: 7,
+    captured_at: 120, items: [item('old')], offset: 0,
+    next_offset: 1, more: false, capped: false}, key);
+  assert.equal(old, recent);
+  const oldAppend = integrateChildPage(recent, {scope: 'store', generation: 7,
+    captured_at: 125, items: [item('old')], offset: 0,
+    next_offset: 1, more: false, capped: false}, key);
+  assert.equal(oldAppend, recent);
+  const next = refreshWatchedPage(recent, {scope: 'store', generation: 7,
+    captured_at: 145, items: [item('latest')], offset: 0,
+    next_offset: 1, more: false, capped: false}, key);
+  assert.equal(next.scopes.store[0].children[0].preview, 'latest');
+});
+
+test('root snapshots cannot regress a newer watched root page', () => {
+  const root = mergeRootSnapshot(null, {generation: 4, captured_at: 100,
+    scopes: {store: [{key: 'a', type: 'int', state: 'value',
+      preview: 'old', expandable: false, children: []}], persistent: []},
+    root_pages: {store: {next_offset: 1, more: false}}});
+  const fresh = refreshWatchedPage(root, {scope: 'store', generation: 4,
+    offset: 0, captured_at: 170, items: [{
+      key: 'a', type: 'int', state: 'value', preview: 'fresh',
+      expandable: false, children: [],
+    }], next_offset: 1, more: false, capped: false});
+  const delayed = mergeRootSnapshot(fresh, {generation: 4, captured_at: 150,
+    scopes: {store: [{key: 'a', type: 'int', state: 'value',
+      preview: 'old', expandable: false, children: []}], persistent: []},
+    root_pages: {store: {next_offset: 1, more: false}}});
+  assert.equal(delayed.scopes.store[0].preview, 'fresh');
+  assert.equal(delayed.roots.store.sampledAt, 170);
+  assert.equal(staleSample(170, 150), true);
+  assert.equal(staleSample(170, 171), false);
+});
+
+test('root preview is not rolled back after a newer expanded-child sample', () => {
+  const owner = JSON.stringify(['store', [['attribute', 'owner']]]);
+  const child = JSON.stringify(['store', [['attribute', 'owner'], ['key', 'hp']]]);
+  const initial = mergeRootSnapshot(null, {generation: 2, captured_at: 100,
+    scopes: {store: [{key: owner, type: 'dict', state: 'value', preview: 'old',
+      expandable: true, children: []}], persistent: []}});
+  const sampled = integrateChildPage(initial, {scope: 'store', generation: 2,
+    captured_at: 130, offset: 0, next_offset: 1, more: false,
+    items: [{key: child, type: 'int', state: 'value',
+      preview: '7', expandable: false, children: []}]}, owner);
+  const oldRoot = mergeRootSnapshot(sampled, {generation: 2, captured_at: 120,
+    scopes: {store: [{key: owner, type: 'dict', state: 'value',
+      preview: 'stale', expandable: true, children: []}], persistent: []}});
+  assert.equal(oldRoot.scopes.store[0].sampledAt, 130);
+  assert.equal(oldRoot.scopes.store[0].preview, 'old');
+  assert.equal(oldRoot.scopes.store[0].children[0].preview, '7');
+});
+
+test('late nested page cannot resurrect scalar or missing root children', () => {
+  const root = mergeRootSnapshot(null, {generation: 2, captured_at: 180,
+    scopes: {store: [{key: 'p', type: 'int', state: 'value',
+      expandable: false, children: []}], persistent: []}});
+  const stale = integrateChildPage(root, {scope: 'store', generation: 2,
+    captured_at: 160, offset: 0, items: [{key: 'old', children: []}],
+    next_offset: 1, more: false}, 'p');
+  assert.equal(stale, root);
+  const impossible = integrateChildPage(root, {scope: 'store', generation: 2,
+    captured_at: 190, offset: 0, items: [{key: 'old', children: []}],
+    next_offset: 1, more: false}, 'p');
+  assert.equal(impossible, root);
+});
+
+test('older root pagination reply does not undo a structural shrink', () => {
+  const state = mergeRootSnapshot(null, {generation: 5, captured_at: 190,
+    scopes: {store: [{key:'a', type:'int', state:'value', expandable: false,
+      children: []}], persistent: []},
+    root_pages: {store: {next_offset: 1, more: false}}});
+  const stale = integrateChildPage(state, {scope: 'store', generation: 5,
+    captured_at: 100, offset: 80, items: [{key: 'vanished'}],
+    next_offset: 81, more: true}, null);
+  assert.equal(stale, state);
+});
