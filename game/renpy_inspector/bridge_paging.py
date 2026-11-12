@@ -24,6 +24,8 @@ MAX_FULL_INTEGER_BITS = 4096
 # Larger values continue to require explicit /full-value inspection.
 MAX_COMPARE_SAMPLE_CHARS = 256
 MAX_COMPARE_INTEGER_BITS = 512
+# Only the first 16 KiB of exact scalar text per page is embedded.
+MAX_COMPARE_PAGE_BYTES = 16 * 1024
 
 
 def comparison_sample(value):
@@ -117,6 +119,7 @@ def build_tree_page(providers, scope, path, offset, size):
         owner, MAX_BRANCH, is_store_root=(not path and scope == 'store'))
     page = visible[offset:offset + size]
     items = []
+    compare_bytes = 0
     for segment, label in page:
         child_path = path + (segment,)
         try:
@@ -139,7 +142,10 @@ def build_tree_page(providers, scope, path, offset, size):
         if state == 'value' and not is_cycle:
             sample = comparison_sample(value)
             if sample is not None:
-                item['compare_sample'] = sample
+                sample_bytes = len(json.dumps(sample, ensure_ascii=True))
+                if compare_bytes + sample_bytes <= MAX_COMPARE_PAGE_BYTES:
+                    item['compare_sample'] = sample
+                    compare_bytes += sample_bytes
         items.append(item)
     next_offset = offset + len(items)
     more = next_offset < MAX_BRANCH and (next_offset < len(visible) or truncated)
