@@ -6,6 +6,7 @@ define config.save_directory = "renpy-inspector-runtime-e2e"
 
 default e2e_value = 1
 default e2e_container = {"hp": 10, "items": ["key", "map"]}
+default e2e_inventory = list(range(170))
 default persistent.e2e_test_flag = True
 
 # Use engine-provided actions so F5/F9 exercise real save/load mechanics.
@@ -44,6 +45,9 @@ screen e2e_shortcuts():
     key "K_F10" action Function(e2e_record_key)
     key "K_F5" action FileSave("e2e-smoke", confirm=False)
     key "K_F9" action FileLoad("e2e-smoke", confirm=False)
+    # The only game writes in these tests occur through native fixture keys.
+    key "K_F6" action SetVariable("e2e_inventory", list(range(12)))
+    key "K_F7" action SetVariable("e2e_container", 7)
 
 label start:
     # This minimal fixture has no generated GUI/overlay stack from the launcher.

@@ -79,6 +79,18 @@ Xvfb, with software OpenGL, dummy audio and `xdotool` keyboard injection.
   expected lifecycle generation change. Rollback may settle at a different
   preceding dialogue checkpoint across supported versions, so the test
   checks generation correctness without inventing a universal exact line.
+- The expanded runtime regression (PR #21) pins a real Store variable and
+  verifies inspector-owned preferences through the authenticated GET,
+  Ren'Py's native save/load cycle, and a genuine Chromium page reload.
+- A 170-item Ren'Py list is expanded in the virtual tree. Playwright scrolls
+  until the browser requests child offset 80, then uses a fixture-only **F6**
+  SetVariable action to shrink the list to 12. Both HTTP pagination and the
+  browser preview must report the reduced collection.
+- A live nested dictionary is expanded, its `hp` child pinned, then replaced
+  with an integer via fixture-only **F7**. The UI must drop the obsolete
+  child, while the favourite transitions to `<missing>` and stays pinned
+  after a browser reload. All mutations occur inside the disposable game,
+  not via the bridge HTTP API.
 
 To reproduce locally on Linux, install the Ren'Py SDK and prerequisites
 (`xvfb`, `xauth`, `xdotool`, Playwright Chromium and its OS libraries),
