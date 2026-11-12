@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Card, ConfigProvider, Descriptions, Drawer, Empty, Input, Popover,
-  Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
+  Button, Card, Checkbox, ConfigProvider, Descriptions, Drawer, Empty, Input, Popover,
+  Select, Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
 } from 'antd';
 import {
   CheckCircleFilled, CopyOutlined, DisconnectOutlined,
@@ -12,13 +12,13 @@ import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
   integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
   readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
-  staleSample,
+  staleSample, formatTypedPath,
 } from './tree.js';
 import {
   collectWatchedPages, combineScopedWatches, nextEligibleWatchBatch,
   WATCH_INTERVAL_MS, MAX_BACKGROUND_IN_FLIGHT,
 } from './watch.js';
-import { createChangeTracker, comparisonText } from './comparison.js';
+import { createChangeTracker, comparisonText, filterChanges } from './comparison.js';
 import { classifyGeneration } from './lifecycle.js';
 import ScriptPane from './ScriptPane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
@@ -222,42 +222,97 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
   </section>;
 }
 
-/** History has its own workspace; it never consumes height in the tree tab. */
-function ComparePane({ changes, onClear, onInspect }) {
+/** Change comparisons live in the Compare scope, not the variable tree.
+ * All controls filter session-only observations without issuing new reads.
+ */
+function ComparePane({ changes, favourites, focusedKey, onResetFocus,
+  onClear, onInspect, onReveal }) {
+  const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('all');
+  const [kindFilter, setKindFilter] = useState('all');
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [navigationError, setNavigationError] = useState('');
+  const visible = useMemo(() => filterChanges(changes, {
+    query: search, scope: scopeFilter, kind: kindFilter, favouritesOnly: pinnedOnly,
+    favourites, focusKey: focusedKey,
+  }), [changes, search, scopeFilter, kindFilter, pinnedOnly, favourites, focusedKey]);
+  const focusPath = focusedKey ? formatTypedPath(focusedKey) : '';
+  const reveal = async (change) => {
+    setNavigationError('');
+    const success = await onReveal(change);
+    if (!success) setNavigationError(
+      'This path is no longer visible in the current game state. Inspect the captured entry instead.');
+  };
+
   return <section className="compare-workspace" aria-label="Variable change comparison">
     <div className="compare-toolbar">
       <Text type="secondary" className="compare-description">
-        Read-only observed primitive previews · last 100 changes in this browser session.
-        Only sampled paths are compared. Save/load resets the history.
+        Last 100 observed changes in this browser session. Exact values are captured
+        only for small built-in primitives; other entries are previews. Not every game
+        mutation is observed. Save/load resets history.
       </Text>
-      <Button size="small" disabled={!changes.length} onClick={onClear}>Clear history</Button>
+      <div className="compare-controls">
+        <Input allowClear size="small" value={search} maxLength={160}
+          aria-label="Filter comparison paths" placeholder="Filter variable paths"
+          onChange={(event) => setSearch(event.target.value)} />
+        <Select size="small" value={scopeFilter} aria-label="Filter history scope"
+          onChange={setScopeFilter} options={[
+            { value: 'all', label: 'All scopes' }, { value: 'store', label: 'Store' },
+            { value: 'persistent', label: 'Persistent' },
+          ]} />
+        <Select size="small" value={kindFilter} aria-label="Filter history event type"
+          onChange={setKindFilter} options={[
+            { value: 'all', label: 'All changes' }, { value: 'changed', label: 'Changed' },
+            { value: 'added', label: 'Added' }, { value: 'removed', label: 'Removed' },
+          ]} />
+        <Checkbox checked={pinnedOnly} onChange={(event) => setPinnedOnly(event.target.checked)}>
+          Pinned only
+        </Checkbox>
+        <Button size="small" disabled={!changes.length} onClick={onClear}>Clear history</Button>
+      </div>
+      {focusedKey && <div className="compare-focused" role="status">
+        <Text type="secondary">History for {focusPath || 'selected variable'}</Text>
+        <Button size="small" onClick={onResetFocus}>Show all paths</Button>
+      </div>}
+      <Text type="secondary" className="compare-count" aria-live="polite">
+        {visible.length} of {changes.length} events shown
+      </Text>
+      {navigationError && <Text type="danger" role="alert">{navigationError}</Text>}
     </div>
     <div className="compare-list" role="region" aria-label="Observed variable changes">
-      {changes.length ? changes.map((change) =>
+      {visible.length ? visible.map((change) =>
         <article className="compare-entry" key={change.id}>
           <div className="compare-entry-title">
             <Text className="compare-path" title={change.path}>{change.path}</Text>
+            <Tag>{change.scope}</Tag>
             <Tag color={change.kind === 'added' ? 'green' :
               change.kind === 'removed' ? 'volcano' : 'blue'}>{change.kind}</Tag>
           </div>
           <div className="compare-context">
             <Text type="secondary">
-              {new Date(change.capturedAt * 1000).toLocaleTimeString()}
+              Sampled {new Date(change.capturedAt * 1000).toLocaleTimeString()}
               {change.context.filename ? ' · ' + change.context.filename : ''}
               {change.context.line !== null ? ':' + change.context.line : ''}
             </Text>
           </div>
           <div className="compare-values">
-            <div><Text type="secondary">Before</Text>
-              <code>{comparisonText(change.before)}</code></div>
-            <div><Text type="secondary">After</Text>
-              <code>{comparisonText(change.after)}</code></div>
+            {[['Before', change.before], ['After', change.after]].map(([label, value]) =>
+              <div key={label}>
+                <Text type="secondary">{label} · {value.precision === 'exact'
+                  ? 'exact sampled scalar' : 'preview/status'}</Text>
+                <pre className="compare-sample">{comparisonText(value)}</pre>
+              </div>)}
           </div>
-          <Button type="link" size="small" className="compare-inspect"
-            onClick={() => onInspect(change)}>Inspect variable</Button>
+          <div className="compare-actions">
+            <Button type="link" size="small" className="compare-inspect"
+              onClick={() => onInspect(change)}>Inspect variable</Button>
+            <Button type="link" size="small" className="compare-inspect"
+              onClick={() => reveal(change)}>Reveal in tree</Button>
+          </div>
         </article>) :
         <Empty className="compare-empty"
-          description="No sampled changes yet. Expand branches or pin values to watch them." />}
+          description={changes.length ? 'No changes match these filters.' :
+            'No sampled changes yet. Expand branches or pin values to watch them.'} />}
     </div>
   </section>;
 }
