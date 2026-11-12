@@ -72,6 +72,10 @@ html, body { overscroll-behavior: none; }
 .search-popover { display:flex;flex-direction:column;gap:7px;width:min(340px,calc(100vw - 40px)); }
 .search-hint { font-size:11px; }
 .search-popover .ant-input-affix-wrapper { min-height:32px; }
+.exact-path-results { display:flex; flex-direction:column; gap:7px;
+  padding:6px 0; min-width:0; }
+.exact-path-results .ant-btn { overflow:hidden; text-overflow:ellipsis; }
+.exact-path-results .ant-typography { font-size:12px; overflow-wrap:anywhere; }
 /* Overview and Scripts are separate pages, never a permanently narrow column. */
 .info-page { overflow: auto; min-height: 0; min-width: 0; width: 100%; padding: 24px; }
 .info-page .ant-typography h3 { margin-top: 5px; }
