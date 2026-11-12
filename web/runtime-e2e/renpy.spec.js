@@ -92,6 +92,14 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       await ensureEngine();
       return await windowId();
     }, 65000);
+    // Fixture-only F10 probes whether XTest keypresses actually reach the
+    // running Ren'Py overlay before claiming an F8 integration failure.
+    await key(window, 'F10');
+    await eventually(async () => {
+      await ensureEngine();
+      return existsSync(urlFile + '.key') &&
+        (await readFile(urlFile + '.key', 'utf8')).includes('F10');
+    }, 10000);
     await key(window, 'F8');
     const rawUrl = await eventually(async () => {
       await ensureEngine();
