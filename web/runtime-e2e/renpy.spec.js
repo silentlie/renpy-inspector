@@ -34,6 +34,8 @@ async function windowId() {
 
 async function key(window, name) {
   await exec('xdotool', ['windowfocus', '--sync', window], { timeout: 4000 });
+  await exec('xdotool', ['mousemove', '--window', window, '380', '280'],
+    { timeout: 4000 });
   await exec('xdotool', ['key', '--clearmodifiers', '--delay', '90', name],
     { timeout: 5000 });
   await delay(350);
@@ -95,6 +97,12 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // Fixture-only F10 probes whether XTest keypresses actually reach the
     // running Ren'Py overlay before claiming an F8 integration failure.
     await key(window, 'F10');
+    // Some virtual X11 setups distinguish XTEST keys from XSendEvent.
+    // Probe both without ever sending duplicate F8 toggle events.
+    if (!existsSync(urlFile + '.key')) {
+      await exec('xdotool', ['key', '--window', window, 'F10'],
+        { timeout: 5000 });
+    }
     await eventually(async () => {
       await ensureEngine();
       return existsSync(urlFile + '.key') &&
@@ -180,6 +188,21 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect(page.getByRole('button', { name: 'Inspect e2e_value' })).toBeVisible();
     await page.screenshot({ path: join(results, 'runtime-inspector.png') });
   } catch (error) {
+    try {
+      const focused = await exec('xdotool', ['getwindowfocus', 'getwindowname']);
+      const geometry = await exec('xdotool', ['getactivewindow', 'getwindowgeometry', '--shell']);
+      console.error('X11 focused window: ' + focused.stdout.trim());
+      console.error('X11 active geometry: ' + geometry.stdout.trim());
+    } catch (diagnostic) {
+      console.error('X11 focus diagnostic failed: ' + diagnostic.message);
+    }
+    try {
+      await exec('scrot', [join(results, 'native-xvfb-screen.png')],
+        { timeout: 5000 });
+      console.error('Captured real RenPy Xvfb screen for CI artifact');
+    } catch (diagnostic) {
+      console.error('X11 screenshot failed: ' + diagnostic.message);
+    }
     let output = '';
     try { output = await readFile(gameLog, 'utf8'); } catch { /* no log */ }
     console.error('Real Ren\'Py failure (last engine lines):\n' + tail(output));
