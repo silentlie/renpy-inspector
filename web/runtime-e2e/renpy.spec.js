@@ -166,7 +166,6 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
 
     // F8 must reopen the SAME token/port, rather than starting a second server.
     await key(window, 'F8');
-    const urls = (await readFile(urlFile, 'utf8')).trim().split('\n');
     await expect.poll(async () => (await readFile(urlFile, 'utf8')).trim().split('\n').length,
       { timeout: 5000 }).toBeGreaterThanOrEqual(2);
     const second = (await readFile(urlFile, 'utf8')).trim().split('\n')[1];
@@ -228,9 +227,11 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     console.error('Real Ren\'Py failure (last engine lines):\n' + tail(output));
     throw error;
   } finally {
-    try { process.kill(-engine.pid, 'SIGTERM'); } catch { /* already exited */ }
-    await delay(600);
-    try { process.kill(-engine.pid, 'SIGKILL'); } catch { /* already stopped */ }
+    // A minimal fixture has no quit confirmation UI. Graceful SIGTERM can
+    // trigger an unrelated Ren'Py yes/no layout exception while tearing down.
+    // Stop this disposable process group directly after all assertions.
+    try { process.kill(-engine.pid, 'SIGKILL'); } catch { /* already exited */ }
+    await delay(150);
     await rm(home, { recursive: true, force: true });
   }
 });
