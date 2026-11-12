@@ -40,12 +40,32 @@ def collect_files(project_root: Path, require_web=False) -> list[Path]:
     missing = [p for p in REQUIRED_FILES if not (project_root / p).is_file()]
     if missing:
         raise ValueError('Missing required inspector source: ' + ', '.join(missing))
-    files = set(game.glob('renpy_inspector*.rpy')) | set(package.rglob('*.py'))
+    # A release must not silently ship legacy in-game drawers or developer
+    # helpers just because their names happen to start with renpy_inspector.
+    allowed = set(project_root / path for path in REQUIRED_FILES)
+    source_candidates = set(game.glob('renpy_inspector*.rpy')) | set(package.rglob('*.py'))
+    extra_sources = sorted(
+        path.relative_to(project_root).as_posix()
+        for path in source_candidates - allowed)
+    if extra_sources:
+        raise ValueError('Unlisted inspector source(s); review/remove before release: ' +
+                         ', '.join(extra_sources))
+    files = set(allowed)
     ui = game / 'renpy_inspector_web'
+    if ui.is_symlink() or package.is_symlink():
+        raise ValueError('Inspector package and UI folders must not be symlinks')
     if (ui / 'index.html').is_file():
-        for item in ui.rglob('*'):
-            if item.is_file():
-                files.add(item)
+        ui_files = set(path for path in ui.rglob('*') if path.is_file())
+        if require_web:
+            # Fail closed on an incomplete build. The browser can return HTML
+            # successfully yet remain blank when hashed JS/CSS are missing.
+            js_assets = [p for p in ui_files if p.parent == ui / 'assets'
+                         and p.suffix == '.js']
+            css_assets = [p for p in ui_files if p.parent == ui / 'assets'
+                          and p.suffix == '.css']
+            if not js_assets or not css_assets:
+                raise ValueError('Built Ant Design UI must include JS and CSS assets')
+        files.update(ui_files)
     elif require_web:
         raise ValueError('Missing built Ant Design UI: game/renpy_inspector_web/index.html')
     files = sorted(files, key=lambda path: path.relative_to(project_root).as_posix())
@@ -92,7 +112,7 @@ def build_both(version: str, output_dir: Path, project_root: Path = PROJECT_ROOT
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('version', help='Release tag, e.g. v0.6.0')
+    parser.add_argument('version', help='Release tag, e.g. v0.7.0')
     parser.add_argument('--output-dir', type=Path, default=PROJECT_ROOT / 'dist')
     parser.add_argument('--engine', choices=('both',) + tuple(ENGINES), default='both')
     parser.add_argument('--require-web', action='store_true', help='Fail if compiled browser UI is missing')
