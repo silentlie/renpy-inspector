@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Space, Tag, Typography } from 'antd';
 import { CopyOutlined, ReloadOutlined } from '@ant-design/icons';
-import { decodeTreeKey } from './tree.js';
+import { decodeTreeKey, formatTypedPath } from './tree.js';
 
 const { Text } = Typography;
 const DISPLAY_KINDS = new Set(['string', 'number', 'boolean', 'null']);
@@ -14,11 +14,12 @@ const MAX_DISPLAY_CHARS = 16384;
  * The parent keys this component by typed path + game generation so a
  * reopened drawer cannot retain a previous game's sensitive value.
  */
-export default function FullValuePanel({ selection, generation, bridge, token, pathLabel }) {
+export default function FullValuePanel({ selection, generation, bridge, token }) {
   const [value, setValue] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef(null);
+  const exactPath = formatTypedPath(selection?.key);
 
   useEffect(() => () => pending.current?.abort(), []);
 
@@ -88,7 +89,7 @@ export default function FullValuePanel({ selection, generation, bridge, token, p
         Copy Value
       </Button>
       <Button size="small" icon={<CopyOutlined />}
-        disabled={!pathLabel} onClick={() => copy(pathLabel)}>
+        disabled={!exactPath} onClick={() => copy(exactPath)}>
         Copy Path
       </Button>
     </Space>
