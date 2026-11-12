@@ -308,10 +308,12 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
 
     // SetVariable runs on the actual engine's interaction thread.
     // Its shorter list must retire old offset pages in the browser.
+    const generationBeforeShrink = (await getSnapshot()).generation;
     await key(window, 'F6');
     await expect.poll(async () => (await getChildren('e2e_inventory')).items.length,
       { timeout: 16000 }).toBe(12);
     expect((await getChildren('e2e_inventory', 80)).items).toHaveLength(0);
+    expect((await getSnapshot()).generation).toBe(generationBeforeShrink);
     // The parent may be unmounted after scrolling a virtualised 170-row
     // subtree. Use the normal Search/Reveal UI to bring it back on screen.
     await revealVariable('e2e_inventory');
@@ -333,10 +335,12 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       .toBeVisible();
     await page.getByRole('button', { name: /Add.*hp.*to favourites/i }).click();
     await expect(page.getByRole('tab', { name: /Favourites \(2\)/ })).toBeVisible();
+    const generationBeforeReplace = (await getSnapshot()).generation;
     await key(window, 'F7');
     await expect(containerRow.locator('.variable-preview')).toHaveText('7',
       { timeout: 18000 });
     await expect(containerRow.locator('.variable-label-expandable')).toHaveCount(0);
+    expect((await getSnapshot()).generation).toBe(generationBeforeReplace);
     await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toHaveCount(0);
 
