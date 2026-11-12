@@ -1,0 +1,132 @@
+"""Deterministic real-HTTP bridge fixture for Playwright browser E2E.
+
+This runs the actual authenticated InspectorBridge server and its game-thread
+tick loop against synthetic providers. It is NOT the Ren'Py engine: F8,
+overlay timing and save/rollback engine callbacks require separate smoke tests.
+
+Commands come from this child process's stdin, NEVER through inspector HTTP.
+The public bridge remains read-only for game data.
+"""
+from __future__ import print_function
+
+import json
+import os
+import queue
+import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+from types import ModuleType
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'game'))
+
+from renpy_inspector.bridge import InspectorBridge
+from renpy_inspector.controller import Inspector
+
+
+class MockLabel(object):
+    def __init__(self, line):
+        self.filename = 'script.rpy'
+        self.linenumber = line
+
+
+class MockScript(object):
+    def lookup(self, name):
+        return MockLabel(6 if name == 'start' else 11)
+
+
+class MockRenpy(object):
+    def __init__(self):
+        self.game = type('Game', (), {'script': MockScript()})()
+
+    def get_all_labels(self):
+        return ['start', 'chapter_two', '_internal']
+
+
+def emit(data):
+    print(json.dumps(data, separators=(',', ':')), flush=True)
+
+
+def main():
+    with tempfile.TemporaryDirectory(prefix='renpy-inspector-e2e-') as temp:
+        store = ModuleType('store')
+        store.score = 2
+        store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
+        store.inventory = list(range(170))
+        persistent = {'test_flag': True}
+        controller = Inspector()
+        controller.bind(
+            lambda: store, lambda: persistent,
+            context_provider=lambda: {
+                'game': 'Playwright Fixture', 'version': '8.5.3 (synthetic)',
+                'filename': 'game/script.rpy', 'line': 6,
+            })
+        bridge = InspectorBridge(controller, str(ROOT / 'web' / 'dist'))
+        bridge.configure_favourites_directory(temp)
+        scriptdir = Path(temp) / 'game'
+        scriptdir.mkdir()
+        (scriptdir / 'script.rpy').write_text(
+            'label start:\n    "A game fixture"\n\nlabel chapter_two:\n'
+            '    "Next scene"\n', encoding='utf-8')
+        bridge.configure_script_runtime(MockRenpy(), str(scriptdir))
+        bridge.start()
+        if not bridge.running:
+            emit({'error': bridge.error})
+            sys.exit(1)
+        commands = queue.Queue()
+
+        def listen():
+            for line in sys.stdin:
+                try:
+                    commands.put(json.loads(line))
+                except (ValueError, TypeError):
+                    pass
+            commands.put({'action': 'exit', 'id': 0})
+
+        worker = threading.Thread(target=listen, daemon=True)
+        worker.start()
+        emit({'ready': bridge.url})
+        try:
+            while True:
+                try:
+                    command = commands.get_nowait()
+                except queue.Empty:
+                    command = None
+                if command is not None:
+                    action = command.get('action')
+                    if action == 'exit':
+                        emit({'ack': command.get('id'), 'stopped': True})
+                        break
+                    if action == 'set_score':
+                        store.score = int(command['value'])
+                        bridge.publish()
+                    elif action == 'shrink_inventory':
+                        store.inventory = list(range(12))
+                        bridge.publish()
+                    elif action == 'replace_stats':
+                        store.player_stats = 7
+                        bridge.publish()
+                    elif action == 'restore_game':
+                        store.score = 2
+                        store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
+                        store.inventory = list(range(170))
+                        bridge.invalidate()
+                        controller.reset()
+                        bridge.publish()
+                    elif action == 'bump_hp':
+                        store.player_stats['hp'] = int(command['value'])
+                        bridge.publish()
+                    else:
+                        emit({'ack': command.get('id'), 'error': 'unknown action'})
+                        continue
+                    emit({'ack': command.get('id'), 'generation': bridge.generation})
+                bridge.tick()
+                time.sleep(0.05)
+        finally:
+            bridge.stop()
+
+
+if __name__ == '__main__':
+    main()
