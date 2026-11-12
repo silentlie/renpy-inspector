@@ -40,6 +40,11 @@ screen e2e_shortcuts():
     key "K_F9" action FileLoad("e2e-smoke", confirm=False)
 
 label start:
+    # This minimal fixture has no generated GUI/overlay stack from the launcher.
+    # Explicitly render the actual inspector screen and fixture control screen
+    # during the game interaction, using the same native key actions.
+    show screen renpy_inspector_overlay
+    show screen e2e_shortcuts
     "E2E initial phase. F8 starts the inspector, F5 saves."
     $ e2e_value = 2
     "E2E changed phase. PageUp triggers real Ren'Py rollback."
