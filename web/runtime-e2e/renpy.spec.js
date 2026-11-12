@@ -211,7 +211,7 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // Real Ren'Py 7/8 game-thread scan of set values, with a typed member
     // path (not a mutable positional index or synthetic browser-only data).
     const setParams = new URLSearchParams({
-      scope: 'store', path: JSON.stringify([['attribute', 'e2e_flags']]),
+      scope: 'store', path: JSON.stringify([['attribute', 'e2e_container'], ['key', 'flags']]),
       offset: '0', size: '80',
     });
     const setResponse = await page.request.get(origin + '/api/v1/children?' + setParams, {
@@ -387,16 +387,14 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await revealVariable('e2e_inventory');
     await expect(inventory.locator('.variable-preview')).toHaveText('12 items',
       { timeout: 18000 });
-    // Search/Reveal guarantees only the parent is mounted. Align it near
-    // the viewport top so all 12 remaining children are actually rendered.
-    await inventory.evaluate((element) => {
-      const holder = element.closest('.ant-tree-list-holder');
-      if (!holder) throw new Error('Virtual tree viewport is missing');
-      holder.scrollTop += element.getBoundingClientRect().top -
-        holder.getBoundingClientRect().top - 12;
-    });
+    // The verified value at index 11 remains addressable; index 12 is gone.
+    // Use the exact path reveal to bring this virtual row into view instead
+    // of relying on DOM offsets while Ant reconciles a shrinking subtree.
+    await page.getByRole('button', { name: 'Search variables' }).click();
+    await pathInput.fill('store.e2e_inventory[11]');
+    await pathInput.press('Enter');
     await expect(page.getByRole('button', { name: 'Inspect [11]', exact: true }))
-      .toBeVisible();
+      .toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('button', { name: 'Inspect [12]', exact: true }))
       .toHaveCount(0);
 
