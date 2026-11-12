@@ -94,6 +94,13 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       await ensureEngine();
       return await windowId();
     }, 65000);
+    // The X11 window may exist while Ren'Py is still loading/rendering its
+    // first interaction. Only inject keys after label start signalled ready.
+    await eventually(async () => {
+      await ensureEngine();
+      return existsSync(urlFile + '.ready');
+    }, 65000);
+    await delay(900);
     // Fixture-only F10 probes whether XTest keypresses actually reach the
     // running Ren'Py overlay before claiming an F8 integration failure.
     await key(window, 'F10');
@@ -195,8 +202,10 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       { timeout: 12000 }).toBeGreaterThan(beforeRollback);
     expect(['1', '2', '3']).toContain((await gameValue()).value);
 
-    // Verify the browser still connects after lifecycle resets.
-    await expect(page.getByRole('button', { name: 'Inspect e2e_value' })).toBeVisible();
+    // A generation reset intentionally discards prior search/reveal and
+    // virtual-tree scroll state. Check connection, not an off-screen row.
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await expect(page.getByText('Connected', { exact: true })).toBeVisible();
     await page.screenshot({ path: join(results, 'runtime-inspector.png') });
   } catch (error) {
     try {
