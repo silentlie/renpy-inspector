@@ -42,7 +42,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.bridge.pending_pages, [])
         self.assertEqual(self.bridge.generation, old_generation + 1)
         self.assertEqual(json.loads(self.bridge.cached_bytes)['captured_at'], None)
-        self.assertEqual(self.bridge.last_publish, 0)
+        self.assertEqual(self.bridge.last_publish, float('-inf'))
         self.bridge.tick()
         updated = json.loads(self.bridge.cached_bytes)
         self.assertEqual(updated['generation'], old_generation + 1)
