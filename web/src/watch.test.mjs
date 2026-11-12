@@ -79,3 +79,39 @@ test('one shared poll plan contains values and expanded pages', () => {
   assert.equal(jobs.length, 2);
   assert.deepEqual(jobs.map(j=>j.kind), ['value','page']);
 });
+
+test('background scheduler skips busy watches and fills the budget fairly', async () => {
+  const { nextEligibleWatchBatch, MAX_BACKGROUND_IN_FLIGHT } = await import('./watch.js');
+  const jobs = [{id:'a'}, {id:'b'}, {id:'c'}, {id:'d'}, {id:'e'}];
+  const busy = new Set(['a','c']);
+  const one = nextEligibleWatchBatch(jobs, 0, (job) => busy.has(job.id), MAX_BACKGROUND_IN_FLIGHT);
+  assert.deepEqual(one.jobs.map((job) => job.id), ['b','d']);
+  assert.equal(one.next, 4);
+  const two = nextEligibleWatchBatch(jobs, one.next, (job) => busy.has(job.id), 1);
+  assert.deepEqual(two.jobs.map((job) => job.id), ['e']);
+  assert.equal(two.next, 0);
+});
+
+test('background capacity exhausted sends nothing and preserves the cursor', async () => {
+  const { nextEligibleWatchBatch } = await import('./watch.js');
+  const jobs = [{id:'a'}, {id:'b'}, {id:'c'}];
+  assert.deepEqual(nextEligibleWatchBatch(jobs, 2, () => false, 0),
+    { jobs: [], next: 2 });
+  assert.deepEqual(nextEligibleWatchBatch(jobs, 1, () => true, 2),
+    { jobs: [], next: 1 });
+  assert.deepEqual(nextEligibleWatchBatch([], 2, () => false, 2),
+    { jobs: [], next: 0 });
+});
+
+test('fair polling selects all ready favourites and pages across multiple ticks', async () => {
+  const { nextEligibleWatchBatch } = await import('./watch.js');
+  const jobs = [{id:'favourite-a'}, {id:'page-a'}, {id:'favourite-b'}, {id:'page-b'}];
+  const scheduled = [];
+  let cursor = 0;
+  for (let i = 0; i < 2; i += 1) {
+    const batch = nextEligibleWatchBatch(jobs, cursor, () => false, 2);
+    scheduled.push(...batch.jobs.map((job) => job.id));
+    cursor = batch.next;
+  }
+  assert.deepEqual(scheduled, jobs.map((job) => job.id));
+});
