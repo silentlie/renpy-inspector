@@ -175,6 +175,28 @@ invalidation. Browser/bridge E2E checks both Scripts modes, source excerpts,
 Find References and method/Origin protection; graphical Ren'Py 7.8.7 and
 8.5.3 E2E checks a real .rpy text lookup.
 
+## PR #25: Precision-aware Compare and filtered variable history
+
+The Ren'Py interaction-thread snapshot and child/favourite reads can attach
+an exact built-in scalar `compare_sample.text` of at most 256 characters.
+No arbitrary Python `repr`/getters run. Each child/root page limits this
+additional metadata to 16 KiB, and Python 2 invalid UTF-8 byte strings are
+excluded rather than decoded with replacement.
+
+The browser compares exact scalar text when both observations contain it,
+detecting differences beyond a truncated 100-character preview. Before and
+after values individually say exact or preview/status. No post-hoc full-value
+fetch is used to invent prior values. Events remain bounded to 100 in one
+browser tab; history resets on game-generation changes.
+
+JavaScript tests cover equal-preview/different-text detection, mixed precision,
+stale sample ordering and path/scope/type/pin filters. Browser-to-bridge E2E
+uses a synthetic Store string with an identical preview but a changed suffix,
+exercises a focused variable history, pin-only filtering and tree reveal.
+Real Ren'Py SDK E2E asserts exact small primitive metadata from a running
+Ren'Py 7.8.7 or 8.5.3 Store. Native F8, save/load, rollback and ZIP package
+verification remain mandatory.
+
 ## What the synthetic suite does *not* test
 
 The **synthetic bridge suite alone** is not a real Ren'Py runtime E2E test. The synthetic fixture
