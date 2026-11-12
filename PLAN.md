@@ -167,7 +167,8 @@ required before merging.
 
 - Register one cache-only restoration callback for `after_load_callbacks` and
   `after_default_callbacks`. Ren'Py documents default processing after
-  rollback, save loads, and game startup. Duplicate callbacks during load may
+  rollback, save loads, and game startup. Older engines without the callback
+  use a conservative in_rollback() probe on new interactions. Duplicate callbacks during load may
   advance the epoch twice; this is harmless and remains intentionally fail-safe.
 - Clear Python inspector caches, increment the browser bridge generation,
   invalidate queued work with HTTP 409, and force the next game-thread tick
