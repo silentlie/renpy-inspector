@@ -293,8 +293,15 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect.poll(async () => (await getChildren('e2e_inventory')).items.length,
       { timeout: 16000 }).toBe(12);
     expect((await getChildren('e2e_inventory', 80)).items).toHaveLength(0);
+    // The parent may be unmounted after scrolling a virtualised 170-row
+    // subtree. Use the normal Search/Reveal UI to bring it back on screen.
+    await revealVariable('e2e_inventory');
     await expect(inventory.locator('.variable-preview')).toHaveText('12 items',
       { timeout: 18000 });
+    await expect(page.getByRole('button', { name: 'Inspect [11]', exact: true }))
+      .toBeVisible();
+    await expect(page.getByRole('button', { name: 'Inspect [12]', exact: true }))
+      .toHaveCount(0);
 
     // Replace a previously expanded dict with an int in the SAME generation.
     // The tree must not resurrect children sampled before replacement.
