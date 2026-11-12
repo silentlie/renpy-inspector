@@ -13,7 +13,7 @@ from renpy_inspector.bridge_paging import MAX_FULL_VALUE_CHARS, build_full_value
 
 class FullValueCompatTests(unittest.TestCase):
     def setUp(self):
-        self.store = ModuleType('store')
+        self.store = ModuleType(str('store'))
         self.store.text = u'First line\nSecond: \u2603'
         self.store.large = u'x' * (MAX_FULL_VALUE_CHARS + 1)
         self.store.bytes_text = 'ascii\nsecond'
