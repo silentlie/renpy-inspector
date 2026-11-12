@@ -163,3 +163,73 @@ test('full value API rejects unauthorised, foreign and non-GET requests', async 
   expect(body.truncated).toBe(false);
   expect(body.text).toBe('Line one\nLine two: ☃');
 });
+
+
+test('exact typed path reveals nested and off-page values without a global search scan', async ({ page, game }) => {
+  const scanned = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/v1/search') scanned.push(request.url());
+  });
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Search variables' }).click();
+  const input = page.getByRole('textbox', {
+    name: 'Search variables across Store and Persistent',
+  });
+  await input.fill('store.player_stats["hp"]');
+  await expect(page.getByRole('button', { name: 'Reveal exact variable path' })).toBeVisible();
+  await expect(page.getByRole('listbox', { name: 'Matching game variables' })).toHaveCount(0);
+  await input.press('Enter');
+  await expect(page.getByRole('button', { name: /Inspect.*hp/i })).toBeVisible();
+  await expect(page.locator('.variable-row-active')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Search variables' }).click();
+  await input.fill('store.inventory[169]');
+  await page.getByRole('button', { name: 'Reveal exact variable path' }).click();
+  await expect(page.getByRole('button', { name: 'Inspect [169]', exact: true }))
+    .toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.variable-row-active')).toBeVisible();
+  expect(scanned).toEqual([]);
+});
+
+test('exact path supports persistent dictionary keys and explicit integer dictionary keys', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Search variables' }).click();
+  const input = page.getByRole('textbox', {
+    name: 'Search variables across Store and Persistent',
+  });
+  await input.fill('persistent["test_flag"]');
+  await input.press('Enter');
+  await expect(page.getByRole('tab', { name: 'Persistent', exact: true }))
+    .toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: /Inspect.*test_flag/i })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Search variables' }).click();
+  await input.fill('store.player_stats[key:3]');
+  await input.press('Enter');
+  await expect(page.getByRole('tab', { name: 'Store', exact: true }))
+    .toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: /Inspect.*\[3\]/i }))
+    .toBeVisible();
+});
+
+test('exact path reports missing keys and rejects unsafe expressions in the popup', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Search variables' }).click();
+  const input = page.getByRole('textbox', {
+    name: 'Search variables across Store and Persistent',
+  });
+  await input.fill('store.player_stats["does-not-exist"]');
+  await input.press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Exact path not found');
+  await expect(page.getByRole('search')).toBeVisible();
+
+  let revealRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/v1/reveal') revealRequests += 1;
+  });
+  await input.fill('store.player_stats[__import__("os")]');
+  await expect(page.getByRole('alert')).toContainText('Expressions are not supported');
+  await expect(page.getByRole('button', { name: 'Reveal exact variable path' })).toHaveCount(0);
+  await input.press('Enter');
+  expect(revealRequests).toBe(0);
+});
