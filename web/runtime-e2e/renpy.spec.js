@@ -149,6 +149,16 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       expect(response.status()).toBe(200);
       return response.json();
     };
+    const getValueNode = async (name) => {
+      const params = new URLSearchParams({
+        scope: 'store', path: JSON.stringify([['attribute', name]]),
+      });
+      const response = await page.request.get(origin + '/api/v1/value?' + params, {
+        headers, timeout: 7000,
+      });
+      expect(response.status()).toBe(200);
+      return (await response.json()).node;
+    };
     const storedFavourites = async () => {
       const response = await page.request.get(origin + '/api/v1/favourites', {
         headers, timeout: 5000,
@@ -156,7 +166,7 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       expect(response.status()).toBe(200);
       return (await response.json()).favourites ?? [];
     };
-    const revealVariable = async (name) => {
+    const revealVariable = async (name, targetName = name) => {
       const searchInput = page.getByRole('textbox', {
         name: 'Search variables across Store and Persistent',
       });
@@ -172,12 +182,14 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
         }
         await searchInput.fill(name);
         const hits = page.getByRole('listbox', { name: 'Matching game variables' });
-        const match = hits.getByRole('option').filter({ hasText: name }).first();
+        const match = hits.getByRole('option').filter({ hasText: targetName }).first();
+        const visibleRow = targetName === name
+          ? page.getByRole('button', { name: 'Inspect ' + name, exact: true })
+          : page.getByRole('button', { name: new RegExp('Inspect.*' + targetName, 'i') }).first();
         try {
           await expect(match).toBeVisible({ timeout: 5000 });
           await match.click();
-          await expect(page.getByRole('button', { name: 'Inspect ' + name, exact: true }))
-            .toBeVisible({ timeout: 8000 });
+          await expect(visibleRow).toBeVisible({ timeout: 8000 });
           return;
         } catch (error) {
           if (attempt === 2) throw error;
@@ -338,25 +350,26 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     const containerRow = page.locator('.variable-row').filter({
       has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
     });
-    // Align the parent BEFORE expanding it. On Ren'Py 8, the virtual tree
-    // may unmount the parent while React lays out newly visible children.
-    await containerRow.evaluate((element) => {
-      const holder = element.closest('.ant-tree-list-holder');
-      if (!holder) throw new Error('Virtual tree viewport is missing');
-      holder.scrollTop += element.getBoundingClientRect().top -
-        holder.getBoundingClientRect().top - 12;
-    });
+    // A manual expansion may move the virtual viewport on Ren'Py 8.
+    // Exercise that interaction, then use the real deep Search/Reveal flow
+    // to bring the nested hp path into view deterministically.
     await containerRow.locator('.variable-label-expandable').click();
+    await revealVariable('e2e_container', 'hp');
     await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toBeVisible();
     await page.getByRole('button', { name: /Add.*hp.*to favourites/i }).click();
     await expect(page.getByRole('tab', { name: /Favourites \(2\)/ })).toBeVisible();
     const generationBeforeReplace = (await getSnapshot()).generation;
     await key(window, 'F7');
+    await expect.poll(async () => (await getValueNode('e2e_container')).preview,
+      { timeout: 18000 }).toBe('7');
+    expect((await getSnapshot()).generation).toBe(generationBeforeReplace);
+    // Return to the real tree after the scalar replacement. Its parent is
+    // now a leaf, so the previously expanded hp path cannot remain visible.
+    await revealVariable('e2e_container');
     await expect(containerRow.locator('.variable-preview')).toHaveText('7',
       { timeout: 18000 });
     await expect(containerRow.locator('.variable-label-expandable')).toHaveCount(0);
-    expect((await getSnapshot()).generation).toBe(generationBeforeReplace);
     await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toHaveCount(0);
 
