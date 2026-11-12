@@ -380,9 +380,11 @@ test('pinned set member follows membership deletion and recovery without positio
   await flags.click();
   await page.getByRole('button', { name: "Add {'open'} to favourites", exact: true }).click();
   await page.getByRole('tab', { name: /Favourites \(1\)/ }).click();
+  // Ant's virtual transition can briefly keep the Store row mounted as the
+  // Favourites scope becomes active. Select the new favourites row.
   const row = page.locator('.variable-row').filter({
     has: page.locator('.variable-key', { hasText: /\{'open'\}/ }),
-  });
+  }).last();
   await expect(row.locator('.variable-preview')).toHaveText("'open'", { timeout: 12000 });
   await game.command('remove_set_member');
   await expect(row.locator('.variable-preview')).toHaveText('<missing>', { timeout: 12000 });
