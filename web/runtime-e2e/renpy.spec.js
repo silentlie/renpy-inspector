@@ -404,7 +404,13 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // The tree must not resurrect children sampled before replacement.
     // Search/Reveal inserts the verified ancestor path and expands it,
     // without relying on an off-screen Ant virtual-row disclosure click.
-    await revealVariable('e2e_container', 'hp');
+    await page.getByRole('button', { name: 'Search variables' }).click();
+    await pathInput.fill('store.e2e_container["hp"]');
+    await expect(page.getByRole('button', { name: 'Reveal exact variable path' }))
+      .toBeVisible();
+    await pathInput.press('Enter');
+    await expect(page.getByRole('button', { name: /Inspect.*hp/i }).first())
+      .toBeVisible({ timeout: 12000 });
     const containerRow = page.locator('.variable-row').filter({
       has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
     });
