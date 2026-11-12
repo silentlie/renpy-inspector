@@ -14,6 +14,7 @@ from renpy_inspector.bridge_paging import (
     build_tree_page, build_tree_value, build_full_value, validate_tree_request,
 )
 from renpy_inspector.favorites import format_location, encode_location, decode_location
+from renpy_inspector.compat import PY2
 
 
 class SetInspectionPy2Tests(unittest.TestCase):
@@ -43,7 +44,10 @@ class SetInspectionPy2Tests(unittest.TestCase):
         children = build_tree_page(self.providers, 'store',
             (('attribute', 'flags'),), 0, 80)
         names = [node['name'] for node in children['items']]
-        self.assertIn("{'valid'}", names)
+        if PY2:
+            self.assertIn("{'valid'}", names)
+        else:
+            self.assertNotIn("{'valid'}", names)
         self.assertNotIn("{'\\xff'}", names)
         self.assertTrue(children['capped'])
         self.assertFalse(children['more'])
