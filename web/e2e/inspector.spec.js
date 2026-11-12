@@ -372,6 +372,25 @@ test('set and frozenset scalar members expand, reveal by value and expose full p
   await expect(page.getByLabel('Full variable value')).toHaveText('blue');
 });
 
+test('unsupported set members show explicit partial coverage without endless pagination', async ({ page, game }) => {
+  await page.goto(game.url);
+  const mixed = page.locator('.variable-label-expandable').filter({
+    has: page.locator('.variable-key', { hasText: /^mixed_set$/ }),
+  });
+  await mixed.click();
+  await expect(page.getByRole('status', { name: 'Partial collection coverage' }))
+    .toBeVisible({ timeout: 12000 });
+  await expect(page.getByRole('button', { name: "Inspect {'visible'}", exact: true }))
+    .toBeVisible();
+  // Unsupported object members are omitted and do not create page sentinels.
+  const row = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: /^mixed_set$/ }),
+  }).first();
+  await expect(row.getByRole('status', { name: 'Partial collection coverage' }))
+    .toBeVisible();
+  expect(await page.getByText('More entries below…').count()).toBe(0);
+});
+
 test('pinned set member follows membership deletion and recovery without positional drift', async ({ page, game }) => {
   await page.goto(game.url);
   const flags = page.locator('.variable-label-expandable').filter({
