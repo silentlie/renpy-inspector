@@ -444,6 +444,9 @@ class InspectorBridge(object):
         """Discard pages and old snapshots after save-load or session reset."""
         with self.lock:
             self.generation += 1
+            # The next interaction tick must capture the restored state,
+            # rather than waiting for the previous 1.5-second poll deadline.
+            self.last_publish = 0.0
             queued, self.pending_pages = self.pending_pages, []
             for job in queued:
                 job['cancelled'] = True
