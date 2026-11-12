@@ -79,6 +79,16 @@ class ScriptCoreTests(unittest.TestCase):
         self.assertEqual(Path(self.temp.name, 'chapters/intro.rpy').read_text(
             encoding='utf-8').count('line 12'), 1)
 
+    def test_source_read_is_bounded_even_when_file_size_check_is_stale(self):
+        # A single oversized line must not be materialised as an unbounded
+        # source line, including if an earlier size check became stale.
+        target = Path(self.temp.name, 'large.rpy')
+        target.write_bytes(b'x' * (1024 * 1024 + 1))
+        result = source_excerpt(self.temp.name, 'large.rpy', 1)
+        self.assertFalse(result['available'])
+        self.assertIn('exceeds read limit', result['reason'])
+        self.assertEqual(result['lines'], [])
+
     def test_compiled_only_games_gracefully_report_missing_source(self):
         Path(self.temp.name, 'chapters/intro.rpy').unlink()
         source = source_excerpt(self.temp.name, 'chapters/intro.rpy', 78)
