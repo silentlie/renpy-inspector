@@ -1,7 +1,7 @@
 """Serializable, root-relative locations for explicit variable watches.
 
 Never retain inspected objects. Supported keys are string, integer, bool and None;
-all other dictionary keys and set members remain inspection-only.
+all other dictionary keys and non-scalar set members remain inspection-only.
 """
 
 from __future__ import unicode_literals
@@ -54,6 +54,13 @@ def encode_location(scope, path):
             parts.append({'kind': 'index', 'index': value})
         elif kind == 'key':
             parts.append({'kind': 'key', 'key': _encode_key(value)})
+        elif kind == 'member':
+            # A stable scalar value identifies membership; never record the
+            # unpredictable iteration position of a Python set.
+            from .inspection import _safe_set_member
+            if not _safe_set_member(value):
+                raise ValueError('unsupported set member')
+            parts.append({'kind': 'member', 'key': _encode_key(value)})
         else:
             raise ValueError('unsupported favourite segment')
     return {'root': scope, 'segments': parts}
@@ -76,7 +83,7 @@ def decode_location(data):
             segment = ('attribute', part.get('name'))
         elif kind == 'index':
             segment = ('index', part.get('index'))
-        elif kind == 'key':
+        elif kind in ('key', 'member'):
             key = part.get('key')
             if not isinstance(key, dict):
                 raise ValueError('invalid key')
@@ -91,7 +98,7 @@ def decode_location(data):
                 pass
             else:
                 raise ValueError('invalid typed dictionary key')
-            segment = ('key', val)
+            segment = (kind, val)
         else:
             raise ValueError('invalid segment kind')
         path.append(segment)
@@ -109,6 +116,8 @@ def format_location(scope, path):
             text += '.' + to_text(value)
         elif kind == 'index':
             text += '[' + str(value) + ']'
+        elif kind == 'member':
+            text += '{' + to_text(repr(value)) + '}'
         else:
             text += '[' + to_text(repr(value)) + ']'
     return text
