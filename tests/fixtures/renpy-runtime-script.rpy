@@ -30,6 +30,12 @@ init python:
             with open(destination + ".key", "a") as capture:
                 capture.write("F10\n")
 
+    def e2e_record_ready():
+        destination = os.environ.get("RENPY_E2E_URL_FILE")
+        if destination:
+            with open(destination + ".ready", "a") as capture:
+                capture.write("ready\n")
+
     webbrowser.open = e2e_record_browser
     if "e2e_shortcuts" not in config.overlay_screens:
         config.overlay_screens.append("e2e_shortcuts")
@@ -45,6 +51,7 @@ label start:
     # during the game interaction, using the same native key actions.
     show screen renpy_inspector_overlay
     show screen e2e_shortcuts
+    $ e2e_record_ready()
     "E2E initial phase. F8 starts the inspector, F5 saves."
     $ e2e_value = 2
     "E2E changed phase. PageUp triggers real Ren'Py rollback."
