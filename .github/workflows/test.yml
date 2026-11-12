@@ -18,6 +18,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m unittest discover -s tests -v
       - run: python -m unittest discover -s tests_py2 -v
+      - name: Measure synthetic bridge root/page/favourite costs
+        run: python scripts/benchmark_bridge.py --iterations 25 --output "${{ runner.temp }}/bridge-benchmark.json"
+      - name: Keep inspectable synthetic timing report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-benchmark-py${{ matrix.python-version }}
+          path: ${{ runner.temp }}/bridge-benchmark.json
+          if-no-files-found: error
 
   python2-tests:
     runs-on: ubuntu-latest
@@ -102,13 +110,13 @@ jobs:
           path: game/renpy_inspector_web
       - name: Build both installable preview packages
         run: |
-          python scripts/build_release.py v0.6.8 --engine both --require-web
+          python scripts/build_release.py v0.6.9 --engine both --require-web
           cd dist
           sha256sum -c *.sha256
       - name: Upload experimental Ren'Py 7 and 8 ZIPs
         uses: actions/upload-artifact@v4
         with:
-          name: renpy-inspector-v0.6.8-preview
+          name: renpy-inspector-v0.6.9-preview
           path: |
             dist/*.zip
             dist/*.sha256
