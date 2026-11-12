@@ -53,6 +53,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='renpy-inspector-e2e-') as temp:
         store = ModuleType('store')
         store.score = 2
+        store.memo = 'A' * 110 + 'before'
         store.story_text = 'Line one\nLine two: \u2603'
         store.large_text = 'L' * 17000
         store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
@@ -109,6 +110,8 @@ def main():
                         break
                     if action == 'set_score':
                         store.score = int(command['value'])
+                    elif action == 'change_memo':
+                        store.memo = 'A' * 110 + str(command['value'])
                         bridge.publish()
                     elif action == 'shrink_inventory':
                         store.inventory = list(range(12))
@@ -118,6 +121,7 @@ def main():
                         bridge.publish()
                     elif action == 'restore_game':
                         store.score = 2
+                        store.memo = 'A' * 110 + 'before'
                         store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
                         store.inventory = list(range(170))
                         bridge.invalidate()
