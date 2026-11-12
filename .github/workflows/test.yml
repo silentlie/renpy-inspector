@@ -93,9 +93,41 @@ jobs:
           path: web/dist/
           if-no-files-found: error
 
+  browser-bridge-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install exact browser test dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build the same production UI shipped to games
+        run: npm run build
+      - name: Install headless Chromium and Linux dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Exercise browser and authenticated Python bridge end-to-end
+        run: npm run test:e2e
+      - name: Upload Playwright report and failure traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-browser-bridge-e2e
+          path: |
+            web/playwright-report/
+            web/test-results/
+          if-no-files-found: ignore
+
   preview-packages:
     if: github.event_name == 'pull_request'
-    needs: [python3-tests, python2-tests, renpy-sdk-lint, ant-design-ui]
+    needs: [python3-tests, python2-tests, renpy-sdk-lint, ant-design-ui, browser-bridge-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -110,16 +142,16 @@ jobs:
           path: game/renpy_inspector_web
       - name: Build both installable preview packages
         run: |
-          python scripts/build_release.py v0.7.1 --engine both --require-web
+          python scripts/build_release.py v0.7.2 --engine both --require-web
           python scripts/verify_release.py \
-            dist/renpy-inspector-v0.7.1-renpy7.zip \
-            dist/renpy-inspector-v0.7.1-renpy8.zip
+            dist/renpy-inspector-v0.7.2-renpy7.zip \
+            dist/renpy-inspector-v0.7.2-renpy8.zip
           cd dist
           sha256sum -c *.sha256
       - name: Upload experimental Ren'Py 7 and 8 ZIPs
         uses: actions/upload-artifact@v4
         with:
-          name: renpy-inspector-v0.7.1-preview
+          name: renpy-inspector-v0.7.2-preview
           path: |
             dist/*.zip
             dist/*.sha256

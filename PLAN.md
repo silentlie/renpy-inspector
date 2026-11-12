@@ -237,6 +237,22 @@ required before merging.
   detection when same-type objects are replaced without visible changes.
 - Details: [docs/TREE_FRESHNESS.md](docs/TREE_FRESHNESS.md).
 
+## Milestone: PR #19 — Browser-to-bridge end-to-end test automation (v0.7.2 experimental)
+
+- Use Playwright Chromium against a compiled production React/Ant Design UI
+  served by the real authenticated 127.0.0.1 Python bridge, not an API mock.
+- Run synthetic game-thread providers in a disposable Python subprocess;
+  drive state changes via private process stdin, never gameplay HTTP writes.
+- Automate auth, browser connection, script source, global search/reveal,
+  independent favourites and generation reset, and virtualised pagination.
+- Wire a required CI E2E job (with traces/screenshots on failure) to gate
+  preview packaging; keep Python 2/3 and four SDK lint jobs.
+- Explicitly separate this suite from real Ren'Py F8, overlay, native
+  save/load/rollback and FPS E2E, which still require actual engine execution.
+- **Merge gate:** all CI green, stable browser/bridge scenarios, manual
+  engine smoke or explicit disclosure of missing real-engine automation.
+- Details: [docs/E2E_TESTING.md](docs/E2E_TESTING.md).
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
