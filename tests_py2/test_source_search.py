@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Python 2.7 source search and bounded UTF-8 compatibility tests."""
 from __future__ import unicode_literals
 
