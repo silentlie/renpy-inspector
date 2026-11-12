@@ -56,6 +56,8 @@ def main():
         store.story_text = 'Line one\nLine two: \u2603'
         store.large_text = 'L' * 17000
         store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
+        store.player_stats[3] = 'numbered key'
+        store.player_stats['snow ☃'] = 'unicode key'
         store.inventory = list(range(170))
         persistent = {'test_flag': True}
         controller = Inspector()
