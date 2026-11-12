@@ -378,7 +378,7 @@ test('unsupported set members show explicit partial coverage without endless pag
     has: page.locator('.variable-key', { hasText: /^mixed_set$/ }),
   });
   await mixed.click();
-  await expect(page.getByRole('status', { name: 'Partial collection coverage' }))
+  await expect(page.locator('.variable-partial-icon[aria-label="Partial collection coverage"]'))
     .toBeVisible({ timeout: 12000 });
   await expect(page.getByRole('button', { name: "Inspect {'visible'}", exact: true }))
     .toBeVisible();
@@ -386,8 +386,7 @@ test('unsupported set members show explicit partial coverage without endless pag
   const row = page.locator('.variable-row').filter({
     has: page.locator('.variable-key', { hasText: /^mixed_set$/ }),
   }).first();
-  await expect(row.getByRole('status', { name: 'Partial collection coverage' }))
-    .toBeVisible();
+  await expect(row.locator('.variable-partial-icon')).toBeVisible();
   expect(await page.getByText('More entries below…').count()).toBe(0);
 });
 
