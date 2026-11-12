@@ -55,6 +55,7 @@ html, body { overscroll-behavior: none; }
 .variable-key { color: #eaf0fc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .variable-colon { color: #8ca5c0; }
 .variable-type { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #71acd8; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.variable-partial-icon { color:#dfbc82;display:inline-flex;align-items:center;font-size:11px;flex:0 0 auto; }
 .variable-preview { flex: 1 1 0; min-width: 0; max-width: 46%; margin-left: auto; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: #b6c8df; }
 .preview-string { color: #d6b77e; }
 .preview-number { color: #a8cfef; }
