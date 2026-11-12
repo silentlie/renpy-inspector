@@ -263,6 +263,12 @@ class InspectorBridge(object):
         self.generation = 0
         self.pending_pages = []
         self.last_publish = 0.0
+        # Primitive counters only. Diagnostics never retain inspected objects.
+        self.queue_peak = 0
+        self.queue_rejected = 0
+        self.requests_completed = 0
+        self.last_request_ms = None
+        self.last_queue_wait_ms = None
         self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'generation': 0, 'captured_at': None,
                                              'scopes': {'store': [], 'persistent': []},
                                              'counts': {}, 'truncated': {},
@@ -374,14 +380,18 @@ class InspectorBridge(object):
     def enqueue_tree_page(self, arguments, kind='page'):
         """HTTP thread: queue primitive paths; never inspect gameplay."""
         with self.lock:
-            if not self.running or len(self.pending_pages) >= 8:
+            if not self.running:
+                return None
+            if len(self.pending_pages) >= 8:
+                self.queue_rejected += 1
                 return None
             if kind not in ('page', 'value', 'search', 'reveal', 'scripts', 'source'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
-                   'cancelled': False}
+                   'cancelled': False, 'enqueued_at': monotonic_time()}
             self.pending_pages.append(job)
+            self.queue_peak = max(self.queue_peak, len(self.pending_pages))
             return job
 
     def cancel_tree_page(self, job):
@@ -400,6 +410,7 @@ class InspectorBridge(object):
         for job in jobs:
             if job['cancelled']:
                 continue
+            serviced_at = monotonic_time()
             try:
                 with self.lock:
                     valid = job['generation'] == self.generation and self.running
@@ -436,6 +447,11 @@ class InspectorBridge(object):
                     except (ValueError, TypeError):
                         status, data = 413, encode_snapshot({'error': 'Page too large'})
                     job['response'] = (status, data)
+                    self.requests_completed += 1
+                    self.last_queue_wait_ms = round(max(
+                        0.0, serviced_at - job['enqueued_at']) * 1000.0, 2)
+                    self.last_request_ms = round(max(
+                        0.0, monotonic_time() - serviced_at) * 1000.0, 2)
                     job['event'].set()
         if monotonic_time() - self.last_publish >= 1.5:
             self.publish()
@@ -444,6 +460,12 @@ class InspectorBridge(object):
         """Discard pages and old snapshots after save-load or session reset."""
         with self.lock:
             self.generation += 1
+            # Queue diagnostics reflect the current game-state epoch.
+            self.queue_peak = 0
+            self.queue_rejected = 0
+            self.requests_completed = 0
+            self.last_request_ms = None
+            self.last_queue_wait_ms = None
             # The next interaction tick must capture the restored state,
             # rather than waiting for the previous 1.5-second poll deadline.
             self.last_publish = float('-inf')
@@ -465,11 +487,25 @@ class InspectorBridge(object):
         if not self.running:
             return
         try:
+            started = monotonic_time()
             info = (self.inspector._context_info()
                     if self.inspector._context_provider else {})
             data = build_lazy_snapshot(self.inspector._providers, game_info=info)
+            scan_ms = round(max(0.0, monotonic_time() - started) * 1000.0, 2)
             with self.lock:
                 data['generation'] = self.generation
+                # A snapshot of the queue, not exact real-time HTTP latency.
+                # root_scan_ms excludes JSON encoding and HTTP transfer.
+                data['diagnostics'] = {
+                    'root_scan_ms': scan_ms,
+                    'queue_pending': len(self.pending_pages),
+                    'queue_peak': self.queue_peak,
+                    'queue_capacity': 8,
+                    'queue_rejected': self.queue_rejected,
+                    'requests_completed': self.requests_completed,
+                    'last_request_ms': self.last_request_ms,
+                    'last_queue_wait_ms': self.last_queue_wait_ms,
+                }
                 self.cached_bytes = encode_snapshot(data)
             self.last_publish = monotonic_time()
             self.error = ''

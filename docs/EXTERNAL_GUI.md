@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #15 experimental lifecycle correctness (v0.6.8).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #14 script navigation was merged in v0.6.7. PR #15 adds cache-only invalidation after load/default processing, including rollback. For older engines lacking after-default callbacks, a conservative in_rollback() check runs on new interactions where available. Live Ren'Py 7/8 lifecycle tests are still required.
+**PR #16 experimental performance instrumentation (v0.6.9).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #15 lifecycle correctness is now merged. Background watch requests are capped at two in flight and scheduled fairly; Overview shows sampled game-thread queue/scan timing. CI synthetic benchmarks do not establish live-game frame rate.
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental lifecycle build, get the engine-specific preview ZIP from [PR #15](https://github.com/silentlie/renpy-inspector/pull/15) after CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental performance build, get the engine-specific preview ZIP from [PR #16](https://github.com/silentlie/renpy-inspector/pull/16) once CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 

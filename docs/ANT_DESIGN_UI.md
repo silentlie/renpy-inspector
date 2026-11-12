@@ -1,8 +1,9 @@
 # External Ant Design interface: SugarCube-inspired PR #8
 
-> **PR #14 development:** v0.6.6 is the published baseline. Draft PR #14 adds
-> bounded label browsing, script search and safe source excerpts in the Scripts
-> tab. Use its v0.6.7 preview installers to test the feature.
+> **PR #16 development:** Script navigation (PR #14) and lifecycle hardening
+> (PR #15) have merged. Draft PR #16 adds fair bounded background watches and
+> sampled queue diagnostics without adding permanent tree controls. Test with
+> v0.6.9 preview installers; see [performance protocol](PERFORMANCE.md).
 
 ## F8-only game integration
 

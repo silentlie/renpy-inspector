@@ -9,6 +9,8 @@ import { decodeTreeKey } from './tree.js';
 export const WATCH_INTERVAL_MS = 1500;
 export const MAX_WATCH_PAGES = 12;
 export const WATCHES_PER_TICK = 2;
+// Background polling must never monopolise the bounded game-thread queue.
+export const MAX_BACKGROUND_IN_FLIGHT = 2;
 const PAGE_SIZE = 80;
 
 function pagesForChildren(scope, parentKey, length, emit) {
@@ -86,6 +88,27 @@ export function nextWatchBatch(jobs, cursor, batchSize = WATCHES_PER_TICK) {
   const start = ((cursor % jobs.length) + jobs.length) % jobs.length;
   const current = Array.from({ length: n }, (_, i) => jobs[(start + i) % jobs.length]);
   return { jobs: current, next: (start + n) % jobs.length };
+}
+
+
+/** Fairly select ready watches, skipping requests already in flight.
+ * Cursor advances by inspected positions rather than by successful requests,
+ * so a paused watch cannot block unrelated favourites/expanded branches.
+ * budget may be zero while the two background slots are occupied.
+ */
+export function nextEligibleWatchBatch(jobs, cursor, busy, budget = WATCHES_PER_TICK) {
+  if (!jobs?.length) return { jobs: [], next: 0 };
+  const start = ((cursor % jobs.length) + jobs.length) % jobs.length;
+  const capacity = Math.min(jobs.length, Math.max(0, Math.floor(budget)));
+  if (!capacity) return { jobs: [], next: start };
+  const chosen = [];
+  let inspected = 0;
+  while (inspected < jobs.length && chosen.length < capacity) {
+    const job = jobs[(start + inspected) % jobs.length];
+    if (!busy?.(job)) chosen.push(job);
+    inspected += 1;
+  }
+  return { jobs: chosen, next: (start + inspected) % jobs.length };
 }
 
 

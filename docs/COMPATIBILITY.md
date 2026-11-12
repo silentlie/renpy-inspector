@@ -57,4 +57,8 @@ a conservative interaction-time rollback probe is used if
 `renpy.in_rollback()` is available. Detection is not guaranteed in
 games that suppress both engine callbacks and interactions.
 
+For PR #16, use [the performance test protocol](PERFORMANCE.md) to compare
+live frame-time distributions, queue backpressure and watch freshness against
+a clean-game baseline. Synthetic CI measurements are not FPS tests.
+
 SDK lint verifies syntax/init, not actual browser launch, F8 handling or save/rollback behaviour. Do not claim universal engine or game compatibility without interactive evidence.

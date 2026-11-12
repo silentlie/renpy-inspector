@@ -14,7 +14,8 @@ import {
   readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
 } from './tree.js';
 import {
-  collectWatchedPages, combineScopedWatches, nextWatchBatch, WATCH_INTERVAL_MS,
+  collectWatchedPages, combineScopedWatches, nextEligibleWatchBatch,
+  WATCH_INTERVAL_MS, MAX_BACKGROUND_IN_FLIGHT,
 } from './watch.js';
 import { createChangeTracker, comparisonText } from './comparison.js';
 import { classifyGeneration } from './lifecycle.js';
@@ -266,6 +267,7 @@ export default function App() {
   const treePagesRef = useRef(null);
   const watchJobsRef = useRef([]);
   const watchCursorRef = useRef(0);
+  const watchPendingRef = useRef(new Set());
   const loadingRef = useRef(new Set());
   const [loadingPages, setLoadingPages] = useState(new Set());
   const [pageErrors, setPageErrors] = useState({});
@@ -380,6 +382,7 @@ export default function App() {
             setLoadingPages(new Set());
             valueLoadingRef.current.clear();
             watchCursorRef.current = 0;
+            watchPendingRef.current.clear();
             setPageErrors({});
             setRevealTarget(null);
             setRevealError('');
@@ -543,12 +546,28 @@ export default function App() {
   useEffect(() => {
     if (connection !== 'online') return undefined;
     const timer = window.setInterval(() => {
-      const batch = nextWatchBatch(watchJobsRef.current, watchCursorRef.current);
+      const generation = treePagesRef.current?.generation;
+      if (generation === undefined) return;
+      const budget = Math.max(0, MAX_BACKGROUND_IN_FLIGHT - watchPendingRef.current.size);
+      const keyFor = (job) => JSON.stringify([generation, job.id]);
+      const busy = (job) => watchPendingRef.current.has(keyFor(job)) ||
+        (job.kind === 'value'
+          ? valueLoadingRef.current.has(JSON.stringify([generation, job.key]))
+          : loadingRef.current.has(pageRequestId(
+              job.scope, job.parentKey, job.offset, generation)));
+      const batch = nextEligibleWatchBatch(
+        watchJobsRef.current, watchCursorRef.current, busy, budget);
       watchCursorRef.current = batch.next;
       for (const job of batch.jobs) {
-        if (job.kind === 'value') requestFavouriteValue(job);
-        else requestPage(job.scope, job.parentKey, job.offset,
-          { refresh: true, quiet: true });
+        const id = keyFor(job);
+        watchPendingRef.current.add(id);
+        const task = job.kind === 'value'
+          ? requestFavouriteValue(job)
+          : requestPage(job.scope, job.parentKey, job.offset,
+            { refresh: true, quiet: true });
+        Promise.resolve(task).catch(() => {}).finally(() => {
+          watchPendingRef.current.delete(id);
+        });
       }
     }, WATCH_INTERVAL_MS);
     return () => window.clearInterval(timer);
@@ -787,7 +806,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.8 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.9 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -796,6 +815,18 @@ export default function App() {
               </span> },
               ...(error ? [{ key: 'error', label: 'Connection error', children: error }] : []),
               { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
+              { key: 'performance', label: 'Root scan (sampled)', children:
+                Number.isFinite(snapshot?.diagnostics?.root_scan_ms)
+                  ? snapshot.diagnostics.root_scan_ms + ' ms, excludes serialization/transfer'
+                  : 'Waiting for game-thread capture' },
+              { key: 'queue', label: 'Read-only queue (sampled)', children:
+                snapshot?.diagnostics
+                  ? `${snapshot.diagnostics.queue_pending} / ${snapshot.diagnostics.queue_capacity} pending · ${snapshot.diagnostics.queue_peak} peak · ${snapshot.diagnostics.queue_rejected} rejected (current epoch)`
+                  : 'Waiting for game-thread capture' },
+              { key: 'jobtiming', label: 'Last inspected request', children:
+                Number.isFinite(snapshot?.diagnostics?.last_request_ms)
+                  ? `${snapshot.diagnostics.last_request_ms} ms execution · ${snapshot.diagnostics.last_queue_wait_ms} ms queued`
+                  : 'No queued requests sampled yet' },
               { key: 'mode', label: 'Access', children: 'Game state read-only · authenticated local session' },
               { key: 'preferences', label: 'Favourite storage', children: preferencesStatus },
               { key: 'watches', label: 'Favourites', children:
