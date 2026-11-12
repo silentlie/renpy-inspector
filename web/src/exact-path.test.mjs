@@ -76,3 +76,40 @@ test('invalid private, executable, huge or malformed input is rejected without e
     assert.equal(result.key, null, input);
   }
 });
+
+
+test('set and frozenset members use value-identified brace segments', () => {
+  assert.deepEqual(exact('store.flags{"open"}').path, [
+    ['attribute', 'flags'], ['member', 'open'],
+  ]);
+  assert.deepEqual(exact('persistent.flags{True}').path, [
+    ['attribute', 'flags'], ['member', true],
+  ]);
+  assert.deepEqual(exact('store.inventory{42}').path.at(-1), ['member', 42]);
+  assert.deepEqual(exact('store.flags{-9}').path.at(-1), ['member', -9]);
+  assert.deepEqual(exact('store.flags{None}').path.at(-1), ['member', null]);
+  assert.deepEqual(exact('store.flags{"snow \u2603"}').path.at(-1), ['member', 'snow ☃']);
+  assert.deepEqual(exact('store.flags{"has } brace"}').path.at(-1),
+    ['member', 'has } brace']);
+});
+
+test('set membership Copy Path roundtrips unambiguously and rejects expressions', () => {
+  for (const path of [
+    ['store', [['attribute', 'flags'], ['member', 'snow ☃']]],
+    ['persistent', [['attribute', 'flags'], ['member', false]]],
+    ['store', [['attribute', 'sets'], ['key', 'nested'], ['member', 42]]],
+    ['store', [['attribute', 'sets'], ['member', 'quote " and }']]],
+    ['store', [['attribute', 'sets'], ['member', null]]],
+  ]) {
+    const formatted = formatTypedPath(JSON.stringify(path));
+    assert.ok(formatted.includes('{'));
+    assert.deepEqual([exact(formatted).scope, exact(formatted).path], path);
+  }
+  for (const invalid of [
+    'store.flags{eval("exec")}', 'store.flags{__import__("os")}',
+    'store.flags{1+2}', 'store.flags{key:42}', 'store.flags{-}',
+    'store.flags{3.4}', 'store.flags{9007199254740992}',
+    'store.flags{', 'store.flags{"unfinished}', 'store.flags{"x"}extra',
+    'store.flags{"' + 'a'.repeat(257) + '"}',
+  ]) assert.ok(parseExactPath(invalid)?.error, invalid);
+});
