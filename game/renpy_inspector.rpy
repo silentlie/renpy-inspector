@@ -11,11 +11,28 @@ init -100 python:
     if "renpy_inspector_overlay" not in config.overlay_screens:
         config.overlay_screens.append("renpy_inspector_overlay")
 
-    if renpy_inspector.inspector.reset not in config.after_load_callbacks:
-        config.after_load_callbacks.append(renpy_inspector.inspector.reset)
-
-    if renpy_inspector.bridge.invalidate not in config.after_load_callbacks:
-        config.after_load_callbacks.append(renpy_inspector.bridge.invalidate)
+    # after_load covers explicit save loads. after_default also runs after
+    # rollback (and at startup); invalidate before the next browser capture.
+    # Both use the same cache-only callback. No gameplay values are written.
+    if renpy_inspector.reset_lifecycle not in config.after_load_callbacks:
+        config.after_load_callbacks.append(renpy_inspector.reset_lifecycle)
+    # Ren'Py 7.4's config proxy throws Exception (not AttributeError)
+    # for unknown config names; avoid an unsafe getattr(..., default).
+    try:
+        defaults_callbacks = config.after_default_callbacks
+    except Exception:
+        defaults_callbacks = None
+    if defaults_callbacks is not None:
+        if renpy_inspector.reset_lifecycle not in defaults_callbacks:
+            defaults_callbacks.append(renpy_inspector.reset_lifecycle)
+    else:
+        # Older engines lack after_default_callbacks. At the next interaction
+        # check their public in_rollback() flag, if exposed. The legacy
+        # fallback may invalidate more than once during rollback replay.
+        def renpy_inspector_legacy_rollback_check():
+            renpy_inspector.observe_legacy_rollback(renpy)
+        if renpy_inspector_legacy_rollback_check not in config.start_interact_callbacks:
+            config.start_interact_callbacks.append(renpy_inspector_legacy_rollback_check)
 
     renpy_inspector.install(
         lambda: renpy.store,

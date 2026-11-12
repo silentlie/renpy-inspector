@@ -25,4 +25,36 @@ The native implementation is now a **displayless overlay screen** handling F8 an
 10. Benchmark game FPS, memory use, and responsiveness without inspector, inspector installed/idle, and inspector/browser active.
 11. Test uninstall/upgrade after previous native drawer releases. The styles file is overwritten with an empty stub and the old drawer screen is replaced; remove independently installed experimental GUI files.
 
+## PR #15 lifecycle acceptance matrix (manual, not established by CI)
+
+Run on one unmodified test game for each of the four SDK versions above,
+plus a customised game with a hidden overlay when available:
+
+1. Begin gameplay and pin a root variable and a nested favourite. Save,
+   change both values, load, and check that the browser first invalidates its
+   old generation and then shows the loaded values without reusing stale tree
+   pages or details. Pinned paths should survive and reconnect.
+2. Change a value, create two checkpoints, then rollback one and two steps.
+   Verify that Compare clears the previous epoch rather than logging the
+   restored values as ordinary mutations. On Ren'Py 7.4, verify the legacy
+   interaction-time `in_rollback()` probe works with the real engine.
+3. Pause or suppress the overlay, issue one children request and one favourite
+   value request, load another state, then resume. Stale old-generation work
+   must never repopulate the new tree. Bounded 409/503 responses are acceptable.
+4. Open a new game without restarting the browser. Check root snapshots,
+   expanded nodes, selected details, temporary search/reveal state and the
+   latest 100-change history. Browser-only caches must reset; preferences
+   and typed favourite definitions must persist.
+5. Repeat with an ancestor object replaced, a favourite temporarily missing,
+   and the path later restored. Check that the pin tracks the **path**, not
+   the old Python object or list element identity.
+6. Measure FPS and request queue latency while browsing and during repeated
+   rollback, including a game where the overlay timer is suspended. Confirm
+   the 127.0.0.1 service remains opt-in and no gameplay state/save changes.
+
+**Coverage caveat:** On engines that lack `config.after_default_callbacks`,
+a conservative interaction-time rollback probe is used if
+`renpy.in_rollback()` is available. Detection is not guaranteed in
+games that suppress both engine callbacks and interactions.
+
 SDK lint verifies syntax/init, not actual browser launch, F8 handling or save/rollback behaviour. Do not claim universal engine or game compatibility without interactive evidence.

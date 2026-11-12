@@ -107,6 +107,33 @@ class BridgePy2Tests(unittest.TestCase):
         finally:
             shutil.rmtree(game_dir)
 
+    def test_lifecycle_invalidation_rejects_obsolete_jobs_py2(self):
+        folder = tempfile.mkdtemp(prefix='inspector-lifecycle-py2-')
+        try:
+            with open(os.path.join(folder, 'index.html'), 'wb') as stream:
+                stream.write(b'local')
+            root = ModuleType(str('store'))
+            root.value = 10
+            inspector = Inspector()
+            inspector.bind(lambda: root, lambda: {})
+            bridge = InspectorBridge(inspector, folder)
+            bridge.start()
+            try:
+                job = bridge.enqueue_tree_page(('store', (), 0, 1))
+                old_generation = bridge.generation
+                root.value = 22
+                bridge.invalidate()
+                self.assertTrue(job['event'].is_set())
+                self.assertEqual(job['response'][0], 409)
+                self.assertEqual(bridge.generation, old_generation + 1)
+                bridge.tick()
+                fresh = json.loads(bridge.cached_bytes)
+                self.assertEqual(fresh['scopes']['store'][0]['preview'], '22')
+            finally:
+                bridge.stop()
+        finally:
+            shutil.rmtree(folder)
+
     def test_service_starts_and_stops_without_game(self):
         folder = tempfile.mkdtemp(prefix='bridge-py2-')
         try:

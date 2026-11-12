@@ -18,7 +18,10 @@ class ExternalUiIntegrationTests(unittest.TestCase):
         self.assertNotIn('textbutton', SCREEN)
 
     def test_state_invalidation_after_game_load(self):
-        self.assertIn('renpy_inspector.bridge.invalidate', INIT)
+        self.assertIn('renpy_inspector.reset_lifecycle', INIT)
+        self.assertIn('defaults_callbacks.append(renpy_inspector.reset_lifecycle)', INIT)
+        self.assertIn('renpy_inspector.observe_legacy_rollback', INIT)
+        self.assertIn('bridge.invalidate()', PACKAGE)
         self.assertIn('bridge = InspectorBridge(inspector)', PACKAGE)
 
     def test_no_external_autostart(self):

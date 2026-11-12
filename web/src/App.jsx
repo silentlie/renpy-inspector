@@ -17,6 +17,7 @@ import {
   collectWatchedPages, combineScopedWatches, nextWatchBatch, WATCH_INTERVAL_MS,
 } from './watch.js';
 import { createChangeTracker, comparisonText } from './comparison.js';
+import { classifyGeneration } from './lifecycle.js';
 import ScriptPane from './ScriptPane.jsx';
 
 const { Text, Title, Paragraph } = Typography;
@@ -367,6 +368,27 @@ export default function App() {
         const data = await response.json();
         if (!data || data.protocol !== 1 || !data.scopes) throw new Error('Unsupported bridge protocol');
         if (!disposed && id === requestCounter.current) {
+          const transition = classifyGeneration(treePagesRef.current?.generation, data.generation);
+          if (transition === 'invalid' || transition === 'stale') return;
+          if (transition === 'new') {
+            // Discard browser-only state attached to the previous game epoch.
+            // Favourites are typed paths and deliberately survive to re-resolve.
+            setSelected(null);
+            setExpanded({ store: [], persistent: [], favourites: [] });
+            setWatchValues({});
+            loadingRef.current.clear();
+            setLoadingPages(new Set());
+            valueLoadingRef.current.clear();
+            watchCursorRef.current = 0;
+            setPageErrors({});
+            setRevealTarget(null);
+            setRevealError('');
+            setSearchOpen(false);
+            setQuery('');
+            setSearchMatches({
+              query: '', items: [], limited: false, scanned: 0, busy: false, error: '',
+            });
+          }
           gameContextRef.current = data.game ?? {};
           trackerRef.current.beginGeneration(data.generation);
           if (Number.isFinite(data.captured_at)) {
@@ -471,12 +493,14 @@ export default function App() {
   }, [bridge, token, publishChanges]);
 
   const requestFavouriteValue = useCallback(async (job) => {
-    if (!token || !job || valueLoadingRef.current.has(job.key)) return;
+    if (!token || !job) return;
     const decoded = decodeTreeKey(job.key);
     if (!decoded || decoded.scope !== job.scope || !decoded.path.length) return;
     const expectedGeneration = treePagesRef.current?.generation;
     if (expectedGeneration === undefined) return;
-    valueLoadingRef.current.add(job.key);
+    const requestId = JSON.stringify([expectedGeneration, job.key]);
+    if (valueLoadingRef.current.has(requestId)) return;
+    valueLoadingRef.current.add(requestId);
     try {
       const params = new URLSearchParams({
         scope: job.scope, path: JSON.stringify(decoded.path),
@@ -496,6 +520,7 @@ export default function App() {
       });
       publishChanges();
       setWatchValues((old) => {
+        if (treePagesRef.current?.generation !== expectedGeneration) return old;
         const before = old[job.key];
         const node = result.node;
         if (before && before.preview === node.preview && before.type === node.type &&
@@ -503,7 +528,7 @@ export default function App() {
         return { ...old, [job.key]: node };
       });
     } catch { /* A missing/paused game watch retries on the next scheduler turn. */ }
-    finally { valueLoadingRef.current.delete(job.key); }
+    finally { valueLoadingRef.current.delete(requestId); }
   }, [bridge, token, publishChanges]);
 
   // One scheduler for all expanded tree watches and independent favourites.
@@ -762,7 +787,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.7 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.6.8 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :

@@ -5,6 +5,8 @@
  * bridge's bounded *previews*, not full Python values. The game thread never
  * receives history state and the browser never mutates gameplay.
  */
+import { classifyGeneration } from './lifecycle.js';
+
 export const MAX_CHANGES = 100;
 export const MAX_SAMPLES = 6000;
 export const MAX_PAGE_BASELINES = 96;
@@ -60,8 +62,9 @@ export function createChangeTracker({
   const pages = new Map();
 
   function adoptGeneration(incoming) {
-    if (!Number.isSafeInteger(incoming) || incoming < 0) return false;
-    if (generation !== incoming) {
+    const transition = classifyGeneration(generation, incoming);
+    if (transition === 'invalid' || transition === 'stale') return false;
+    if (transition === 'new') {
       generation = incoming;
       events = []; // a game load/rollback generation is a new comparison epoch
       last.clear();

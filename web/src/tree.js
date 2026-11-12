@@ -276,6 +276,8 @@ export function asVirtualTreeNodes(nodes, scope, roots, showMore = true) {
 /** Root snapshots refresh previews but do not erase previously loaded pages. */
 export function mergeRootSnapshot(previous, incoming) {
   const generation = incoming?.generation ?? 0;
+  if (previous && Number.isSafeInteger(previous.generation) &&
+      Number.isSafeInteger(generation) && generation < previous.generation) return previous;
   const scopes = {};
   const roots = {};
   for (const scope of ['store', 'persistent']) {
