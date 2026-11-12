@@ -346,15 +346,12 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
 
     // Replace a previously expanded dict with an int in the SAME generation.
     // The tree must not resurrect children sampled before replacement.
-    await revealVariable('e2e_container');
+    // Search/Reveal inserts the verified ancestor path and expands it,
+    // without relying on an off-screen Ant virtual-row disclosure click.
+    await revealVariable('e2e_container', 'hp');
     const containerRow = page.locator('.variable-row').filter({
       has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
     });
-    // A manual expansion may move the virtual viewport on Ren'Py 8.
-    // Exercise that interaction, then use the real deep Search/Reveal flow
-    // to bring the nested hp path into view deterministically.
-    await containerRow.locator('.variable-label-expandable').click();
-    await revealVariable('e2e_container', 'hp');
     await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toBeVisible();
     await page.getByRole('button', { name: /Add.*hp.*to favourites/i }).click();
