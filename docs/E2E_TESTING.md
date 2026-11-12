@@ -62,10 +62,13 @@ Xvfb, with software OpenGL, dummy audio and `xdotool` keyboard injection.
 - The actual SDK game process runs in a virtual graphical display;
   the test finds its real window and sends **F8 twice**, confirming that
   the same authenticated token and localhost port are reused.
-- The test redirects the operating system's default browser launcher to
-  a local URL capture helper using `BROWSER` instead of launching another
-  desktop GUI. A headless Playwright Chromium browser opens that exact
-  session URL and verifies the normal React inspector and API.
+- The disposable fixture instruments Python's `webbrowser.open` only
+  inside the test game: it records the actual URL passed by the real F8
+  handler and returns success instead of opening an OS desktop browser.
+  A `BROWSER` helper is also provided as a fallback. Playwright Chromium
+  then opens that exact authenticated session and verifies the real React
+  inspector and HTTP API. This **does not test OS default-browser
+  associations**, which remain a manual compatibility check.
 - It checks `e2e_value` in real Ren'Py Store, then sends **Space** to
   advance a real dialogue and observes the changed state in the HTTP
   snapshot and browser.
