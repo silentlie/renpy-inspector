@@ -61,6 +61,25 @@ class LifecycleTests(unittest.TestCase):
         self.bridge.tick()
         self.assertEqual(json.loads(self.bridge.cached_bytes)['scopes']['store'][0]['preview'], '99')
 
+    def test_legacy_rollback_probe_only_invalidates_when_true(self):
+        class Engine:
+            rolling = False
+
+            def in_rollback(self):
+                return self.rolling
+
+        engine = Engine()
+        with patch.object(renpy_inspector, 'inspector', self.inspector), patch.object(
+                renpy_inspector, 'bridge', self.bridge):
+            before = self.bridge.generation
+            renpy_inspector.observe_legacy_rollback(engine)
+            self.assertEqual(self.bridge.generation, before)
+            engine.rolling = True
+            renpy_inspector.observe_legacy_rollback(engine)
+            self.assertEqual(self.bridge.generation, before + 1)
+            renpy_inspector.observe_legacy_rollback(object())
+            self.assertEqual(self.bridge.generation, before + 1)
+
     def test_integration_registers_both_load_and_rollback_safe_hooks(self):
         script = Path(__file__).resolve().parents[1] / 'game' / 'renpy_inspector.rpy'
         content = script.read_text(encoding='utf-8')
