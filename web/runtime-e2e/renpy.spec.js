@@ -319,6 +319,14 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await revealVariable('e2e_inventory');
     await expect(inventory.locator('.variable-preview')).toHaveText('12 items',
       { timeout: 18000 });
+    // Search/Reveal guarantees only the parent is mounted. Align it near
+    // the viewport top so all 12 remaining children are actually rendered.
+    await inventory.evaluate((element) => {
+      const holder = element.closest('.ant-tree-list-holder');
+      if (!holder) throw new Error('Virtual tree viewport is missing');
+      holder.scrollTop += element.getBoundingClientRect().top -
+        holder.getBoundingClientRect().top - 12;
+    });
     await expect(page.getByRole('button', { name: 'Inspect [11]', exact: true }))
       .toBeVisible();
     await expect(page.getByRole('button', { name: 'Inspect [12]', exact: true }))
