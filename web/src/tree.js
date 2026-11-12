@@ -113,11 +113,14 @@ export function staleSample(last, incoming) {
 }
 
 function sampleAt(last, incoming) {
-  return Number.isFinite(incoming) ? incoming : last;
+  if (!Number.isFinite(incoming)) return last;
+  return Number.isFinite(last) ? Math.max(last, incoming) : incoming;
 }
 
 function preserveLoadedNode(newer, previous) {
   if (!previous) return newer;
+  // A later child-page sample can beat a cached shallow-root poll.
+  if (staleSample(previous.sampledAt, newer.sampledAt)) return previous;
   // A container can turn into a scalar or disappear between observations.
   // Keeping its old children would display fictitious state.
   if (newer.expandable === false ||
