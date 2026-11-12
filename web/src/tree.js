@@ -108,7 +108,7 @@ export function decodeTreeKey(key) {
  * Timestamps are captured on Ren'Py's game thread, not on arrival in React.
  * Missing stamps keep compatibility with older bridges/test fixtures.
  */
-function staleSample(last, incoming) {
+export function staleSample(last, incoming) {
   return Number.isFinite(last) && Number.isFinite(incoming) && incoming < last;
 }
 
@@ -333,7 +333,7 @@ export function mergeRootSnapshot(previous, incoming) {
       // A newly complete root must trim previously paginated rows even if
       // the earlier snapshot still advertised more pages.
       const structuralChange = !stablePrefix ||
-        (!rootMeta.more && oldSequential.length !== next.length);
+        (!rootMeta.more && oldNodes.length !== next.length);
       scopes[scope] = reconcilePageNodes(oldNodes, next, !structuralChange);
       const keepCursor = !structuralChange && rootMeta.more &&
         (oldMeta?.nextOffset ?? 0) > rootMeta.nextOffset;
