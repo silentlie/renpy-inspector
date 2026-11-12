@@ -226,6 +226,18 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
 
     await page.goto(rawUrl);
     await expect(page.getByRole('tab', { name: 'Variables' })).toBeVisible();
+    // Exercise direct typed-path lookup through the production browser and
+    // actual Ren'Py SDK, not merely the synthetic bridge fixture.
+    await page.getByRole('button', { name: 'Search variables' }).click();
+    const pathInput = page.getByRole('textbox', {
+      name: 'Search variables across Store and Persistent',
+    });
+    await pathInput.fill('store.e2e_value');
+    await expect(page.getByRole('button', { name: 'Reveal exact variable path' }))
+      .toBeVisible();
+    await pathInput.press('Enter');
+    await expect(page.getByRole('button', { name: 'Inspect e2e_value', exact: true }))
+      .toBeVisible({ timeout: 15000 });
     // A real Ren'Py Store has hundreds of engine-owned root variables. Ant
     // virtualisation correctly keeps e2e_value out of the initial viewport.
     // Use the actual bounded search/reveal flow to scroll to the game value.
