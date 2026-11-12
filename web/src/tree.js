@@ -116,7 +116,7 @@ export function formatTypedPath(key) {
     if (kind === 'index') return '[' + String(value) + ']';
     const literal = typeof value === 'string' ? JSON.stringify(value) :
       value === null ? 'None' : typeof value === 'boolean' ?
-        (value ? 'True' : 'False') : String(value);
+        (value ? 'True' : 'False') : 'key:' + String(value);
     return '[' + literal + ']';
   }).join('');
   return decoded.scope + suffix;
