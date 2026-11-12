@@ -881,7 +881,7 @@ export default function App() {
           <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
           <FullValuePanel key={JSON.stringify([treePages?.generation, selected.scope, selected.key])}
             selection={selected} generation={treePages?.generation}
-            bridge={bridge} token={token} pathLabel={activeNode?.path ?? ''} />
+            bridge={bridge} token={token} />
           {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
           <div className="detail-history">
             <div className="detail-history-header">
