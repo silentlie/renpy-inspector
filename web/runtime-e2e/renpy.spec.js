@@ -208,6 +208,19 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     const initial = await getSnapshot();
     expect(initial.game?.version).toContain(process.env.RENPY_VERSION);
     expect(initial.scopes.store.some((node) => node.name === 'e2e_container')).toBeTruthy();
+    // Full primitive text is read only when explicitly requested through
+    // the real Ren'Py interaction thread, never from an HTTP worker.
+    const fullParams = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'e2e_value']]),
+    });
+    const fullResponse = await page.request.get(origin + '/api/v1/full-value?' + fullParams, {
+      headers, timeout: 7000,
+    });
+    expect(fullResponse.status()).toBe(200);
+    const fullValue = await fullResponse.json();
+    expect(fullValue.kind).toBe('number');
+    expect(fullValue.text).toBe('1');
+    expect(fullValue.generation).toBe(initial.generation);
     const unauth = await page.request.get(origin + '/api/v1/snapshot');
     expect(unauth.status()).toBe(401);
 
