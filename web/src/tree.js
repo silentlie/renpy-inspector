@@ -104,6 +104,24 @@ export function decodeTreeKey(key) {
   } catch { return null; }
 }
 
+/** An exact, copyable Python-style path built from trusted typed segments.
+ * Snapshot path labels are capped at 230 chars, so do not copy those previews.
+ * This formats text only. It does NOT evaluate expressions in the game.
+ */
+export function formatTypedPath(key) {
+  const decoded = decodeTreeKey(key);
+  if (!decoded?.path?.length) return '';
+  const suffix = decoded.path.map(([kind, value]) => {
+    if (kind === 'attribute') return '.' + value;
+    if (kind === 'index') return '[' + String(value) + ']';
+    const literal = typeof value === 'string' ? JSON.stringify(value) :
+      value === null ? 'None' : typeof value === 'boolean' ?
+        (value ? 'True' : 'False') : String(value);
+    return '[' + literal + ']';
+  }).join('');
+  return decoded.scope + suffix;
+}
+
 /** Guard against reordering of independently completed HTTP samples.
  * Timestamps are captured on Ren'Py's game thread, not on arrival in React.
  * Missing stamps keep compatibility with older bridges/test fixtures.
