@@ -1,11 +1,11 @@
 # External Ant Design workspace
 
-**PR #14 experimental script navigation.** The browser remains the entire inspector UI and F8 is the only in-game control. Use the v0.6.7 PR preview for script navigation; v0.6.6 is the previously published baseline.
+**PR #15 experimental lifecycle correctness (v0.6.8).** The browser remains the entire inspector UI and F8 is the only in-game control. PR #14 script navigation was merged in v0.6.7. PR #15 adds cache-only invalidation after load/default processing, including rollback. Live Ren'Py 7/8 lifecycle tests are still required.
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For experimental script navigation, get the engine-specific preview ZIP from [PR #14](https://github.com/silentlie/renpy-inspector/pull/14). For the prior implementation, use the latest published GitHub release.
+2. For the experimental lifecycle build, get the engine-specific preview ZIP from [PR #15](https://github.com/silentlie/renpy-inspector/pull/15) after CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
