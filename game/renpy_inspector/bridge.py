@@ -446,7 +446,7 @@ class InspectorBridge(object):
             self.generation += 1
             # The next interaction tick must capture the restored state,
             # rather than waiting for the previous 1.5-second poll deadline.
-            self.last_publish = 0.0
+            self.last_publish = float('-inf')
             queued, self.pending_pages = self.pending_pages, []
             for job in queued:
                 job['cancelled'] = True
