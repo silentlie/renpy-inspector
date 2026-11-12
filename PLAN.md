@@ -287,6 +287,23 @@ required before merging.
 - **Merge gate:** both real SDK test jobs green, plus existing synthetic,
   Python 2/3, SDK lint, frontend and packaging jobs.
 
+## Milestone: PR #22 — Full Value Inspector (v0.7.4 experimental)
+
+- Reuse the authenticated GET-only bridge and bounded Ren'Py interaction-thread
+  queue for explicit typed-path full-value requests; no automatic full-value
+  polling, gameplay writes or unrestricted Python evaluation.
+- Support exact built-in strings, finite/built-in numeric representations,
+  booleans and None, with a 16,384-unit text budget and safe handling of
+  oversized integers, replaced/missing paths and cycles.
+- Expose Show/Refresh full value, a scrollable multiline viewer, explicit Copy
+  Value and Copy Path in the existing on-demand details drawer.
+- Never claim truncated text is complete or copy an incomplete value as though
+  it were the original. Keep Compare and tree previews lightweight.
+- Gate on Python 2/3 unit/security tests, synthetic Chromium browser-to-bridge,
+  actual Ren'Py 7.8.7/8.5.3 runtime checks, and both verified installer ZIPs.
+- **Deferred:** direct path expression navigation, source text search, richer
+  comparison values, safe object traversal and any editing/undo/locks.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
