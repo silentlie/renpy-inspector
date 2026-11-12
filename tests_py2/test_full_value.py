@@ -17,7 +17,7 @@ class FullValueCompatTests(unittest.TestCase):
         self.store.text = u'First line\nSecond: \u2603'
         self.store.large = u'x' * (MAX_FULL_VALUE_CHARS + 1)
         self.store.bytes_text = 'ascii\nsecond'
-        self.store.invalid_bytes = '\xff\xfe'
+        self.store.invalid_bytes = b'\xff\xfe'
         self.store.value = 15
         self.store.player = {'score': 4}
         self.store.huge = 1 << 4097
