@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChangeTracker, comparisonText, MAX_CHANGES } from './comparison.js';
+import { createChangeTracker, comparisonText, filterChanges, MAX_CHANGES } from './comparison.js';
 
 const key = (path) => JSON.stringify(['store', [['attribute', path]]]);
 const node = (name, preview, type = 'int') => ({
@@ -127,4 +127,81 @@ test('a comparison event includes the actual sampled context, not invented turns
   assert.deepEqual(change.context, { filename: 'scene.rpy', line: 99 });
   assert.equal('passage' in change, false);
   assert.equal('turn' in change, false);
+});
+
+
+test('exact small strings detect changes hidden beyond truncated previews', () => {
+  const tracker = createChangeTracker();
+  const prefix = 'A'.repeat(110);
+  const preview = "'"+ prefix.slice(0, 100) + "'…";
+  const first = {
+    ...node('memo', preview, 'str'), compare_sample: { text: prefix + 'before' },
+  };
+  const second = {
+    ...node('memo', preview, 'str'), compare_sample: { text: prefix + 'after' },
+  };
+  tracker.observeValue(direct(first, 10));
+  tracker.observeValue(direct(second, 11));
+  assert.equal(tracker.getChanges().length, 1);
+  const [change] = tracker.getChanges();
+  assert.equal(change.before.precision, 'exact');
+  assert.equal(change.after.precision, 'exact');
+  assert.equal(comparisonText(change.before), prefix + 'before');
+  assert.equal(comparisonText(change.after), prefix + 'after');
+  tracker.observeValue(direct(second, 12));
+  assert.equal(tracker.getChanges().length, 1);
+});
+
+test('mixed old preview-only and exact comparisons clearly label their precision', () => {
+  const tracker = createChangeTracker();
+  tracker.observeValue(direct(node('score', 2), 1));
+  tracker.observeValue(direct({
+    ...node('score', 3), compare_sample: { text: '3' },
+  }, 2));
+  const [change] = tracker.getChanges();
+  assert.equal(change.before.precision, 'preview');
+  assert.equal(change.after.precision, 'exact');
+  assert.equal(comparisonText(change.before), '2');
+  assert.equal(comparisonText(change.after), '3');
+});
+
+test('preview-same samples from different precision do not create spurious events', () => {
+  const tracker = createChangeTracker();
+  tracker.observeValue(direct(node('score', 10), 1));
+  tracker.observeValue(direct({
+    ...node('score', 10), compare_sample: { text: '10' },
+  }, 2));
+  assert.equal(tracker.getChanges().length, 0);
+});
+
+test('filter history by path, kind, scope, favourite and exact focused typed key', () => {
+  const storeKey = key('hp');
+  const persistentKey = JSON.stringify(['persistent', [['attribute', 'flags']]]);
+  const changes = [
+    { id: '1', key: storeKey, scope: 'store', path: 'store.hp', kind: 'changed' },
+    { id: '2', key: persistentKey, scope: 'persistent', path: 'persistent.flags', kind: 'added' },
+    { id: '3', key: key('xp'), scope: 'store', path: 'store.xp', kind: 'removed' },
+  ];
+  const favourites = [{ scope: 'store', key: storeKey }];
+  assert.deepEqual(filterChanges(changes, { query: 'HP' }).map(e => e.id), ['1']);
+  assert.deepEqual(filterChanges(changes, { scope: 'persistent' }).map(e => e.id), ['2']);
+  assert.deepEqual(filterChanges(changes, { kind: 'removed' }).map(e => e.id), ['3']);
+  assert.deepEqual(filterChanges(changes, { favouritesOnly: true, favourites }).map(e => e.id), ['1']);
+  assert.deepEqual(filterChanges(changes, { focusKey: persistentKey }).map(e => e.id), ['2']);
+  assert.deepEqual(filterChanges(changes, {
+    focusKey: storeKey, scope: 'persistent', favouritesOnly: true, favourites,
+  }), []);
+});
+
+test('exact sample guards against untrusted oversized metadata', () => {
+  const tracker = createChangeTracker();
+  tracker.observeValue(direct({
+    ...node('text', 'preview', 'str'), compare_sample: { text: 'x'.repeat(300) },
+  }, 1));
+  tracker.observeValue(direct({
+    ...node('text', 'different', 'str'), compare_sample: { text: 'x'.repeat(300) },
+  }, 2));
+  const change = tracker.getChanges()[0];
+  assert.equal(change.before.precision, 'preview');
+  assert.equal(change.after.precision, 'preview');
 });

@@ -345,6 +345,30 @@ required before merging.
 - No change to the F8-only browser integration, gameplay writes, polling or
   Inspector 1.5-second snapshot sampling. Not an FPS benchmark.
 
+## Milestone: PR #25 — Enhanced Compare & History (v0.7.7 experimental)
+
+- Preserve the existing 100-event session history, observed-only tracking,
+  same-generation capture order, and save/load/rollback reset guarantees.
+- Attach bounded exact text for **small built-in primitive values only**
+  (up to 256 characters / 512-bit integers and 16 KiB of scalar metadata per
+  child page) to snapshots and explicit favourite watches on the game thread.
+  Do not evaluate game Python, stringify objects, add a request per tree node,
+  capture large strings automatically or reconstruct previous states later.
+- Keep precision per side of each transition: exact scalar, preview-only,
+  missing, or unsupported. Detect changed strings whose first 100 preview
+  characters are identical, while maintaining compatibility with old bridges.
+- In the Compare scope, filter the existing events by path, scope, event type
+  and currently pinned variables. Show exact before/after multiline text,
+  sampled timestamp and best-effort script location. Reveal current location
+  in the tree or inspect it, without implying the old value still exists.
+- Make the details drawer's observed-history list readable and link directly
+  to a Compare view focused on the selected typed path.
+- Test Python 2/3 bounded and UTF-8-safe sampling, change precision and
+  filter logic, synthetic browser-bridge E2E, real Ren'Py 7.8.7 / 8.5.3
+  graphical SDK E2E, and both verified release packages.
+- **Deferred:** semantic read/write history, arbitrary Python object diffs,
+  editing, value locking, undo/redo and offline persistence of history.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

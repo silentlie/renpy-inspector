@@ -288,3 +288,58 @@ test('source search is authenticated, read-only and rejects traversal-like curso
     headers: { 'X-Inspector-Token': game.token },
   })).status()).toBe(400);
 });
+
+
+test('Compare records exact small strings even when their previews are identical', async ({ page, game }) => {
+  await page.goto(game.url);
+  const memo = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: /^memo$/ }),
+  });
+  const initialPreview = await memo.locator('.variable-preview').innerText();
+  await game.command('change_memo', { value: 'after' });
+  await page.getByRole('tab', { name: /Compare \(/ }).click();
+  const entry = page.locator('.compare-entry').filter({ hasText: 'store.memo' });
+  await expect(entry).toBeVisible({ timeout: 12000 });
+  await expect(entry.getByText('exact sampled scalar')).toHaveCount(2);
+  await expect(entry.locator('.compare-sample').first()).toHaveText('A'.repeat(110) + 'before');
+  await expect(entry.locator('.compare-sample').last()).toHaveText('A'.repeat(110) + 'after');
+  await page.getByRole('tab', { name: 'Store' }).click();
+  await expect(memo.locator('.variable-preview')).toHaveText(initialPreview);
+});
+
+test('Compare filters, pinned-only history, detail history and Reveal in tree', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Add score to favourites' }).click();
+  await game.command('set_score', { value: 17 });
+  await game.command('change_memo', { value: 'after' });
+  await page.getByRole('tab', { name: /Compare \(/ }).click();
+  const changes = page.getByRole('region', { name: 'Observed variable changes' });
+  await expect(changes.locator('.compare-entry')).toHaveCount(2, { timeout: 12000 });
+  await page.getByRole('textbox', { name: 'Filter comparison paths' }).fill('memo');
+  await expect(changes.locator('.compare-entry')).toHaveCount(1);
+  await expect(changes.locator('.compare-entry')).toContainText('store.memo');
+  await page.getByRole('textbox', { name: 'Filter comparison paths' }).fill('');
+  await page.getByRole('checkbox', { name: 'Pinned only' }).check();
+  await expect(changes.locator('.compare-entry')).toHaveCount(1);
+  await expect(changes.locator('.compare-entry')).toContainText('store.score');
+  await page.getByRole('checkbox', { name: 'Pinned only' }).uncheck();
+  await changes.locator('.compare-entry').filter({ hasText: 'store.memo' })
+    .getByRole('button', { name: 'Reveal in tree' }).click();
+  await expect(page.getByRole('tab', { name: 'Store', exact: true }))
+    .toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.variable-row-active')).toContainText('memo');
+
+  await page.getByRole('button', { name: 'Inspect memo' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Variable details' });
+  await expect(drawer.getByText('Observed history')).toBeVisible();
+  await expect(drawer.locator('.detail-history-samples pre').last()).toHaveText(
+    'A'.repeat(110) + 'after');
+  await drawer.getByRole('button', { name: 'View variable history in Compare' }).click();
+  await expect(page.getByRole('tab', { name: /Compare \(/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('status')).toContainText('History for store.memo');
+  await expect(changes.locator('.compare-entry')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Show all paths' }).click();
+  await expect(changes.locator('.compare-entry')).toHaveCount(2);
+  await game.command('restore_game');
+  await expect(page.getByRole('tab', { name: 'Compare (0)' })).toBeVisible({ timeout: 12000 });
+});

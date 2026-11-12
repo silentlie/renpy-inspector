@@ -2,8 +2,9 @@
  * Bounded, session-only change history derived from read-only Ren'Py samples.
  *
  * Adapted conceptually from SugarCube Inspector's PolledChanges, but uses the
- * bridge's bounded *previews*, not full Python values. The game thread never
- * receives history state and the browser never mutates gameplay.
+ * bridge's bounded *preview metadata* and small exact primitive samples,
+ * never arbitrary full Python objects. The game thread never receives history
+ * state and the browser never mutates gameplay.
  */
 import { classifyGeneration } from './lifecycle.js';
 
@@ -20,16 +21,27 @@ function sampleValue(node) {
   if (node?.state !== 'value') return null; // failed, unavailable or cyclic reads are not changes
   const type = String(node.type ?? '');
   const preview = String(node.preview ?? '');
+  const captured = node.compare_sample?.text;
+  if (PRIMITIVES.has(type) && typeof captured === 'string' &&
+      captured.length <= 256) {
+    return { kind: 'value', preview, type, text: captured, precision: 'exact' };
+  }
   if (!PRIMITIVES.has(type) || preview.length > 160 ||
       ((type === 'str' || type === 'unicode') && preview.endsWith('\u2026'))) {
     return { kind: 'other', preview: 'Not a fully captured primitive', type };
   }
-  return { kind: 'value', preview, type };
+  // Old bridges provide previews only, not exact primitive samples.
+  return { kind: 'value', preview, type, precision: 'preview' };
 }
 
 function sameValue(a, b) {
-  return a.kind === b.kind &&
-    (a.kind !== 'value' || (a.type === b.type && a.preview === b.preview));
+  if (a.kind !== b.kind) return false;
+  if (a.kind !== 'value') return true;
+  if (a.type !== b.type) return false;
+  // Two exact samples detect changes that fall beyond a 100-character preview.
+  // Never infer equality from an exact sample vs an older preview-only bridge.
+  if (a.precision === 'exact' && b.precision === 'exact') return a.text === b.text;
+  return a.preview === b.preview;
 }
 
 function eventKind(before, after) {
@@ -86,7 +98,8 @@ export function createChangeTracker({
     if (last.size > sampleLimit) last.delete(last.keys().next().value);
     if (!before || sameValue(before, sampled) ||
         (before.kind !== 'value' && sampled.kind !== 'value')) return false;
-    // Do not label a preview-only string as its complete actual value.
+    // Precision is recorded independently on each side of a transition. A
+    // later re-read cannot reconstruct the full earlier value.
     events = [{
       id: String(nextId++), key, scope,
       path: node.path, kind: eventKind(before, sampled),
@@ -151,5 +164,28 @@ export function createChangeTracker({
 export function comparisonText(value) {
   return value?.kind === 'missing' ? 'Missing' :
     value?.kind === 'other' ? 'Not a fully captured primitive' :
-      String(value?.preview ?? 'Unavailable');
+      value?.precision === 'exact' ? String(value.text) :
+        String(value?.preview ?? 'Unavailable');
+}
+
+/** Client-side filtering of the existing 100-event history; never rescans
+ * game data. Pinned state is the current list, not historical pin metadata.
+ */
+export function filterChanges(changes, {
+  query = '', scope = 'all', kind = 'all', favouritesOnly = false,
+  favourites = [], focusKey = null,
+} = {}) {
+  const needle = String(query).trim().toLocaleLowerCase();
+  const pins = new Set((favourites ?? []).map((f) =>
+    JSON.stringify([f.scope, f.key])));
+  return (changes ?? []).filter((entry) => {
+    if (!entry || (scope !== 'all' && entry.scope !== scope) ||
+        (kind !== 'all' && entry.kind !== kind) ||
+        (focusKey && entry.key !== focusKey)) return false;
+    if (favouritesOnly && !pins.has(JSON.stringify([entry.scope, entry.key])))
+      return false;
+    return !needle ||
+      String(entry.path ?? '').toLocaleLowerCase().includes(needle) ||
+      String(entry.key ?? '').toLocaleLowerCase().includes(needle);
+  });
 }
