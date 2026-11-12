@@ -157,18 +157,37 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       return (await response.json()).favourites ?? [];
     };
     const revealVariable = async (name) => {
-      await page.getByRole('tab', { name: 'Variables', exact: true }).click();
-      await page.getByRole('tab', { name: 'Store', exact: true }).click();
-      await page.getByRole('button', { name: 'Search variables' }).click();
-      await page.getByRole('textbox', {
+      const searchInput = page.getByRole('textbox', {
         name: 'Search variables across Store and Persistent',
-      }).fill(name);
-      const hits = page.getByRole('listbox', { name: 'Matching game variables' });
-      const match = hits.getByRole('option').filter({ hasText: name }).first();
-      await expect(match).toBeVisible();
-      await match.click();
-      await expect(page.getByRole('button', { name: 'Inspect ' + name, exact: true }))
-        .toBeVisible();
+      });
+      // A native lifecycle transition may arrive in React after the HTTP
+      // assertion has passed. Its intentional UI reset closes the popover.
+      // Retry the user-visible search rather than mistaking that race for a
+      // missing game variable; never bypass the authenticated search API.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await page.getByRole('tab', { name: 'Variables', exact: true }).click();
+        await page.getByRole('tab', { name: 'Store', exact: true }).click();
+        if (!await searchInput.isVisible()) {
+          await page.getByRole('button', { name: 'Search variables' }).click();
+        }
+        await searchInput.fill(name);
+        const hits = page.getByRole('listbox', { name: 'Matching game variables' });
+        const match = hits.getByRole('option').filter({ hasText: name }).first();
+        try {
+          await expect(match).toBeVisible({ timeout: 5000 });
+          await match.click();
+          await expect(page.getByRole('button', { name: 'Inspect ' + name, exact: true }))
+            .toBeVisible({ timeout: 8000 });
+          return;
+        } catch (error) {
+          if (attempt === 2) throw error;
+          // Wait for the following snapshot poll before retrying. A real
+          // missing variable still fails after the bounded attempts.
+          await page.waitForResponse((response) =>
+            new URL(response.url()).pathname === '/api/v1/snapshot' &&
+            response.status() === 200, { timeout: 5000 });
+        }
+      }
     };
     await expect.poll(async () => (await gameValue()).value, { timeout: 10000 })
       .toBe('1');
