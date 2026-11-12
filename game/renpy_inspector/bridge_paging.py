@@ -247,7 +247,18 @@ def build_full_value(providers, scope, path):
         result['length'] = len(value)
         result['length_unit'] = 'bytes' if type(value) is binary_type else 'characters'
         result['truncated'] = len(value) > MAX_FULL_VALUE_CHARS
-        result['text'] = to_text(value[:MAX_FULL_VALUE_CHARS])
+        prefix = value[:MAX_FULL_VALUE_CHARS]
+        if type(value) is binary_type:
+            # Python 2 str is bytes, not Unicode. Never silently replace
+            # undecodable bytes and present a lossy conversion as exact.
+            try:
+                prefix = prefix.decode('utf-8')
+            except UnicodeError:
+                result['kind'] = 'unsupported'
+                result['text'] = None
+                result['reason'] = 'Byte string is not UTF-8 decodable within the display budget'
+                return result
+        result['text'] = to_text(prefix)
     elif type(value) is bool:
         result['kind'] = 'boolean'
         result['text'] = 'True' if value else 'False'
