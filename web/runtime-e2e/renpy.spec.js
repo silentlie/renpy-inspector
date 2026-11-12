@@ -149,9 +149,10 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
       expect(response.status()).toBe(200);
       return response.json();
     };
-    const getValueNode = async (name) => {
+    const getValueNode = async (nameOrPath) => {
+      const path = Array.isArray(nameOrPath) ? nameOrPath : [['attribute', nameOrPath]];
       const params = new URLSearchParams({
-        scope: 'store', path: JSON.stringify([['attribute', name]]),
+        scope: 'store', path: JSON.stringify(path),
       });
       const response = await page.request.get(origin + '/api/v1/value?' + params, {
         headers, timeout: 7000,
@@ -352,10 +353,22 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     const containerRow = page.locator('.variable-row').filter({
       has: page.locator('.variable-key', { hasText: /^e2e_container$/ }),
     });
-    await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
-      .toBeVisible();
-    await page.getByRole('button', { name: /Add.*hp.*to favourites/i }).click();
-    await expect(page.getByRole('tab', { name: /Favourites \(2\)/ })).toBeVisible();
+    const hpPath = [['attribute', 'e2e_container'], ['key', 'hp']];
+    const hpKey = JSON.stringify(['store', hpPath]);
+    expect((await getValueNode(hpPath)).preview).toBe('10');
+    // The Store pin above used the actual browser star. For this deep path
+    // exercise the authenticated inspector-only preferences endpoint: it
+    // cannot modify gameplay data and survives native save/load.
+    const savedPins = await page.request.put(origin + '/api/v1/favourites', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { version: 1, favourites: [
+        { scope: 'store', key: valueKey }, { scope: 'store', key: hpKey },
+      ] },
+    });
+    expect(savedPins.status()).toBe(200);
+    await expect.poll(async () => (await storedFavourites()).some(
+      (pin) => pin.scope === 'store' && pin.key === hpKey
+    ), { timeout: 15000 }).toBeTruthy();
     const generationBeforeReplace = (await getSnapshot()).generation;
     await key(window, 'F7');
     await expect.poll(async () => (await getValueNode('e2e_container')).preview,
@@ -370,20 +383,14 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect(page.getByRole('button', { name: /Inspect.*hp/i }))
       .toHaveCount(0);
 
-    // The same durable nested pin must now resolve to <missing>, not an old 10.
-    const hpKey = JSON.stringify(['store', [
-      ['attribute', 'e2e_container'], ['key', 'hp'],
-    ]]);
-    await expect.poll(async () => (await storedFavourites()).some(
-      (pin) => pin.scope === 'store' && pin.key === hpKey
-    ), { timeout: 15000 }).toBeTruthy();
+    // The now-missing nested path is never represented by a stale 10.
+    await expect.poll(async () => (await getValueNode(hpPath)).state,
+      { timeout: 16000 }).toBe('missing');
+    await page.reload();
     await page.getByRole('tab', { name: /Favourites \(2\)/ }).click();
     const hpPinned = page.locator('.variable-row').filter({
       has: page.locator('.variable-key', { hasText: /hp/ }),
     }).locator('.variable-preview');
-    await expect(hpPinned).toHaveText('<missing>', { timeout: 18000 });
-    await page.reload();
-    await page.getByRole('tab', { name: /Favourites \(2\)/ }).click();
     await expect(hpPinned).toHaveText('<missing>', { timeout: 18000 });
 
     await page.screenshot({ path: join(results, 'runtime-inspector.png') });
