@@ -208,6 +208,21 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     const initial = await getSnapshot();
     expect(initial.game?.version).toContain(process.env.RENPY_VERSION);
     expect(initial.scopes.store.some((node) => node.name === 'e2e_container')).toBeTruthy();
+    // Real Ren'Py 7/8 game-thread scan of set values, with a typed member
+    // path (not a mutable positional index or synthetic browser-only data).
+    const setParams = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'e2e_flags']]),
+      offset: '0', size: '80',
+    });
+    const setResponse = await page.request.get(origin + '/api/v1/children?' + setParams, {
+      headers, timeout: 7000,
+    });
+    expect(setResponse.status()).toBe(200);
+    const setPage = await setResponse.json();
+    expect(setPage.items.length).toBe(3);
+    expect(setPage.items.some((item) =>
+      JSON.parse(item.key)[1].at(-1)[0] === 'member')).toBe(true);
+
     // The actual Ren'Py game-thread root capture carries the same bounded
     // exact scalar that Compare uses. No extra gameplay reads are required.
     const initialScalar = initial.scopes.store.find((node) => node.name === 'e2e_value');
