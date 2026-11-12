@@ -142,7 +142,18 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
 
     await page.goto(rawUrl);
     await expect(page.getByRole('tab', { name: 'Variables' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Inspect e2e_value' })).toBeVisible();
+    // A real Ren'Py Store has hundreds of engine-owned root variables. Ant
+    // virtualisation correctly keeps e2e_value out of the initial viewport.
+    // Use the actual bounded search/reveal flow to scroll to the game value.
+    await page.getByRole('button', { name: 'Search variables' }).click();
+    await page.getByRole('textbox', {
+      name: 'Search variables across Store and Persistent',
+    }).fill('e2e_value');
+    const hits = page.getByRole('listbox', { name: 'Matching game variables' });
+    await expect(hits.getByRole('option').first()).toBeVisible();
+    await hits.getByRole('option').first().click();
+    await expect(page.getByRole('button', { name: 'Inspect e2e_value' }))
+      .toBeVisible();
     await page.getByRole('tab', { name: 'Overview' }).click();
     await expect(page.getByText('Connected', { exact: true })).toBeVisible();
 
