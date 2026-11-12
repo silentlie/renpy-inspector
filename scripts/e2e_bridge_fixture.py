@@ -34,7 +34,7 @@ class MockLabel(object):
 
 class MockScript(object):
     def lookup(self, name):
-        return MockLabel(6 if name == 'start' else 11)
+        return MockLabel(1 if name == 'start' else 4)
 
 
 class MockRenpy(object):
@@ -61,7 +61,7 @@ def main():
             lambda: store, lambda: persistent,
             context_provider=lambda: {
                 'game': 'Playwright Fixture', 'version': '8.5.3 (synthetic)',
-                'filename': 'game/script.rpy', 'line': 6,
+                'filename': 'game/script.rpy', 'line': 1,
             })
         bridge = InspectorBridge(controller, str(ROOT / 'web' / 'dist'))
         bridge.configure_favourites_directory(temp)
