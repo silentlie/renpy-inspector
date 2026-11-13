@@ -179,7 +179,10 @@ def build_lazy_snapshot(providers, game_info=None):
     if isinstance(game_info, dict):
         for name in ('game', 'version', 'filename', 'line', 'return_depth', 'return_labels', 'rollback_active'):
             value = game_info.get(name)
-            if type(value) in (int, float) or isinstance(value, string_types):
+            if name == 'rollback_active':
+                if type(value) is bool:
+                    result['game'][name] = value
+            elif type(value) in (int, float) or isinstance(value, string_types):
                 result['game'][name] = _safe_text(value)
     for scope in ('store', 'persistent'):
         try:
