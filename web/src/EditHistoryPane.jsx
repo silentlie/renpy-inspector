@@ -57,8 +57,9 @@ export default function EditHistoryPane({
       if (!response.ok) {
         throw new Error(response.status === 409
           ? (data.error || 'Conflict: the recorded value or game generation changed.')
-          : response.status === 403 ? 'Editing has been disabled by the game.'
-            : response.status === 503
+          : response.status === 423 ? 'This variable is locked against Inspector writes. Unlock it from the variable details before undoing or redoing.'
+            : response.status === 403 ? 'Editing has been disabled by the game.'
+              : response.status === 503
               ? 'The game may have completed this action. Refresh and inspect the current value before retrying.'
               : 'Undo/Redo failed (HTTP ' + response.status + ')');
       }
