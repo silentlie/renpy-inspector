@@ -1062,7 +1062,7 @@ export default function App() {
               key={JSON.stringify(['edit', treePages?.generation, selected.scope, selected.key])}
               enabled={snapshot.capabilities.primitive_edits} selection={selected}
               generation={treePages?.generation} bridge={bridge} token={token}
-              locks={snapshot?.locks} onApplied={() => setSelected(null)} onLocksChanged={syncLocks} />
+              locks={snapshot?.locks} onApplied={() => setSelected(null)} onLocksChanged={syncLocks} />}
           {(activeNode?.limited || activeNode?.capped) &&
             <Tag color="gold">Some descendants were omitted by type or inspection limits</Tag>}
           <div className="detail-history">
