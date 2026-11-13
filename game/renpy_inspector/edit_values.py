@@ -47,6 +47,8 @@ def validate_edit_request(payload):
         payload['scope'], payload['path'], 0, 1)
     if scope != 'store' or not 1 <= len(path) <= MAX_EDIT_PATH:
         raise ValueError('edits require a Store variable path')
+    if any(kind == 'member' for kind, unused_value in path):
+        raise ValueError('set members are not editable')
     if type(payload['generation']) is not int or not 0 <= payload['generation'] < 2 ** 53:
         raise ValueError('invalid edit generation')
     expected = payload['expected']
