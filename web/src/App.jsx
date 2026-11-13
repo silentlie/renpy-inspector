@@ -370,7 +370,7 @@ export default function App() {
   const revealCounterRef = useRef(0);
   const [selected, setSelected] = useState(null);
   const lockedKeys = useMemo(() => new Set((snapshot?.locks?.entries ?? [])
-    .map((entry) => JSON.stringify([entry.scope, entry.path]))), [snapshot?.locks]);
+    .map((entry) => entry.key).filter((key) => typeof key === 'string')), [snapshot?.locks]);
   const syncLocks = useCallback((locks) => {
     setSnapshot((current) => current ? { ...current, locks } : current);
   }, []);
