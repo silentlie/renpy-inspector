@@ -12,6 +12,7 @@ Python 2.7 / Python 3 compatible; no eval, exec, pickle or untrusted repr.
 from __future__ import unicode_literals
 
 import hashlib
+import json
 import math
 import re
 from types import ModuleType
@@ -24,7 +25,7 @@ MAX_EDIT_TEXT = 1024
 MAX_EDIT_BYTES = 4096
 MAX_EDIT_INTEGER_BITS = 512
 MAX_EDIT_PATH = 8
-MAX_EDIT_REQUEST_BYTES = 3072
+MAX_EDIT_REQUEST_BYTES = 6144
 _HEX = re.compile(r'\A[a-f0-9]{64}\Z')
 _INTEGER = re.compile(r'\A[+-]?[0-9]{1,160}\Z')
 _FLOAT = re.compile(r'\A[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z')
@@ -131,7 +132,7 @@ def inspect_edit_target(providers, scope, path):
     scope, path, unused_offset, unused_size = validate_tree_request(
         scope, [[kind, value] for kind, value in path], 0, 1)
     result = {
-        'protocol': 1, 'scope': scope, 'key': __import__('json').dumps(
+        'protocol': 1, 'scope': scope, 'key': json.dumps(
             [scope, path], ensure_ascii=True, separators=(',', ':')),
         'editable': False,
     }
