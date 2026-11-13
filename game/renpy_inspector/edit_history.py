@@ -98,7 +98,7 @@ class PrimitiveEditHistory(object):
                                if item['id'] != removed['id']]
         return entry['id']
 
-    def apply(self, providers, action, entry_id, is_locked=None):
+    def apply(self, providers, action, entry_id, lock_state=None):
         """Apply the current stack head only if its exact recorded value remains."""
         if action == 'undo':
             stack = self.undo_stack
@@ -111,11 +111,19 @@ class PrimitiveEditHistory(object):
         else:
             raise ValueError('unsupported history action')
         if not stack or stack[-1]['id'] != entry_id:
-            raise EditConflict('Edit history changed; refresh before retrying')
+            raise EditConflict('Edit history changed; refresh before retrying', 'history_changed')
         entry = stack[-1]
-        if is_locked and is_locked(
-                entry['scope'], tuple((segment[0], segment[1]) for segment in entry['path'])):
-            raise EditLocked('Variable is locked against inspector writes')
+        if lock_state:
+            current_lock = lock_state(
+                entry['scope'], tuple((segment[0], segment[1]) for segment in entry['path']))
+            if isinstance(current_lock, dict):
+                if current_lock.get('locked'):
+                    raise EditLocked(
+                        'Variable is locked against inspector writes',
+                        current_lock.get('stale', False),
+                        current_lock.get('stale_reason'))
+            elif current_lock:
+                raise EditLocked('Variable is locked against inspector writes')
         expected = entry[expected_text]
         replacement = entry[replacement_text]
         try:
@@ -130,7 +138,7 @@ class PrimitiveEditHistory(object):
             stack.pop()
             entry['status'] = 'conflicted'
             self.revision += 1
-            raise EditConflict('Recorded variable no longer matches; edit retired')
+            raise EditConflict('Recorded variable no longer matches; edit retired', 'history_value_changed')
         stack.pop()
         if action == 'undo':
             entry['status'] = 'undone'
