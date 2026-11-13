@@ -114,6 +114,14 @@ class VariableLocksHTTPTests(unittest.TestCase):
             'expected': target['expected'], 'type': target['type'], 'text': str(value),
         })
 
+    def test_refresh_without_an_active_lock_returns_a_stable_conflict(self):
+        target = self.target()
+        status, response = self.lock('refresh', target)
+        self.assertEqual(status, 409)
+        self.assertEqual(response['code'], 'lock_missing')
+        self.assertFalse(self.bridge.variable_locks.is_locked(
+            'store', (('attribute', 'score'),)))
+
     def test_lock_blocks_inspector_edit_but_does_not_advance_game_generation(self):
         target = self.target()
         status, locked = self.lock('lock', target)
