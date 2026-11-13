@@ -10,7 +10,7 @@ import json
 
 from .compat import integer_types, string_types, text_type, to_text
 from .edit_values import (
-    MAX_EDIT_TEXT, EditConflict, EditUnsupported, _fingerprint,
+    MAX_EDIT_TEXT, EditConflict, EditLocked, EditUnsupported, _fingerprint,
     apply_primitive_edit,
 )
 
@@ -98,7 +98,7 @@ class PrimitiveEditHistory(object):
                                if item['id'] != removed['id']]
         return entry['id']
 
-    def apply(self, providers, action, entry_id):
+    def apply(self, providers, action, entry_id, is_locked=None):
         """Apply the current stack head only if its exact recorded value remains."""
         if action == 'undo':
             stack = self.undo_stack
@@ -113,6 +113,9 @@ class PrimitiveEditHistory(object):
         if not stack or stack[-1]['id'] != entry_id:
             raise EditConflict('Edit history changed; refresh before retrying')
         entry = stack[-1]
+        if is_locked and is_locked(
+                entry['scope'], tuple((segment[0], segment[1]) for segment in entry['path'])):
+            raise EditLocked('Variable is locked against inspector writes')
         expected = entry[expected_text]
         replacement = entry[replacement_text]
         try:
