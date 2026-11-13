@@ -16,6 +16,10 @@ MAX_VARIABLE_LOCKS_BYTES = 32 * 1024
 MAX_VARIABLE_LOCK_REQUEST_BYTES = 4096
 
 
+class VariableLockLimit(Exception):
+    """The bounded session lock set is full."""
+
+
 def validate_variable_lock_request(payload):
     if type(payload) is not dict or set(payload) != set((
             'action', 'scope', 'path', 'generation')):
@@ -62,7 +66,7 @@ class VariableLocks(object):
             return False
         size = self._size(key)
         if len(self.entries) >= MAX_VARIABLE_LOCKS or self.bytes_used + size > MAX_VARIABLE_LOCKS_BYTES:
-            raise ValueError('variable lock capacity reached')
+            raise VariableLockLimit('variable lock capacity reached')
         entry = {
             'scope': scope,
             'path': [[kind, value] for kind, value in path],
