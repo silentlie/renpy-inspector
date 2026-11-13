@@ -62,6 +62,7 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(history.events, [])
         history.restoration('not a callback', 1, 2.0)
         self.assertEqual(history.events[-1]['signal'], 'unspecified')
+        self.assertEqual(history.events[-1]['kind'], 'invalidation')
 
     def test_runtime_collects_optional_public_indicator(self):
         class Engine:
