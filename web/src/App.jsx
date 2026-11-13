@@ -24,6 +24,8 @@ import ScriptPane from './ScriptPane.jsx';
 import RuntimePane from './RuntimePane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
 import { parseExactPath } from './exact-path.js';
+import { sourceTargetForContext } from './scripts.js';
+import { valuePresentation } from './value-format.js';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
@@ -98,6 +100,7 @@ function AutoPageSentinel({ scope, offset, loading, error, requestPage }) {
 
 function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite }) {
   const canExpand = Boolean(node.expandable || node.children?.length) && typeof onToggle === 'function';
+  const displayedType = valuePresentation(node.type, node.state);
   return <span className={`variable-row${isActive ? ' variable-row-active' : ''}`}>
     <span className={`variable-label${canExpand ? ' variable-label-expandable' : ''}`}
       role={canExpand ? 'button' : undefined} tabIndex={canExpand ? 0 : undefined}
@@ -110,7 +113,7 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
       } : undefined}>
       <span className="variable-key" title={node.path}>{node.name}</span>
       <span className="variable-colon">:</span>
-      <span className="variable-type">{node.type}</span>
+      <Tooltip title={`${displayedType.category}: ${displayedType.detail}`}><span className="variable-type">{node.type}</span></Tooltip>
       {node.capped && <Tooltip title="Partial collection: some entries are unsupported or exceed inspection limits.">
         <span className="variable-partial-icon" role="status"
           aria-label="Partial collection coverage"><WarningOutlined /></span>
@@ -231,7 +234,7 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
  * All controls filter session-only observations without issuing new reads.
  */
 function ComparePane({ changes, favourites, focusedKey, onResetFocus,
-  onClear, onInspect, onReveal }) {
+  onClear, onInspect, onReveal, onOpenSource }) {
   const [search, setSearch] = useState('');
   const [scopeFilter, setScopeFilter] = useState('all');
   const [kindFilter, setKindFilter] = useState('all');
@@ -305,7 +308,7 @@ function ComparePane({ changes, favourites, focusedKey, onResetFocus,
               <div key={label}>
                 <Text type="secondary">{label} · {value.precision === 'exact'
                   ? 'exact sampled scalar' : 'preview/status'}</Text>
-                <pre className="compare-sample">{comparisonText(value)}</pre>
+                <pre className={`compare-sample value-tone-${valuePresentation(value.type, value.kind).tone}`}>{comparisonText(value)}</pre>
               </div>)}
           </div>
           <div className="compare-actions">
@@ -313,6 +316,10 @@ function ComparePane({ changes, favourites, focusedKey, onResetFocus,
               onClick={() => onInspect(change)}>Inspect variable</Button>
             <Button type="link" size="small" className="compare-inspect"
               onClick={() => reveal(change)}>Reveal in tree</Button>
+            {sourceTargetForContext(change.context) && <Button type="link" size="small"
+              aria-label="View sampled source" className="compare-inspect"
+              title="Location observed when sampled, not proof of a change cause"
+              onClick={() => onOpenSource(change.context)}>View sampled source</Button>}
           </div>
         </article>) :
         <Empty className="compare-empty"
@@ -352,6 +359,8 @@ export default function App() {
   const revealCounterRef = useRef(0);
   const [selected, setSelected] = useState(null);
   const [findRequest, setFindRequest] = useState(null);
+  const [sourceRequest, setSourceRequest] = useState(null);
+  const sourceRequestIdRef = useRef(0);
   const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
   const [favourites, setFavourites] = useState(loadLocalFavourites);
   const [favouritesReady, setFavouritesReady] = useState(false);
@@ -768,6 +777,14 @@ export default function App() {
     const captured = flatten(treePages?.scopes?.[selected.scope] ?? []).get(selected.key);
     return watchValues[selected.key] || captured || null;
   }, [treePages, selected, watchValues]);
+  const openSourceContext = useCallback((context) => {
+    const target = sourceTargetForContext(context);
+    if (!target) return;
+    setSourceRequest({ ...target, name: "Observed script location",
+      id: ++sourceRequestIdRef.current, generation: treePagesRef.current?.generation });
+    setSelected(null);
+    setSection("scripts");
+  }, []);
   const findReferences = useCallback(() => {
     const decoded = decodeTreeKey(selected?.key);
     if (!decoded?.path?.length) return;
@@ -915,7 +932,7 @@ export default function App() {
             ? <ComparePane changes={changes} favourites={favourites}
                 focusedKey={comparisonFocus} onResetFocus={() => setComparisonFocus(null)}
                 onClear={clearHistory} onInspect={inspectChange}
-                onReveal={revealResult} />
+                onReveal={revealResult} onOpenSource={openSourceContext} />
             : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
@@ -969,10 +986,10 @@ export default function App() {
             ]} />
           </Card>
         </section>}
-        {section === 'runtime' && <RuntimePane snapshot={snapshot} />}
+        {section === 'runtime' && <RuntimePane snapshot={snapshot} onOpenSource={openSourceContext} />}
         {section === 'scripts' && <ScriptPane token={token} bridge={bridge}
           activeGame={activeGame} generation={treePages?.generation}
-          findRequest={findRequest} />}
+          findRequest={findRequest} sourceRequest={sourceRequest} />}
       </main>
       <Drawer title="Variable details" className="inspector-detail-drawer" placement="right"
         width="min(520px, 94vw)" open={Boolean(selected)} onClose={() => setSelected(null)}>
@@ -988,7 +1005,8 @@ export default function App() {
           </div>
           <Descriptions column={1} size="small" bordered items={[
             { key: 'path', label: 'Path', children: <Text copyable={{ text: activeNode?.path ?? '' }} className="path-monospace">{activeNode?.path || 'Not in latest snapshot'}</Text> },
-            { key: 'type', label: 'Type', children: <Tag color="geekblue">{activeNode?.type || 'Unknown'}</Tag> },
+            { key: 'type', label: 'Type', children: <><Tag color="geekblue">{activeNode?.type || 'Unknown'}</Tag><Tag>{valuePresentation(activeNode?.type, activeNode?.state).category}</Tag></> },
+            { key: 'description', label: 'Type information', children: valuePresentation(activeNode?.type, activeNode?.state).detail },
             { key: 'state', label: 'State', children: activeNode?.state || 'Missing from latest snapshot' },
           ]} />
           <div className="detail-preview-heading"><Text strong>Captured value preview</Text>
@@ -997,12 +1015,15 @@ export default function App() {
                 onClick={() => activeNode && navigator.clipboard?.writeText(activeNode.preview).catch(() => {})}>Copy preview</Button>
             </Tooltip>
           </div>
-          <pre className="detail-value">{activeNode?.preview ?? '(not available)'}</pre>
-          <Button size="small" icon={<SearchOutlined />}
-            aria-label="Find references in Scripts" disabled={!canFindReferences}
-            onClick={findReferences}>
-            Find references in Scripts
-          </Button>
+          <pre className={`detail-value value-tone-${valuePresentation(activeNode?.type, activeNode?.state).tone}`}>{activeNode?.preview ?? '(not available)'}</pre>
+          <div className="detail-source-actions">
+            <Button size="small" icon={<SearchOutlined />}
+              aria-label="Find references in Scripts" disabled={!canFindReferences}
+              onClick={findReferences}>Find references in Scripts</Button>
+            <Button size="small" disabled={!sourceTargetForContext(activeGame)}
+              aria-label="View current script context" onClick={() => openSourceContext(activeGame)}
+              title="Current statement is not necessarily where this variable was assigned">View current script</Button>
+          </div>
           <FullValuePanel key={JSON.stringify([treePages?.generation, selected.scope, selected.key])}
             selection={selected} generation={treePages?.generation}
             bridge={bridge} token={token} />
@@ -1023,10 +1044,10 @@ export default function App() {
                 <div className="detail-history-samples">
                   <div><Text type="secondary">Before · {change.before.precision === 'exact'
                     ? 'exact scalar' : 'preview/status'}</Text>
-                    <pre>{comparisonText(change.before)}</pre></div>
+                    <pre className={`value-tone-${valuePresentation(change.before.type, change.before.kind).tone}`}>{comparisonText(change.before)}</pre></div>
                   <div><Text type="secondary">After · {change.after.precision === 'exact'
                     ? 'exact scalar' : 'preview/status'}</Text>
-                    <pre>{comparisonText(change.after)}</pre></div>
+                    <pre className={`value-tone-${valuePresentation(change.after.type, change.after.kind).tone}`}>{comparisonText(change.after)}</pre></div>
                 </div>
               </div>) :
               <Text type="secondary">
