@@ -117,8 +117,10 @@ class VariableLocks(object):
             raise ValueError('variable lock needs a supported primitive fingerprint')
         expected = to_text(expected)
         typename = to_text(typename)
-        if (len(expected) != 64 or
-                any(character not in _HEX_CHARS for character in expected)) or typename not in _EDITABLE_TYPES:
+        if (len(expected) != 64 or any(
+                character not in _HEX_CHARS for character in expected)):
+            raise ValueError('variable lock needs a supported primitive fingerprint')
+        if typename not in _EDITABLE_TYPES:
             raise ValueError('variable lock needs a supported primitive fingerprint')
         key = self._key(scope, path)
         if key in self._by_key:
@@ -198,8 +200,10 @@ class VariableLocks(object):
             raise ValueError('variable lock needs a supported primitive fingerprint')
         expected = to_text(expected)
         typename = to_text(typename)
-        if (len(expected) != 64 or
-                any(character not in _HEX_CHARS for character in expected)) or typename not in _EDITABLE_TYPES:
+        if (len(expected) != 64 or any(
+                character not in _HEX_CHARS for character in expected)):
+            raise ValueError('variable lock needs a supported primitive fingerprint')
+        if typename not in _EDITABLE_TYPES:
             raise ValueError('variable lock needs a supported primitive fingerprint')
         new_size = self._size(
             entry['_key'], entry['_display_key'], expected, typename)
