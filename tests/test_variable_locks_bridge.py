@@ -148,7 +148,34 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.assertEqual(retry[0], 200)
         self.assertEqual(self.store.score, 2)
 
+    def test_unrelated_edit_undo_and_redo_preserve_locks(self):
+        nested_path = [['attribute', 'profile'], ['key', 'hp']]
+        nested = self.target(nested_path)
+        self.assertTrue(nested['editable'])
+        self.assertEqual(self.lock('lock', nested, nested_path)[0], 200)
+        score = self.target()
+        status, edited = self.edit(score, 17)
+        self.assertEqual(status, 200)
+        self.assertTrue(self.bridge.variable_locks.is_locked(
+            'store', (('attribute', 'profile'), ('key', 'hp'))))
+        history = edited['edit_history']
+        undo = self.threaded('PUT', '/api/v1/edit-history', {
+            'action': 'undo', 'generation': history['generation'],
+            'entry_id': history['undo_entry_id'],
+        })
+        self.assertEqual(undo[0], 200)
+        self.assertTrue(self.bridge.variable_locks.is_locked(
+            'store', (('attribute', 'profile'), ('key', 'hp'))))
+        redo = self.threaded('PUT', '/api/v1/edit-history', {
+            'action': 'redo', 'generation': undo[1]['generation'],
+            'entry_id': undo[1]['edit_history']['redo_entry_id'],
+        })
+        self.assertEqual(redo[0], 200)
+        self.assertTrue(self.bridge.variable_locks.is_locked(
+            'store', (('attribute', 'profile'), ('key', 'hp'))))
+
     def test_lock_does_not_intercept_game_script_mutations(self):
+
         target = self.target()
         self.assertEqual(self.lock('lock', target)[0], 200)
         # A normal game script assignment is outside the inspector lock system.
