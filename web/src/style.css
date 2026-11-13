@@ -321,3 +321,32 @@ html, body { overscroll-behavior: none; }
 .variable-lock-indicator.is-stale { color:#ed8b54; }
 .detail-lock-controls { margin:10px 0 6px; }
 .detail-lock-note { display:block;font-size:11px;line-height:1.5;margin-bottom:8px; }
+
+
+/* PR #33: a dedicated, bounded workspace for session-only Store locks. */
+.locked-workspace { display:flex;flex:1 1 auto;flex-direction:column;gap:11px;
+  min-width:0;min-height:0;overflow:auto;padding:14px 18px 22px; }
+.locked-toolbar { display:flex;align-items:center;justify-content:space-between;
+  gap:10px;flex-wrap:wrap; }
+.locked-summary { display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0; }
+.locked-summary .ant-typography { font-size:11px; }
+.locked-filter { max-width:380px; }
+.locked-list { display:flex;flex-direction:column;gap:8px;min-width:0; }
+.locked-entry { display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;min-width:0;padding:11px 12px;border:1px solid #2b3c52;
+  border-radius:7px;background:#111d2d; }
+.locked-entry-main { display:flex;flex:1 1 auto;flex-direction:column;gap:5px;min-width:0; }
+.locked-entry-title { display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0; }
+.locked-entry-icon { flex:0 0 auto;color:#e3bd73;font-size:12px; }
+.locked-entry-path { min-width:0;overflow-wrap:anywhere;
+  color:#e0ebf9;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.locked-entry-meta,.locked-entry-stale { display:block;font-size:11px;line-height:1.5; }
+.locked-entry-actions { flex:0 0 auto;align-self:center; }
+.locked-empty { padding:38px 14px;text-align:center; }
+@media (max-width:680px) {
+  .locked-workspace { padding:10px 10px 18px; }
+  .locked-entry { flex-direction:column; }
+  .locked-entry-actions { width:100%;align-self:stretch; }
+  .locked-entry-actions .ant-btn { flex:1 1 auto; }
+  .locked-filter { max-width:none; }
+}

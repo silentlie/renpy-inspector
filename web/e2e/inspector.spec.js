@@ -47,6 +47,7 @@ test('primitive writes are disabled on the unconfigured bridge', async ({ page, 
   expect(snapshot.capabilities.primitive_edits).toBe(false);
   expect(snapshot.locks.entries).toHaveLength(0);
   await expect(page.getByRole('tab', { name: /Edits \(/ })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /Locked \(/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Inspect score' }).click();
   await expect(page.getByRole('button', { name: 'Open primitive editor' })).toHaveCount(0);
   const disabledWrite = await page.request.put(game.origin + '/api/v1/edit', {
@@ -822,4 +823,65 @@ test('read-only set membership rejects made-up members and executable paths', as
   });
   expect((await page.request.get(endpoint + hostile, { headers })).status()).toBe(400);
   expect((await page.request.post(endpoint + valid, { headers })).status()).toBe(405);
+});
+
+
+test('locked variables workspace lists, refreshes and releases active locks', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const headers = { 'X-Inspector-Token': game.token };
+    const createLock = async (path) => {
+      const params = new URLSearchParams({
+        scope: 'store', path: JSON.stringify(path),
+      });
+      const targetResponse = await page.request.get(
+        game.origin + '/api/v1/edit-target?' + params, { headers });
+      expect(targetResponse.ok()).toBeTruthy();
+      const target = await targetResponse.json();
+      expect(target.editable).toBe(true);
+      const response = await page.request.put(game.origin + '/api/v1/locks', {
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        data: { action: 'lock', scope: 'store', path, generation: target.generation },
+      });
+      expect(response.status()).toBe(200);
+    };
+
+    await createLock([['attribute', 'score']]);
+    await createLock([['attribute', 'player_stats'], ['key', 'hp']]);
+    await createLock([['attribute', 'memo']]);
+
+    const lockedTab = page.getByRole('tab', { name: /Locked \\(3\\)/ });
+    await expect(lockedTab).toBeVisible({ timeout: 10000 });
+    await lockedTab.click();
+    const workspace = page.getByRole('region', { name: 'Locked variables workspace' });
+    await expect(workspace.getByText('store.score', { exact: true })).toBeVisible();
+    await expect(workspace.getByText('store.player_stats["hp"]', { exact: true })).toBeVisible();
+    await expect(workspace).toContainText('Baseline type: int');
+
+    await game.command('set_score', { value: 9 });
+    const scoreEntry = workspace.locator('.locked-entry').filter({ hasText: 'store.score' });
+    await expect(scoreEntry.getByText('Stale', { exact: true })).toBeVisible({ timeout: 12000 });
+    await scoreEntry.getByRole('button', { name: 'Refresh lock store.score' }).click();
+    await expect(scoreEntry.getByText('Active', { exact: true })).toBeVisible();
+    await expect(workspace).toContainText('Lock refreshed against the current game value: store.score');
+
+    const playerEntry = workspace.locator('.locked-entry')
+      .filter({ hasText: 'store.player_stats["hp"]' });
+    await playerEntry.getByRole('button', {
+      name: 'Unlock store.player_stats["hp"]',
+    }).click();
+    await expect(page.getByRole('tab', { name: /Locked \\(2\\)/ })).toBeVisible();
+
+    await workspace.getByRole('button', { name: 'Unlock all variables' }).click();
+    await page.getByRole('button', { name: 'Unlock all' }).click();
+    await expect(page.getByRole('tab', { name: /Locked \\(0\\)/ })).toBeVisible();
+    await expect(workspace.getByText(
+      'No locked variables. Lock an eligible Store primitive from its details drawer.',
+    )).toBeVisible();
+    const latest = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json();
+    expect(latest.locks.entries).toHaveLength(0);
+  } finally { await game.stop(); }
 });

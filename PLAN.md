@@ -2,10 +2,31 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #32 — Edit Safety & State Consistency (v0.7.14 experimental)
+## Milestone: PR #33 — Locked Variables workspace (v0.7.15 experimental)
 
-- Build on PR #29-31's trusted opt-in, compare-and-swap writes, bounded edit
-  history and exact-path locks. Editing and locks remain disabled by default.
+- Add a dedicated **Locked** scope beside Store, Persistent, Favourites and
+  Compare, visible only while trusted game init enables primitive editing.
+- List all active session locks, including stale locks, with exact typed path,
+  baseline built-in type, lock timestamp and stale reason. Do not expose or
+  retain the raw baseline value; the backend intentionally stores only its
+  fingerprint and type.
+- Provide per-entry Inspect, Unlock and stale-only Refresh actions. Use the
+  existing authenticated PUT /api/v1/locks endpoint with the current game
+  generation; keep all reads and lock mutations on the Ren'Py interaction
+  thread. A stale target that is no longer eligible remains unlockable.
+- Provide **Unlock all** with explicit confirmation. Process each lock
+  sequentially through the existing endpoint rather than adding a bulk bypass
+  or increasing the bridge queue budget. Show progress and stop on the first
+  generation/queue conflict.
+- Preserve the established contract: locks block only Inspector Edit/Undo/Redo,
+  never intercept game scripts, remain session-only and bounded to 128 paths /
+  32 KiB, and reset on lifecycle invalidation or editing disablement.
+- Add browser/bridge E2E coverage for capability gating, path/type display,
+  stale refresh, individual unlock and confirmed Unlock all. Retain Python 2/3,
+  SDK lint, browser build, dual-engine package and real-engine CI coverage.
+
+## Previous milestone: PR #32 — Edit Safety & State Consistency (v0.7.14 experimental)
+
 - Bind each lock to the exact supported primitive fingerprint and built-in type
   captured when it is created. Never retain game objects or raw game values.
 - Monitor locked paths on the Ren'Py interaction thread. Check at most eight
