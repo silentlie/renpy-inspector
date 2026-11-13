@@ -286,3 +286,15 @@ interaction thread. Browser E2E covers the separate Edits tab, per-operation
 confirmation, Undo/Redo round trips and redo-branch discard. Runtime history
 labels explicit edit/undo/redo invalidations without calling them Ren'Py
 rollback events or reconstructed turns.
+
+
+## Variable lock validation (PR #31, v0.7.13)
+
+Python 2/3 tests cover strict typed-path payload validation, Unicode paths,
+idempotent lock/unlock, the 128-path / 32 KiB retention budget and lifecycle
+resets. HTTP tests verify pairing-token and Origin/Host enforcement, game-thread
+queue ownership, lock rejection for inspector edits and Undo/Redo (HTTP 423),
+and that normal game-script assignments remain unaffected. Browser E2E covers
+the contextual lock/unlock controls, tree padlock state and unchanged game
+generation. Real Ren'Py 7/8 E2E confirms default-deny behavior and packaging
+includes the lock manager in both closed-manifest engine installers.
