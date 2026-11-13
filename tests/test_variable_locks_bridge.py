@@ -168,10 +168,7 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.assertEqual(cached['locks']['entries'], [])
         self.assertFalse(self.bridge.variable_locks.is_locked(
             'store', (('attribute', 'score'),)))
-        stale_unlock = self.request('PUT', '/api/v1/locks', {
-            'action': 'unlock', 'scope': 'store',
-            'path': [['attribute', 'score']], 'generation': target['generation'],
-        })
+        stale_unlock = self.lock('unlock', target)
         self.assertEqual(stale_unlock[0], 409)
 
         fresh = self.target()
@@ -199,8 +196,7 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/api/v1/locks', payload)[0], 405)
         self.assertEqual(self.request('PUT', '/api/v1/locks', dict(payload, action='execute'))[0], 400)
         self.assertEqual(self.request('PUT', '/api/v1/locks', dict(payload, extra='x'))[0], 400)
-        self.assertEqual(self.request('PUT', '/api/v1/locks', payload,
-                                      token=self.bridge.token)[0], 429 if len(self.bridge.pending_pages) >= 8 else 200)
+        self.assertEqual(self.threaded('PUT', '/api/v1/locks', payload)[0], 200)
 
 
 if __name__ == '__main__':
