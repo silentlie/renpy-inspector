@@ -622,13 +622,14 @@ class InspectorBridge(object):
                         status, result = 403, {'error': 'Primitive editing disabled'}
                     elif job['kind'] == 'edit_target':
                         result = inspect_edit_target(self.inspector._providers, *job['args'])
+                        previous_lock_revision = self.variable_locks.revision
                         lock_state = self.variable_locks.observe(
                             job['args'][0], job['args'][1], result, time.time())
                         result['locked'] = lock_state['locked']
                         result['lock_stale'] = lock_state['stale']
                         result['lock_stale_reason'] = lock_state['stale_reason']
                         result['lock_revision'] = self.variable_locks.revision
-                        if lock_state['stale']:
+                        if self.variable_locks.revision != previous_lock_revision:
                             self._publish_lock_metadata()
                         result['captured_at'] = time.time()
                         status = 200
