@@ -24,3 +24,11 @@ test('bounded timeline renders newest first without manufacturing interactions',
   assert.equal(filteredRuntimeEvents({ events: [invalidation] }, 'restoration').length, 0);
   assert.equal(filteredRuntimeEvents({ events: [invalidation] }, 'invalidation').length, 1);
 });
+
+
+test('explicit primitive edit invalidation is not presented as a rollback callback', () => {
+  const event = { kind: 'invalidation', signal: 'edit', generation: 4, captured_at: 1 };
+  const label = runtimeEventDescription(event);
+  assert.equal(label.title, 'Confirmed inspector edit');
+  assert.match(label.note, /not a rollback/i);
+});
