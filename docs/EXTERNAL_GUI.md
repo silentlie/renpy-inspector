@@ -1,5 +1,14 @@
 # External Ant Design workspace
 
+**PR #29 Variable Editing MVP (v0.7.11).** Read-only by default. A trusted game
+init script can call `renpy_inspector.bridge.configure_variable_editing(True)`.
+The browser then exposes a contextual, confirmation-gated primitive editor for
+existing Store fields and plain dict/list entries only. Each write validates
+generation, exact previous-value fingerprint and unchanged built-in type before
+the interaction-thread mutation. Persistent/custom/immutable targets and all
+Python evaluation remain forbidden. No Undo/Redo, locks or edit log yet.
+See [README opt-in instructions](../README.md#optional-store-primitive-editing-pr-29).
+
 **PR #28 Better Value Rendering (v0.7.10).** Source excerpts in Scripts have escaped, browser-only Python/Ren'Py token colours; variable previews and on-demand values show explanatory type categories without interpreting game text as code. Runtime/Compare/detail source links are based on verified game-relative .rpy locations and never jump game execution. A sampled file:line is observation, not proven variable mutation causation.
 
 **PR #27 Runtime & Rollback History (v0.7.9).** The dedicated Runtime tab displays bounded, in-memory script-location observations, after-load/default callback signals, and the optional sampled rollback indicator. A default callback alone does not prove a rollback, and no SugarCube turns or exact dialogue interaction history are invented. This uses the existing authenticated snapshots, with no new game-state writes or polling.
@@ -9,7 +18,7 @@
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #27](https://github.com/silentlie/renpy-inspector/pull/27) once CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #29](https://github.com/silentlie/renpy-inspector/pull/29) after CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
@@ -26,19 +35,19 @@
 6. Press **F8** again to reopen the existing session. No native drawer, Settings screen or Inspector tab is shown.
 7. To stop the local server, exit the game. Closing the browser does not stop the service.
 
-A short in-game error notification may appear if static assets are missing or the system cannot open a browser. The read-only local service never starts automatically at game init.
+A short in-game error notification may appear if static assets are missing or the system cannot open a browser. The default read-only local service never starts automatically at game init.
 
 ## Browser interaction
 
 The browser has top-level **Overview / Variables / Scripts / Runtime** tabs, nested **Store / Persistent / Favourites** scopes, a virtual tree, a popover search, details drawers and browser-local favourites. The tree occupies the available viewport, without permanent header or footer. Search via the icon or `/`; type at least two characters. Global name/path results are shown only in the popup and include bounded previews. Enter reveals the first result, or click a hit to materialise its verified ancestor chain, expand the path and scroll to it in the virtualised Store/Persistent tree. Escape closes search. No permanent search bar is added.
 
-On branch expansion, the browser requests its first **80** children over the authenticated GET-only API. As the virtualised list scrolls and its pagination sentinel enters the viewport, it requests the next 80 automatically. The tree renders only visible rows, even if hundreds of nodes have been loaded. A retry control appears only after a failed page request. The connection state, capture timestamp, coverage warning, and read-only status live in **Overview**; there is no manual refresh button.
+On branch expansion, the browser requests its first **80** children over the authenticated GET-only API. As the virtualised list scrolls and its pagination sentinel enters the viewport, it requests the next 80 automatically. The tree renders only visible rows, even if hundreds of nodes have been loaded. A retry control appears only after a failed page request. The connection state, capture timestamp, coverage warning, and write capability status live in **Overview**; there is no manual refresh button.
 
 ## Security and resource limits
 
 - The server binds only to `127.0.0.1` on an OS-selected port, uses a **new 256-bit token when first started**, and validates Host/Origin headers. Do not share pairing URLs.
 - The browser authenticates `GET /api/v1/snapshot`, `GET /api/v1/children`, `GET /api/v1/search` and `GET /api/v1/reveal` using the token header. The paging request sends typed JSON path segments, scope, offset and size as URL-encoded query fields. POST and unknown routes are rejected. The token lives in a URL fragment, not an HTTP path.
-- Game values are inspected **only on the Ren'Py interaction thread**. HTTP workers validate and queue primitive requests; the game timer resolves at most two per 250ms tick and serialises responses before the HTTP worker returns them. Nothing executes user-supplied Python expressions or writes game state.
+- Game values are inspected **only on the Ren'Py interaction thread**. HTTP workers validate and queue primitive requests; the game timer resolves at most two per 250ms tick and serialises responses before the HTTP worker returns them. Without trusted game init opt-in, nothing writes game state; even with it, only confirmed, same-type Store primitives can change through the interaction-thread queue. No user-supplied Python expression is evaluated.
 - Initial captures include shallow root pages only. Children are fetched on demand, **80 per request**, capped at **1,000 entries per branch**, **eight path levels** and **6,000 browser-loaded nodes**. HTTP response size is capped at **256 KiB** and the page-request queue holds at most eight jobs. The timer refreshes shallow roots about every 1.5 seconds. Overlay suppression may pause all requests.
 - Browser-local favourites are separate from native legacy favourites, can expire with a local-origin port change, and are not gameplay saves.
 - No telemetry or remote network server. The HTML/JS/CSS assets load from the localhost service.
