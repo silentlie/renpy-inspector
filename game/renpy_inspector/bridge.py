@@ -742,7 +742,15 @@ class InspectorBridge(object):
                     scope, path = job['args'][0], job['args'][1]
                     result['current_target'] = inspect_edit_target(
                         self.inspector._providers, scope, path)
-                    result['current_target']['generation'] = self.generation
+                    lock_state = self.variable_locks.state(scope, path)
+                    result['current_target'].update({
+                        'generation': self.generation,
+                        'locked': lock_state['locked'],
+                        'lock_stale': lock_state['stale'],
+                        'lock_stale_reason': lock_state['stale_reason'],
+                        'lock_revision': self.variable_locks.revision,
+                    })
+                    result['locks'] = self.variable_locks.snapshot()
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
                 if job['kind'] == 'edit_history':
