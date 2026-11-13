@@ -44,6 +44,21 @@ class PrimitiveEditPython2Tests(unittest.TestCase):
         self.assertIs(self.root.flags['enabled'], False)
         self.assertEqual(self.root.flags['inventory'][1], 99)
 
+    def test_signed_zero_float_edits_preserve_the_ieee_sign(self):
+        self.root.decimal = 0.0
+        path = (('attribute', 'decimal'),)
+        target = inspect_edit_target(self.providers, 'store', path)
+        self.assertTrue(target['editable'])
+        self.assertTrue(apply_primitive_edit(
+            self.providers, 'store', path, target['expected'],
+            target['type'], '-0.0')['applied'])
+        self.assertEqual(repr(self.root.decimal), '-0.0')
+        target = inspect_edit_target(self.providers, 'store', path)
+        self.assertTrue(apply_primitive_edit(
+            self.providers, 'store', path, target['expected'],
+            target['type'], '0.0')['applied'])
+        self.assertEqual(repr(self.root.decimal), '0.0')
+
     def test_byte_strings_are_not_silently_converted_or_editable(self):
         result = inspect_edit_target(
             self.providers, 'store', (('attribute', 'utf8_bytes'),))
