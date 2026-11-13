@@ -64,12 +64,14 @@ def main():
         store.frozen_flags = frozenset(['blue', 'red'])
         store.mixed_set = set(['visible', object()])
         persistent = {'test_flag': True}
+        runtime_line = {'line': 1}
         controller = Inspector()
         controller.bind(
             lambda: store, lambda: persistent,
             context_provider=lambda: {
                 'game': 'Playwright Fixture', 'version': '8.5.3 (synthetic)',
-                'filename': 'game/script.rpy', 'line': 1,
+                'filename': 'game/script.rpy', 'line': runtime_line['line'],
+                'rollback_active': False,
             })
         bridge = InspectorBridge(controller, str(ROOT / 'web' / 'dist'))
         bridge.configure_favourites_directory(temp)
@@ -113,6 +115,9 @@ def main():
                         break
                     if action == 'set_score':
                         store.score = int(command['value'])
+                    elif action == 'set_runtime_line':
+                        runtime_line['line'] = max(1, min(10000, int(command['line'])))
+                        bridge.publish()
                     elif action == 'change_memo':
                         store.memo = 'A' * 110 + str(command['value'])
                     elif action == 'remove_set_member':

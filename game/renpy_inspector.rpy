@@ -13,9 +13,10 @@ init -100 python:
 
     # after_load covers explicit save loads. after_default also runs after
     # rollback (and at startup); invalidate before the next browser capture.
-    # Both use the same cache-only callback. No gameplay values are written.
-    if renpy_inspector.reset_lifecycle not in config.after_load_callbacks:
-        config.after_load_callbacks.append(renpy_inspector.reset_lifecycle)
+    # Separate wrappers preserve callback provenance, not a guessed cause.
+    # No gameplay values are written.
+    if renpy_inspector.after_load_lifecycle not in config.after_load_callbacks:
+        config.after_load_callbacks.append(renpy_inspector.after_load_lifecycle)
     # Ren'Py 7.4's config proxy throws Exception (not AttributeError)
     # for unknown config names; avoid an unsafe getattr(..., default).
     try:
@@ -23,8 +24,8 @@ init -100 python:
     except Exception:
         defaults_callbacks = None
     if defaults_callbacks is not None:
-        if renpy_inspector.reset_lifecycle not in defaults_callbacks:
-            defaults_callbacks.append(renpy_inspector.reset_lifecycle)
+        if renpy_inspector.after_default_lifecycle not in defaults_callbacks:
+            defaults_callbacks.append(renpy_inspector.after_default_lifecycle)
     else:
         # Older engines lack after_default_callbacks. At the next interaction
         # check their public in_rollback() flag, if exposed. The legacy

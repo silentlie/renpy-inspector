@@ -19,14 +19,24 @@ def install(store_provider, persistent_provider, restart_interaction, savedir=No
     bridge.configure_favourites_directory(savedir)
 
 
-def reset_lifecycle():
+def reset_lifecycle(reason='unspecified'):
     """Invalidate read-only caches after load or default-state restoration.
 
     Ren'Py runs after_default_callbacks following rollback as well as during
     startup/load. These callbacks never change gameplay variables or saves.
     """
     inspector.reset()
-    bridge.invalidate()
+    bridge.invalidate(reason=reason)
+
+
+def after_load_lifecycle():
+    """A save-load callback ran; its exact slot is not inferred."""
+    reset_lifecycle('after_load')
+
+
+def after_default_lifecycle():
+    """Default restoration: rollback, startup or load are possible."""
+    reset_lifecycle('after_default')
 
 
 def observe_legacy_rollback(renpy_api):
@@ -34,15 +44,19 @@ def observe_legacy_rollback(renpy_api):
 
     The modern after-default callback handles rollback directly. Ren'Py 7.4
     may not expose it, so consult in_rollback() on new interactions instead.
-    Repeated invalidations in rollback replay are safe; missing APIs are not
-    guessed or silently replaced by gameplay writes.
+    A sustained true indicator is one observed phase, not an event on every
+    interaction. Missing APIs are not replaced by gameplay writes.
     """
     try:
         rolling = renpy_api.in_rollback()
     except Exception:
         return
-    if rolling:
-        reset_lifecycle()
+    if type(rolling) is not bool:
+        return
+    was_rolling = bridge._legacy_rollback_active
+    bridge._legacy_rollback_active = rolling
+    if rolling and not was_rolling:
+        reset_lifecycle('legacy_rollback')
 
 
 def register_named_store(name, provider):

@@ -34,6 +34,7 @@ from .bridge_scripts import (list_labels, source_excerpt, search_source_text,
 from .browser_favourites import (BrowserFavouritesStore,
                                  MAX_PREFERENCE_BYTES, validate_favourites)
 from .compat import monotonic_time
+from .runtime_history import RuntimeTimeline
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -273,6 +274,8 @@ class InspectorBridge(object):
         self.script_game_dir = None
         self.error = ''
         self.generation = 0
+        self.runtime_history = RuntimeTimeline()
+        self._legacy_rollback_active = False
         self.pending_pages = []
         self.last_publish = 0.0
         # Primitive counters only. Diagnostics never retain inspected objects.
@@ -284,7 +287,8 @@ class InspectorBridge(object):
         self.cached_bytes = encode_snapshot({'protocol': PROTOCOL, 'generation': 0, 'captured_at': None,
                                              'scopes': {'store': [], 'persistent': []},
                                              'counts': {}, 'truncated': {},
-                                             'root_pages': {}, 'game': {}})
+                                             'root_pages': {}, 'game': {},
+                                             'runtime': self.runtime_history.snapshot()})
 
     def configure_game_directory(self, directory):
         """Use Ren'Py's actual game/ location, not an import cache path.
@@ -336,6 +340,8 @@ class InspectorBridge(object):
             self.thread.daemon = True
             self.thread.start()
             self.error = ''
+            self.runtime_history = RuntimeTimeline()
+            self._legacy_rollback_active = False
             self.publish()
         except (IOError, OSError, RuntimeError) as exc:
             self.error = 'External UI unavailable: ' + type(exc).__name__
@@ -472,10 +478,12 @@ class InspectorBridge(object):
         if monotonic_time() - self.last_publish >= 1.5:
             self.publish()
 
-    def invalidate(self):
-        """Discard pages and old snapshots after save-load or session reset."""
+    def invalidate(self, reason='unspecified'):
+        """Invalidate caches; retain bounded, evidence-labelled callback history."""
         with self.lock:
             self.generation += 1
+            if self.running:
+                self.runtime_history.restoration(reason, self.generation, time.time())
             # Queue diagnostics reflect the current game-state epoch.
             self.queue_peak = 0
             self.queue_rejected = 0
@@ -496,7 +504,8 @@ class InspectorBridge(object):
                 'captured_at': None,
                 'scopes': {'store': [], 'persistent': []},
                 'counts': {}, 'truncated': {},
-                'root_pages': {}, 'game': {}})
+                'root_pages': {}, 'game': {},
+                'runtime': self.runtime_history.snapshot()})
 
     def publish(self):
         """Read game values ONLY on the Ren'Py interaction thread."""
@@ -510,6 +519,8 @@ class InspectorBridge(object):
             scan_ms = round(max(0.0, monotonic_time() - started) * 1000.0, 2)
             with self.lock:
                 data['generation'] = self.generation
+                self.runtime_history.observe(info, self.generation, data['captured_at'])
+                data['runtime'] = self.runtime_history.snapshot()
                 # A snapshot of the queue, not exact real-time HTTP latency.
                 # root_scan_ms excludes JSON encoding and HTTP transfer.
                 data['diagnostics'] = {

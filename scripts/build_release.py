@@ -18,6 +18,7 @@ REQUIRED_FILES = (
     'game/renpy_inspector/settings.py',
     'game/renpy_inspector/search.py',
     'game/renpy_inspector/runtime.py',
+    'game/renpy_inspector/runtime_history.py',
     'game/renpy_inspector/compat.py',
     'game/renpy_inspector/bridge.py',
     'game/renpy_inspector/bridge_snapshot.py',

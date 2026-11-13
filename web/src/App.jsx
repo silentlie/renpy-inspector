@@ -21,6 +21,7 @@ import {
 import { createChangeTracker, comparisonText, filterChanges } from './comparison.js';
 import { classifyGeneration } from './lifecycle.js';
 import ScriptPane from './ScriptPane.jsx';
+import RuntimePane from './RuntimePane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
 import { parseExactPath } from './exact-path.js';
 
@@ -829,7 +830,7 @@ export default function App() {
   } }}>
     <div className="inspector-shell">
       <Tabs className="main-navigation" activeKey={section} onChange={setSection}
-        items={[{ key: 'overview', label: 'Overview' }, { key: 'variables', label: 'Variables' }, { key: 'scripts', label: 'Scripts' }]} />
+        items={[{ key: 'overview', label: 'Overview' }, { key: 'variables', label: 'Variables' }, { key: 'scripts', label: 'Scripts' }, { key: 'runtime', label: 'Runtime' }]} />
       <main className="inspector-main">
         {section === 'variables' && <div className="variables-workspace">
           <Tabs className="variable-scope-tabs" activeKey={scope}
@@ -934,7 +935,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.8 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.9 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -968,6 +969,7 @@ export default function App() {
             ]} />
           </Card>
         </section>}
+        {section === 'runtime' && <RuntimePane snapshot={snapshot} />}
         {section === 'scripts' && <ScriptPane token={token} bridge={bridge}
           activeGame={activeGame} generation={treePages?.generation}
           findRequest={findRequest} />}
