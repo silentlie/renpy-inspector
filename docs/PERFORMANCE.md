@@ -28,7 +28,8 @@ also publishes bounded, primitive-only `diagnostics`:
 
 | Field | Interpretation |
 | --- | --- |
-| `root_scan_ms` | Wall-clock time to collect the last shallow game-thread snapshot, excluding JSON encoding, network transfer and browser rendering |
+| `root_scan_ms` | Wall-clock time to collect the last shallow game-thread snapshot, excluding bounded lock checks, JSON encoding, network transfer and browser rendering |
+| `lock_checks` / `lock_check_ms` | At most eight rotating exact-path checks per snapshot publish and their separate game-thread cost; not included in `root_scan_ms` |
 | `queue_pending` | Jobs waiting **at the time of the last snapshot**; it is not a continuously updated queue graph |
 | `queue_capacity` | Eight queued jobs, not total running HTTP threads |
 | `queue_peak` | Maximum queued jobs observed in the current game-state generation |
