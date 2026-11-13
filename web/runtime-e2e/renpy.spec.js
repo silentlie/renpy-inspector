@@ -255,6 +255,8 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect(runtimeSourceMatch).toBeVisible({ timeout: 12000 });
     await runtimeSourceMatch.click();
     await expect(page.locator('.script-source-heading')).toContainText('script.rpy:');
+    await expect(page.locator('.script-source-lines .source-token-keyword').first()).toBeVisible();
+    // Syntax colouring is presentation only. Source and game state remain read-only.
     await page.getByRole('tab', { name: 'Variables' }).click();
     // Exercise direct typed-path lookup through the production browser and
     // actual Ren'Py SDK, not merely the synthetic bridge fixture.
