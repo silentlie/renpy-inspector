@@ -83,8 +83,8 @@ class LifecycleTests(unittest.TestCase):
     def test_integration_registers_both_load_and_rollback_safe_hooks(self):
         script = Path(__file__).resolve().parents[1] / 'game' / 'renpy_inspector.rpy'
         content = script.read_text(encoding='utf-8')
-        self.assertIn('config.after_load_callbacks.append(renpy_inspector.reset_lifecycle)', content)
-        self.assertIn('defaults_callbacks.append(renpy_inspector.reset_lifecycle)', content)
+        self.assertIn('config.after_load_callbacks.append(renpy_inspector.after_load_lifecycle)', content)
+        self.assertIn('defaults_callbacks.append(renpy_inspector.after_default_lifecycle)', content)
         self.assertNotIn('config.after_load_callbacks.append(renpy_inspector.bridge.invalidate)', content)
 
 
