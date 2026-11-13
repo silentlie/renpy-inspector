@@ -25,6 +25,16 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
         self.assertTrue(locks.unlock('store', path))
         self.assertFalse(locks.is_locked('store', path))
 
+    def test_python_dictionary_boolean_integer_aliases_share_lock_identity(self):
+        locks = VariableLocks()
+        bool_path = (('attribute', u'flags'), ('key', True))
+        int_path = (('attribute', u'flags'), ('key', 1))
+        self.assertTrue(locks.lock('store', bool_path, 1.0))
+        self.assertTrue(locks.is_locked('store', int_path))
+        self.assertFalse(locks.lock('store', int_path, 2.0))
+        self.assertTrue(locks.unlock('store', int_path))
+        self.assertFalse(locks.is_locked('store', bool_path))
+
     def test_strict_generation_and_action_validation(self):
         payload = {'action': u'lock', 'scope': u'store',
                    'path': [['attribute', u'score']], 'generation': 3}
