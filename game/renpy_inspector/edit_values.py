@@ -18,7 +18,7 @@ import re
 from types import ModuleType
 
 from .bridge_paging import MAX_BRANCH, validate_tree_request
-from .compat import text_type
+from .compat import text_type, integer_types
 from .inspection import MISSING, child_descriptors, read_child
 
 MAX_EDIT_TEXT = 1024
@@ -79,7 +79,7 @@ def _scalar(value):
         return None
     if kind is bool:
         return 'bool', 'True' if value else 'False'
-    if kind is int or kind.__name__ == 'long' and kind.__module__ == '__builtin__':
+    if kind in integer_types:
         if value.bit_length() <= MAX_EDIT_INTEGER_BITS:
             return kind.__name__, str(value)
         return None
@@ -98,12 +98,12 @@ def _target(providers, scope, path):
     if scope != 'store':
         raise EditUnsupported('Only Store variables can be edited')
     owner = providers['store']()
-    if type(owner) is not ModuleType:
+    if not isinstance(owner, ModuleType):
         raise EditUnsupported('Store provider is not a plain module')
     for depth, segment in enumerate(path):
         kind, key = segment
         # All intermediates must be built-in containers or the trusted module.
-        if type(owner) is ModuleType:
+        if isinstance(owner, ModuleType):
             if depth != 0 or kind != 'attribute':
                 raise EditUnsupported('Only direct Store module fields are allowed')
         elif type(owner) is dict:
@@ -198,8 +198,9 @@ def apply_primitive_edit(providers, scope, path, expected, typename, text):
     if candidate == current:
         raise ValueError('No change to apply')
     last_kind, key = segment
-    if type(owner) is ModuleType and last_kind == 'attribute':
-        dict.__setitem__(vars(owner), key, candidate)
+    if isinstance(owner, ModuleType) and last_kind == 'attribute':
+        fields = ModuleType.__getattribute__(owner, '__dict__')
+        dict.__setitem__(fields, key, candidate)
     elif type(owner) is dict and last_kind == 'key':
         dict.__setitem__(owner, key, candidate)
     elif type(owner) is list and last_kind == 'index':
