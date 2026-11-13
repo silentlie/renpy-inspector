@@ -84,7 +84,7 @@ class VariableLocks(object):
         # fingerprint, type and mutable status metadata.
         return (3 * max(len(key.encode('utf-8')),
                         len(display_key.encode('utf-8'))) +
-                len(expected) + len(typename.encode('utf-8')) + 96)
+                len(expected) + len(typename.encode('utf-8')) + 80)
 
     def _event(self, action, entry=None, reason=None, at=None):
         self.revision += 1
