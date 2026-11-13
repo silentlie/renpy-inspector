@@ -5,11 +5,12 @@
  * Dot access identifies an object/module attribute. Quoted bracket access
  * identifies a dictionary key; numeric brackets identify a list index.
  * Numeric dictionary keys use [key:42] to avoid ambiguity with list indices.
+ * Value-identified set/frozenset members use {"text"}, {42}, {True}, {None}.
  * Only store and persistent are supported (no SugarCube $/_ aliases).
  */
 import { decodeTreeKey } from './tree.js';
 
-const SCOPE = /^(store|persistent)(?=\.|\[|$)/;
+const SCOPE = /^(store|persistent)(?=\.|\[|\{|$)/;
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*/;
 const MAX_LENGTH = 2048;
 const MAX_SEGMENTS = 8;
@@ -87,47 +88,54 @@ export function parseExactPath(query) {
       if (name.length > MAX_KEY_LENGTH) return invalid('Attribute name is too long (256 characters max).');
       segments.push(['attribute', name]);
       pos += name.length;
-    } else if (char === '[') {
+    } else if (char === '[' || char === '{') {
+      // Square brackets address array indexes/dictionary keys; curly braces
+      // address a value-identified set member. Never use iteration positions.
+      const member = char === '{';
+      const closing = member ? '}' : ']';
       pos++;
       let kind, value;
       if (input[pos] === '"' || input[pos] === "'") {
         const quoted = quoteValue(input, pos);
         if (quoted.error) return invalid(quoted.error);
         value = quoted.value;
-        kind = segments.length === 0 && scope === 'store' ? 'attribute' : 'key';
+        kind = member ? 'member' :
+          segments.length === 0 && scope === 'store' ? 'attribute' : 'key';
         pos = quoted.end;
       } else {
-        const end = input.indexOf(']', pos);
-        if (end === -1) return invalid('Missing closing "]".');
+        const end = input.indexOf(closing, pos);
+        if (end === -1) return invalid('Missing closing "' + closing + '".');
         const literal = input.slice(pos, end).trim();
-        const explicitKey = literal.startsWith('key:');
+        const explicitKey = !member && literal.startsWith('key:');
         const token = explicitKey ? literal.slice(4) : literal;
         if (token === 'True' || token === 'False' || token === 'None') {
           value = token === 'None' ? null : token === 'True';
-          kind = 'key';
+          kind = member ? 'member' : 'key';
         } else if (INT_LITERAL.test(token) &&
-          (explicitKey || INDEX_LITERAL.test(token))) {
+          (member || explicitKey || INDEX_LITERAL.test(token))) {
           value = Number(token);
-          if (!Number.isSafeInteger(value) || (!explicitKey && value > 1000000)) {
-            return invalid('Index must be between 0 and 1,000,000; keys must be safe integers.');
+          if (!Number.isSafeInteger(value) || (!member && !explicitKey && value > 1000000)) {
+            return invalid('Index must be between 0 and 1,000,000; keys and members must be safe integers.');
           }
-          kind = explicitKey ? 'key' : 'index';
+          kind = member ? 'member' : explicitKey ? 'key' : 'index';
         } else {
-          return invalid('Use ["key"], [0], [True], [None] or [key:42]. Expressions are not supported.');
+          return invalid(member
+            ? 'Use {"member"}, {42}, {True} or {None}. Expressions are not supported.'
+            : 'Use ["key"], [0], [True], [None] or [key:42]. Expressions are not supported.');
         }
         pos = end;
       }
-      if (input[pos] !== ']') return invalid('Expected "]" after the bracket value.');
+      if (input[pos] !== closing) return invalid('Expected "' + closing + '" after the value.');
       pos++;
       if (kind === 'attribute' && (!value || value.startsWith('_'))) {
         return invalid('The Store root must use a public attribute name.');
       }
       if (typeof value === 'string' && value.length > MAX_KEY_LENGTH) {
-        return invalid('Dictionary key is too long (256 characters max).');
+        return invalid('Dictionary key or set member is too long (256 characters max).');
       }
       segments.push([kind, value]);
     } else {
-      return invalid('Unexpected path syntax. Use .name or ["key"] or [0].');
+      return invalid('Unexpected path syntax. Use .name, ["key"], [0] or {"member"}.');
     }
   }
 

@@ -60,6 +60,9 @@ def main():
         store.player_stats[3] = 'numbered key'
         store.player_stats['snow ☃'] = 'unicode key'
         store.inventory = list(range(170))
+        store.set_flags = set(['open', 'closed', 42, True, None])
+        store.frozen_flags = frozenset(['blue', 'red'])
+        store.mixed_set = set(['visible', object()])
         persistent = {'test_flag': True}
         controller = Inspector()
         controller.bind(
@@ -112,6 +115,10 @@ def main():
                         store.score = int(command['value'])
                     elif action == 'change_memo':
                         store.memo = 'A' * 110 + str(command['value'])
+                    elif action == 'remove_set_member':
+                        store.set_flags.discard('open')
+                    elif action == 'restore_set_member':
+                        store.set_flags.add('open')
                         bridge.publish()
                     elif action == 'shrink_inventory':
                         store.inventory = list(range(12))
@@ -122,6 +129,9 @@ def main():
                     elif action == 'restore_game':
                         store.score = 2
                         store.memo = 'A' * 110 + 'before'
+                        store.set_flags = set(['open', 'closed', 42, True, None])
+                        store.frozen_flags = frozenset(['blue', 'red'])
+                        store.mixed_set = set(['visible', object()])
                         store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
                         store.inventory = list(range(170))
                         bridge.invalidate()

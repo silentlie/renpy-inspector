@@ -11,7 +11,7 @@ import time
 from .compat import integer_types, string_types, to_text, binary_type
 from .bridge_snapshot import MAX_TEXT, _safe_text
 from .favorites import encode_location, format_location
-from .inspection import MISSING, child_descriptors, read_child, snapshot
+from .inspection import MISSING, child_descriptors, read_child, snapshot, _safe_set_member
 
 MAX_BRANCH = 1000
 PAGE_SIZE = 80
@@ -85,6 +85,9 @@ def validate_tree_request(scope, raw_path, offset, size):
             if not (type(value) in integer_types + (bool, type(None)) or
                     isinstance(value, string_types)):
                 raise ValueError('invalid mapping key')
+        elif kind == 'member':
+            if not _safe_set_member(value):
+                raise ValueError('invalid set member')
         else:
             raise ValueError('invalid path type')
         path.append((kind, value))
@@ -148,8 +151,11 @@ def build_tree_page(providers, scope, path, offset, size):
                     compare_bytes += sample_bytes
         items.append(item)
     next_offset = offset + len(items)
-    more = next_offset < MAX_BRANCH and (next_offset < len(visible) or truncated)
-    capped = next_offset >= MAX_BRANCH and truncated
+    # A collection may include inaccessible/unsupported keys (e.g. objects
+    # in sets or dictionaries). Those are omitted and reported as capped,
+    # not offered as an endless "next page" with an unchanged cursor.
+    more = next_offset < MAX_BRANCH and next_offset < len(visible)
+    capped = bool(truncated and next_offset >= len(visible))
     return {
         'protocol': 1, 'scope': scope,
         'parent': json.dumps([scope, path], ensure_ascii=True, separators=(',', ':')),
@@ -232,7 +238,8 @@ def build_tree_value(providers, scope, path):
             value, is_cycle=is_cycle)
     last_kind, last_value = path[-1]
     name = last_value if last_kind == 'attribute' else (
-        '[{}]'.format(last_value) if last_kind == 'index' else repr(last_value))
+        '[{}]'.format(last_value) if last_kind == 'index' else
+        '{' + repr(last_value) + '}' if last_kind == 'member' else repr(last_value))
     node = {
         'key': json.dumps([scope, path], ensure_ascii=True, separators=(',', ':')),
         'name': _safe_text(name, 90),

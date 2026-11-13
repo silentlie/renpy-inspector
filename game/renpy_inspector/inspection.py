@@ -8,12 +8,38 @@ introspection, hostile extension types cannot be made completely safe.
 from __future__ import unicode_literals
 
 from itertools import islice
-from .compat import integer_types, string_types, iter_keys, fold_text, to_text
+from .compat import integer_types, string_types, iter_keys, fold_text, to_text, binary_type
 from types import ModuleType, FunctionType, BuiltinFunctionType, MethodType
 
 
 MISSING = object()
 _SIMPLE_KEYS = string_types + integer_types + (bool, type(None))
+# Set membership paths are value-based, not iteration-position based.
+# Limit representable set elements to JSON-safe scalar values. Other elements
+# stay in the displayed total but cannot be opened or pinned.
+MAX_SET_MEMBER_TEXT = 256
+MAX_SET_MEMBER_INTEGER = 9007199254740991  # JavaScript's safe-integer limit
+
+
+def _safe_set_member(value):
+    typ = type(value)
+    if typ not in _SIMPLE_KEYS:
+        return False
+    if typ in integer_types:
+        return abs(value) <= MAX_SET_MEMBER_INTEGER
+    if typ in string_types:
+        if len(value) > MAX_SET_MEMBER_TEXT:
+            return False
+        # Python 2 str can contain invalid UTF-8. Never expose a lossy or
+        # unroundtrippable typed path for such a member.
+        try:
+            if typ is binary_type:
+                value.decode('utf-8')
+            else:
+                value.encode('utf-8')
+        except UnicodeError:
+            return False
+    return True
 _SCALARS = string_types + integer_types + (float, bool, type(None))
 _NON_EXPANDABLE = (type, FunctionType, BuiltinFunctionType, MethodType, ModuleType)
 
@@ -59,6 +85,14 @@ def read_child(parent, segment):
         if fields is None:
             return MISSING
         return dict.get(fields, key, MISSING)
+    if kind == "member" and isinstance(parent, (set, frozenset)):
+        if not _safe_set_member(key):
+            return MISSING
+        # Use built-in containment, never game-defined __iter__/__contains__.
+        # The descriptor check at each parent rejects unenumerated members.
+        found = (set.__contains__(parent, key) if isinstance(parent, set)
+                 else frozenset.__contains__(parent, key))
+        return key if found else MISSING
     if kind == "key" and isinstance(parent, dict):
         try:
             return dict.__getitem__(parent, key)
@@ -82,6 +116,21 @@ def child_descriptors(value, limit, is_store_root=False):
         size = list.__len__(value) if isinstance(value, list) else tuple.__len__(value)
         n = min(size, limit)
         return [(('index', i), '[{}]'.format(i)) for i in range(n)], size > n
+
+    if isinstance(value, (set, frozenset)):
+        size = (set.__len__(value) if isinstance(value, set)
+                else frozenset.__len__(value))
+        scan = set.__iter__(value) if isinstance(value, set) else frozenset.__iter__(value)
+        pairs = []
+        for member in islice(scan, limit * 4):
+            if not _safe_set_member(member):
+                continue
+            label = '{' + clipped(repr(member), 40) + '}'
+            pairs.append((('member', member), label))
+        # Never use set iteration positions as IDs. Sort the bounded scalar
+        # prefix to keep pagination stable when membership has not changed.
+        pairs.sort(key=lambda pair: (type(pair[0][1]).__name__, repr(pair[0][1])))
+        return pairs[:limit], size > len(pairs) or len(pairs) > limit
 
     if isinstance(value, dict):
         size = dict.__len__(value)
@@ -148,7 +197,8 @@ def snapshot(value, is_cycle=False):
 
     if isinstance(value, (set, frozenset)):
         size = set.__len__(value) if isinstance(value, set) else frozenset.__len__(value)
-        return ('value', name, '{} items (not expandable)'.format(size), False, (name, id(value), size))
+        return ('value', name, '{} item{} (bounded scalar members)'.format(
+            size, '' if size == 1 else 's'), size > 0, (name, id(value), size))
 
     if isinstance(value, ModuleType):
         return ('value', name, '<module>', False, (name, id(value)))

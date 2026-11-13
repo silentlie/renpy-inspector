@@ -5,7 +5,7 @@ define config.developer = False
 define config.save_directory = "renpy-inspector-runtime-e2e"
 
 default e2e_value = 1
-default e2e_container = {"hp": 10, "items": ["key", "map"]}
+default e2e_container = {"hp": 10, "items": ["key", "map"], "flags": set(["alpha", "beta", 7]), "frozen": frozenset(["cold", "warm"])}
 default e2e_inventory = list(range(170))
 default persistent.e2e_test_flag = True
 

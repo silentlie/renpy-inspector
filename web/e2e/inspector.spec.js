@@ -343,3 +343,90 @@ test('Compare filters, pinned-only history, detail history and Reveal in tree', 
   await game.command('restore_game');
   await expect(page.getByRole('tab', { name: 'Compare (0)' })).toBeVisible({ timeout: 12000 });
 });
+
+
+test('set and frozenset scalar members expand, reveal by value and expose full primitives', async ({ page, game }) => {
+  await page.goto(game.url);
+  const flags = page.locator('.variable-label-expandable').filter({
+    has: page.locator('.variable-key', { hasText: /^set_flags$/ }),
+  });
+  await expect(flags).toBeVisible();
+  await flags.click();
+  await expect(page.getByRole('button', { name: "Inspect {'open'}", exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Inspect {42}', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Inspect {True}', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Inspect {None}', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Search variables' }).click();
+  const input = page.getByRole('textbox', {
+    name: 'Search variables across Store and Persistent',
+  });
+  await input.fill('store.frozen_flags{"blue"}');
+  await expect(page.getByRole('button', { name: 'Reveal exact variable path' })).toBeVisible();
+  await input.press('Enter');
+  await expect(page.getByRole('button', { name: "Inspect {'blue'}", exact: true }))
+    .toBeVisible({ timeout: 12000 });
+  await expect(page.locator('.variable-row-active')).toContainText("{'blue'}");
+  await page.getByRole('button', { name: "Inspect {'blue'}", exact: true }).click();
+  await page.getByRole('button', { name: 'Show full value' }).click();
+  await expect(page.getByLabel('Full variable value')).toHaveText('blue');
+});
+
+test('unsupported set members show explicit partial coverage without endless pagination', async ({ page, game }) => {
+  await page.goto(game.url);
+  const mixed = page.locator('.variable-label-expandable').filter({
+    has: page.locator('.variable-key', { hasText: /^mixed_set$/ }),
+  });
+  await mixed.click();
+  await expect(page.locator('.variable-partial-icon[aria-label="Partial collection coverage"]'))
+    .toBeVisible({ timeout: 12000 });
+  await expect(page.getByRole('button', { name: "Inspect {'visible'}", exact: true }))
+    .toBeVisible();
+  // Unsupported object members are omitted and do not create page sentinels.
+  const row = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: /^mixed_set$/ }),
+  }).first();
+  await expect(row.locator('.variable-partial-icon')).toBeVisible();
+  expect(await page.getByText('More entries below…').count()).toBe(0);
+});
+
+test('pinned set member follows membership deletion and recovery without positional drift', async ({ page, game }) => {
+  await page.goto(game.url);
+  const flags = page.locator('.variable-label-expandable').filter({
+    has: page.locator('.variable-key', { hasText: /^set_flags$/ }),
+  });
+  await flags.click();
+  await page.getByRole('button', { name: "Add {'open'} to favourites", exact: true }).click();
+  await page.getByRole('tab', { name: /Favourites \(1\)/ }).click();
+  // Ant's virtual transition can briefly keep the Store row mounted as the
+  // Favourites scope becomes active. Select the new favourites row.
+  const row = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: /\{'open'\}/ }),
+  }).last();
+  await expect(row.locator('.variable-preview')).toHaveText("'open'", { timeout: 12000 });
+  await game.command('remove_set_member');
+  await expect(row.locator('.variable-preview')).toHaveText('<missing>', { timeout: 12000 });
+  await game.command('restore_set_member');
+  await expect(row.locator('.variable-preview')).toHaveText("'open'", { timeout: 12000 });
+});
+
+test('read-only set membership rejects made-up members and executable paths', async ({ page, game }) => {
+  const endpoint = game.origin + '/api/v1/reveal?';
+  const valid = new URLSearchParams({
+    scope: 'store', path: JSON.stringify([['attribute', 'set_flags'], ['member', 'open']]),
+  });
+  const headers = { 'X-Inspector-Token': game.token };
+  const response = await page.request.get(endpoint + valid, { headers });
+  expect(response.status()).toBe(200);
+  const data = await response.json();
+  expect(data.chain.at(-1).name).toBe("{'open'}");
+  const unknown = new URLSearchParams({
+    scope: 'store', path: JSON.stringify([['attribute', 'set_flags'], ['member', 'not-there']]),
+  });
+  expect((await page.request.get(endpoint + unknown, { headers })).status()).toBe(404);
+  const hostile = new URLSearchParams({
+    scope: 'store', path: JSON.stringify([['attribute', 'set_flags'], ['member', { code: 'evil' }]]),
+  });
+  expect((await page.request.get(endpoint + hostile, { headers })).status()).toBe(400);
+  expect((await page.request.post(endpoint + valid, { headers })).status()).toBe(405);
+});

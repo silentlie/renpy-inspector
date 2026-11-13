@@ -369,6 +369,29 @@ required before merging.
 - **Deferred:** semantic read/write history, arbitrary Python object diffs,
   editing, value locking, undo/redo and offline persistence of history.
 
+## Milestone: PR #26 — Structured set/frozenset inspection (v0.7.8 experimental)
+
+- Expand built-in and subclassed Python set/frozenset collections using
+  bounded built-in iteration, never user-defined __iter__, repr, or getters.
+- Only expose stable, JSON-safe scalar member identities: built-in text
+  (max 256 characters, valid UTF-8 on Python 2), safe integers, bool and None.
+  Non-scalar objects and unsupported huge members remain omitted, with
+  explicit partial/capped indicators.
+- Use typed `member` path segments rather than arbitrary positions, allowing
+  direct read-only reveal, on-demand scalar values, independently watched
+  pinned members, and missing/recovery after membership changes.
+- Support copyable exact `store.flags{"text"}`, `store.flags{42}`,
+  `store.flags{True}`, and `store.flags{None}` path notation. No eval,
+  arbitrary expressions, or path traversal beyond visible descriptors.
+- Respect the existing maximum of 80 children/page, 1,000 visible members,
+  eight path segments and game-thread queue limits. Fix the empty-page loop
+  when unsupported collection members are omitted.
+- Python 2/3 set/frozenset safety and path tests, browser E2E of direct
+  reveal/pinning/membership removal, graphical Ren'Py SDK 7.8.7/8.5.3
+  tests, and verified dual-engine v0.7.8 ZIPs.
+- **Deferred:** arbitrary hashable object members, unordered mutable-object
+  inspection, engine-native custom containers, game-state editing.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

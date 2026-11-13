@@ -6,7 +6,7 @@ import {
 import {
   CheckCircleFilled, CopyOutlined, DisconnectOutlined,
   EyeOutlined, RightOutlined, DownOutlined, SearchOutlined,
-  StarFilled, StarOutlined,
+  StarFilled, StarOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
@@ -110,6 +110,10 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
       <span className="variable-key" title={node.path}>{node.name}</span>
       <span className="variable-colon">:</span>
       <span className="variable-type">{node.type}</span>
+      {node.capped && <Tooltip title="Partial collection: some entries are unsupported or exceed inspection limits.">
+        <span className="variable-partial-icon" role="status"
+          aria-label="Partial collection coverage"><WarningOutlined /></span>
+      </Tooltip>}
     </span>
     <span className={`variable-preview preview-${previewKind(node.type)}`}
       title={`${node.type} · ${node.preview}`}>{node.preview}</span>
@@ -930,7 +934,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.7 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.8 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -1000,7 +1004,8 @@ export default function App() {
           <FullValuePanel key={JSON.stringify([treePages?.generation, selected.scope, selected.key])}
             selection={selected} generation={treePages?.generation}
             bridge={bridge} token={token} />
-          {activeNode?.limited && <Tag color="gold">Some descendants were omitted by snapshot limits</Tag>}
+          {(activeNode?.limited || activeNode?.capped) &&
+            <Tag color="gold">Some descendants were omitted by type or inspection limits</Tag>}
           <div className="detail-history">
             <div className="detail-history-header">
               <Text strong>Observed history</Text>
