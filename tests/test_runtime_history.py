@@ -46,6 +46,15 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(history.events[1]['generation'], 2)
         self.assertNotIn('turn', history.snapshot())
 
+    def test_explicit_edit_undo_redo_are_invalidations_not_restorations(self):
+        history = RuntimeTimeline()
+        for signal in ('edit', 'undo', 'redo'):
+            history.restoration(signal, 1, 1.0)
+        self.assertEqual([event['kind'] for event in history.events],
+                         ['invalidation', 'invalidation', 'invalidation'])
+        self.assertEqual([event['signal'] for event in history.events],
+                         ['edit', 'undo', 'redo'])
+
     def test_rollback_flag_only_records_observed_true_transition(self):
         history = RuntimeTimeline()
         for flag in (False, True, True, False, True):
