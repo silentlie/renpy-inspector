@@ -174,10 +174,20 @@ export default function EditValuePanel({
           !Array.isArray(data.locks?.entries)) {
         throw new Error('Lock confirmation was invalid. Refresh the variable before retrying.');
       }
-      setTarget((current) => current ? {
-        ...current, locked: data.locked, lock_stale: data.lock_stale === true,
-        lock_stale_reason: data.lock_stale_reason, lock_revision: data.lock_revision ?? data.locks.revision,
-      } : current);
+      if (data.target && data.target.generation === target.generation) {
+        setTarget({ ...data.target, locked: data.locked,
+          lock_stale: data.lock_stale === true,
+          lock_stale_reason: data.lock_stale_reason,
+          lock_revision: data.lock_revision ?? data.locks.revision });
+        if (action === 'refresh' && value === target.text && data.target.editable) {
+          setValue(data.target.text);
+        }
+      } else {
+        setTarget((current) => current ? {
+          ...current, locked: data.locked, lock_stale: data.lock_stale === true,
+          lock_stale_reason: data.lock_stale_reason, lock_revision: data.lock_revision ?? data.locks.revision,
+        } : current);
+      }
       onLocksChanged?.(data.locks);
       setConfirmed(false);
       setSaved(action === 'refresh'
