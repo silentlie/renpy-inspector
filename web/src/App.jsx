@@ -372,7 +372,12 @@ export default function App() {
   const lockedKeys = useMemo(() => new Set((snapshot?.locks?.entries ?? [])
     .map((entry) => lockIdentity(entry.key)).filter((key) => typeof key === 'string')), [snapshot?.locks]);
   const syncLocks = useCallback((locks) => {
-    setSnapshot((current) => current ? { ...current, locks } : current);
+    setSnapshot((current) => {
+      if (!current || !locks || !Number.isSafeInteger(locks.revision)) return current;
+      if (Number.isSafeInteger(current.locks?.revision) &&
+          locks.revision < current.locks.revision) return current;
+      return { ...current, locks };
+    });
   }, []);
   const [findRequest, setFindRequest] = useState(null);
   const [sourceRequest, setSourceRequest] = useState(null);
