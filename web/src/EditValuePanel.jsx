@@ -138,7 +138,7 @@ export default function EditValuePanel({
           : response.status === 422
             ? 'Only an existing supported Store primitive can be locked.'
             : response.status === 429
-              ? 'The session lock limit has been reached.'
+              ? (data.error || 'The Inspector queue is busy or the session lock limit has been reached.')
               : response.status === 403
                 ? 'Variable editing has been disabled by the game.'
                 : 'Lock request failed (HTTP ' + response.status + ')');
