@@ -673,7 +673,10 @@ class InspectorBridge(object):
                         target = None
                         if action in ('lock', 'refresh'):
                             target = inspect_edit_target(self.inspector._providers, scope, path)
+                            previous_lock_revision = self.variable_locks.revision
                             self.variable_locks.observe(scope, path, target, time.time())
+                            if self.variable_locks.revision != previous_lock_revision:
+                                self._publish_lock_metadata()
                             if not target.get('editable'):
                                 raise EditUnsupported(
                                     'Only existing supported Store primitives can be locked or refreshed')
