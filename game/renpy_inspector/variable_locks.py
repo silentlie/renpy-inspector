@@ -55,7 +55,8 @@ class VariableLocks(object):
 
     @staticmethod
     def _size(key):
-        return len(key.encode('utf-8')) + 128
+        # The snapshot retains both the canonical key and a JSON-safe path copy.
+        return 2 * len(key.encode('utf-8')) + 160
 
     def is_locked(self, scope, path):
         return self._key(scope, path) in self._by_key
