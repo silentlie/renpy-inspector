@@ -858,9 +858,13 @@ test('locked variables workspace lists, refreshes and releases active locks', as
     await expect(workspace.getByText('store.score', { exact: true })).toBeVisible();
     await expect(workspace.getByText('store.player_stats["hp"]', { exact: true })).toBeVisible();
     await expect(workspace).toContainText('Baseline type: int');
+    const scoreEntry = workspace.locator('.locked-entry').filter({ hasText: 'store.score' });
+    await scoreEntry.getByRole('button', { name: 'Inspect store.score' }).click();
+    await expect(page.getByRole('dialog', { name: 'Variable details' })).toBeVisible();
+    await expect(page.locator('.detail-value')).toContainText('2');
+    await page.keyboard.press('Escape');
 
     await game.command('set_score', { value: 9 });
-    const scoreEntry = workspace.locator('.locked-entry').filter({ hasText: 'store.score' });
     await expect(scoreEntry.getByText('Stale', { exact: true })).toBeVisible({ timeout: 12000 });
     await scoreEntry.getByRole('button', { name: 'Refresh lock store.score' }).click();
     await expect(scoreEntry.getByText('Active', { exact: true })).toBeVisible();

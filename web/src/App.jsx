@@ -793,6 +793,12 @@ export default function App() {
   }, [bridge, token, revealBusy]);
 
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
+  const inspectLocked = useCallback((chosenScope, key) => {
+    const decoded = decodeTreeKey(key);
+    if (!decoded || decoded.scope !== chosenScope) return;
+    setSelected({ scope: chosenScope, key });
+    requestFavouriteValue({ scope: chosenScope, key });
+  }, [requestFavouriteValue]);
   const pinVariable = useCallback((chosenScope, key) => {
     if (!SCOPES.some((item) => item.key === chosenScope)) return;
     setFavourites((before) => {
@@ -978,7 +984,7 @@ export default function App() {
             : scope === 'locked' && snapshot?.capabilities?.primitive_edits === true
               ? <LockedVariablesPane locks={snapshot?.locks} generation={treePages?.generation}
                   bridge={bridge} token={token} onLocksChanged={syncLocks}
-                  onInspect={selectNode} />
+                  onInspect={inspectLocked} />
               : scope === 'edits' && snapshot?.capabilities?.primitive_edits === true
                 ? <EditHistoryPane value={snapshot?.edit_history}
                     generation={treePages?.generation} enabled={true}
