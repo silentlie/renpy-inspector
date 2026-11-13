@@ -48,6 +48,7 @@ export default function RuntimePane({ snapshot }) {
           { value: 'all', label: 'All observations' },
           { value: 'location', label: 'Script locations' },
           { value: 'restoration', label: 'Restoration signals' },
+          { value: 'invalidation', label: 'Inspector invalidations' },
           { value: 'rollback_flag', label: 'Rollback indicators' },
         ]} />
     </div>
@@ -57,7 +58,8 @@ export default function RuntimePane({ snapshot }) {
         return <article className="runtime-event" key={entry.id}>
           <div className="runtime-event-header">
             <Text strong>{description.title}</Text>
-            <Tag>{entry.kind === 'location' ? 'sample' : entry.kind === 'restoration' ? 'callback' : 'indicator'}</Tag>
+            <Tag>{entry.kind === 'location' ? 'sample' : entry.kind === 'restoration' ? 'callback' :
+              entry.kind === 'invalidation' ? 'reset' : 'indicator'}</Tag>
             <Text type="secondary">{sampledTime(entry.captured_at)} · epoch {entry.generation}</Text>
           </div>
           <Text className="runtime-mono">{description.detail}</Text>
