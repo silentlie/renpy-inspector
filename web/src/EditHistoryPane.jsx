@@ -81,7 +81,7 @@ export default function EditHistoryPane({
       </div>
       <div className="edit-history-actions">
         <Button size="small" disabled={!canUndo || busy || !confirmed}
-          loading={busy && false} onClick={() => run('undo')}
+          onClick={() => run('undo')}
           aria-label="Undo last inspector edit">Undo</Button>
         <Button size="small" disabled={!canRedo || busy || !confirmed}
           onClick={() => run('redo')} aria-label="Redo last inspector edit">Redo</Button>
