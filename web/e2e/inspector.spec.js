@@ -86,6 +86,23 @@ test('source highlighting, rich type labels, and navigation reuse the read-only 
   await changed.getByRole('button', { name: 'View sampled source' }).click();
   await expect(page.getByRole('tab', { name: 'Scripts' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
+
+  // A later Find References must not be replaced by an earlier source request
+  // when the Scripts panel unmounts and mounts again.
+  await page.getByRole('tab', { name: 'Variables' }).click();
+  await page.getByRole('button', { name: 'Inspect score' }).click();
+  await page.getByRole('dialog', { name: 'Variable details' })
+    .getByRole('button', { name: 'Find references in Scripts' }).click();
+  await expect(page.getByRole('textbox', { name: 'Search source text' })).toHaveValue('score');
+  await expect(page.getByRole('region', { name: 'Script source context' }))
+    .toContainText('Choose a label or view the current statement');
+
+  // The reverse order must also work: a source navigation should replace a
+  // previous literal reference search, never resurrect that search on remount.
+  await page.getByRole('tab', { name: 'Runtime' }).click();
+  await page.getByRole('button', { name: 'View current in Scripts' }).click();
+  await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
+  await expect(page.getByRole('textbox', { name: 'Search script labels or filenames' })).toBeVisible();
 });
 
 test('pinned values update and survive a simulated game reload', async ({ page, game }) => {
