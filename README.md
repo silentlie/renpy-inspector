@@ -1,6 +1,6 @@
 # Ren'Py Inspector
 
-**Experimental, read-only external inspector for Ren'Py 7 and 8 desktop games.**
+**Experimental external inspector for Ren'Py 7 and 8 desktop games. Read-only by default; optional, game-author-enabled Store primitive editing.**
 
 The inspector uses a separate browser workspace built with **React + Ant Design**.
 There is **no in-game inspector drawer, Inspect tab, or settings UI**.
@@ -40,15 +40,50 @@ On the first F8 press, the inspector starts its authenticated **127.0.0.1** serv
 - **PR #24 Source Text Search:** Scripts has **Labels / Source text** modes. Search literal, case-insensitive text across game-owned `.rpy` files, open an exact source line and its nearby context, and continue a bounded search from its cursor. **Find references in Scripts** in variable details searches for a selected variable's literal name/key. Results are textual occurrences, **not** semantic read/write references; comments and strings can match. Files are restricted to the game source directory; no arbitrary filesystem reads, Python evaluation or game writes. Large files, compiled-only games and files outside the scan limits are labelled as partial or unavailable.
 - **PR #23 Direct Path Navigation:** Open the search popup (`/` or magnifier) and enter an **exact typed path** such as `store.player["stats"][0]`, `persistent.flags["seen"]` or `persistent["flag"]`. Press Enter to fetch only the verified ancestor chain, expand the necessary nodes and scroll to the variable even if it was not previously loaded or is outside the bounded global search budget. Dot notation means a module/object attribute, quoted brackets mean a dictionary key, `[0]` means a list index, and `[key:42]` means an integer dictionary key. No Python evaluation or gameplay writes. Invalid and missing paths show errors in the popup. **Copy Path** from the details drawer is directly pasteable here.
 - **PR #22 Full Value Inspector:** Select a variable, open its details and choose **Show full value** to read exact built-in string/number/boolean/None contents with a multiline viewer, **Copy Value**, and **Copy Path**. Text is capped at 16,384 characters (or source bytes on Python 2 byte strings), clearly marked when truncated; copying incomplete values is disabled. Unsupported game objects are not stringified. Requests use the authenticated read-only game-thread queue; this does not change automatic preview polling or Compare.
-- Read-only access: no variable editing, code evaluation, or writes to gameplay saves.
+- **PR #29 Variable Editing MVP:** Safe primitive Store writes are **disabled by default**. A trusted game author must explicitly enable the capability in an `init python` block. Eligible *existing* Store variables (and values inside plain dictionaries/lists) can be edited from the details drawer after an exact-value read and affirmative per-edit confirmation. Types cannot change. Persistent values, tuple/set membership, custom objects, new/deleted keys, arbitrary Python expressions and automatic undo are excluded. Successful writes advance state generation and invalidate stale reads; this is **not** a game rollback or a comprehensive edit history.
 
 The first snapshot contains only shallow root pages. Expanding a branch fetches up to **80 child nodes per request**; as the virtual tree scrolls close to a page boundary, it requests another page automatically. While a scope is active, the shared watcher polls already-loaded expanded pages and reconciles changed previews; favourites receive independent polling even if the scope is hidden. Structural changes reset affected pagination tails to avoid keeping stale positional cursors. Bounds remain: **1,000 nodes per branch, eight path levels, 6,000 browser-loaded nodes, eight queued requests and 256 KiB per HTTP response**. This is still not an unrestricted dump of all game state. Tree filtering applies to already loaded nodes, but the popup also performs a **separate bounded, read-only game-thread search** of unloaded names and formatted paths. Each query examines up to 1,400 visible entries, returns up to 30 results, descends at most five levels, and limits non-root branches to 100 children. Partial results are labelled. Search never evaluates user Python expressions, enumerates private members or searches full object values. Compare records bounded exact built-in scalar samples where available (maximum 256 characters and 16 KiB per page); older bridges, oversized strings, unsupported objects and exhausted sample budgets remain clearly preview-only or unavailable. It is not a full game-state mutation log and never reconstructs earlier values by re-reading the current state. It does not claim exact script/turn causality and resets on the bridge's save/load generation change. Documented after-default callbacks cover rollback in supported Ren'Py versions; heavily customised games that suppress these callbacks may still show misleading sampled changes. Favourites are stored in a separate inspector-owned `renpy-inspector-browser-favourites.json` file under the game's save directory. The browser imports old origin-local pins only when that file does not yet exist. Saved paths are independently sampled on the game interaction thread, even when their branches have never been opened. If the game has no writable save directory, favourites fall back to browser-local storage and Overview reports the limitation.
+
+## Optional Store primitive editing (PR #29)
+
+**Default: disabled.** Only the game author or someone authorised to modify its source should add this to a separate `.rpy` file, after the inspector's `init -100 python` block:
+
+```renpy
+init 1 python:
+    import renpy_inspector
+    renpy_inspector.bridge.configure_variable_editing(True)
+```
+
+Restart the game and press **F8**. The details drawer offers **Edit primitive**
+only while the server advertises the game-configured capability. Open it to
+capture the *current* exact value/type, enter the replacement literally, check
+the explicit confirmation box, and click **Apply edit**. There is no browser
+setting or HTTP request to enable editing, no automatic writes and no edit
+button for Persistent values.
+
+The server validates the pairing token, loopback Host/Origin, JSON size,
+visible typed path, exact primitive type, value length, expected generation
+and SHA256 fingerprint of the previously captured value. All reads/writes
+execute exclusively on Ren'Py's interaction thread. Only existing Store
+module fields and existing entries of plain built-in dictionaries/lists may
+be replaced with the **same** built-in primitive type: Unicode text up to
+1,024 characters / 4 KiB UTF-8, booleans, bounded integers or finite floats.
+Python 2 byte strings, None values, custom objects, immutable containers,
+computed attributes and Persistent changes are not writable. A successful
+edit invalidates stale inspector requests and increments its generation.
+
+**Caution:** Editing game variables can change gameplay logic, saves and
+rollback behaviour. No undo/redo, lock manager or durable edit log exists in
+this MVP. Back up saves before enabling editing. A timed-out request could
+have completed on the game thread; inspect the fresh value before retrying.
+The inspector does not assert Ren'Py's rollback system will reverse these
+external edits.
 
 ## How it works
 
 F8 calls an opt-in bridge launcher on Ren'Py's interaction thread. The server binds to `127.0.0.1` on an ephemeral port and generates a new pairing token when it starts. The token is passed in the local browser URL fragment and is required in an API header. The HTTP server only serves already serialised, bounded JSON and static Ant Design assets. Child-page HTTP requests queue validated typed paths; they never inspect game objects on HTTP threads. A 250ms Ren'Py interaction-thread timer services at most two queued requests per tick and publishes a shallow root refresh around every 1.5 seconds.
 
-The authenticated `GET /api/v1/value` endpoint queues a single typed path for safe game-thread inspection. The separate `GET /api/v1/full-value` endpoint returns bounded primitive text only on explicit request, with generation/capture metadata; it cannot evaluate arbitrary Python or modify gameplay. `GET /api/v1/scripts` and `GET /api/v1/source` queue bounded read-only script requests. Label names and line numbers come from Ren'Py's runtime; source windows are read only from `.rpy` files resolving within `config.gamedir`, with symlink/traversal checks and size limits. Games distributing only `.rpyc` retain label metadata but cannot display source text. Only the `PUT /api/v1/favourites` endpoint writes data, and it is restricted to bounded, validated inspector-owned preference metadata. Gameplay variables and Ren'Py save files remain read-only. PR #12 stamps each child and favourite sample with its Ren'Py game-thread capture time so delayed HTTP responses cannot produce misleading before/after events.
+The authenticated `GET /api/v1/value` endpoint queues a single typed path for safe game-thread inspection. The separate `GET /api/v1/full-value` endpoint returns bounded primitive text only on explicit request, with generation/capture metadata; it cannot evaluate arbitrary Python or modify gameplay. `GET /api/v1/scripts` and `GET /api/v1/source` queue bounded read-only script requests. Label names and line numbers come from Ren'Py's runtime; source windows are read only from `.rpy` files resolving within `config.gamedir`, with symlink/traversal checks and size limits. Games distributing only `.rpyc` retain label metadata but cannot display source text. `PUT /api/v1/favourites` writes only inspector-owned preference metadata. **Only after trusted game init opt-in**, `GET /api/v1/edit-target` inspects eligible Store primitives and `PUT /api/v1/edit` queues a bounded, confirmed primitive mutation for the Ren'Py interaction thread. No endpoint enables edits; they are disabled by default. The game may subsequently save modified Store state through its normal mechanisms. PR #12 stamps each child and favourite sample with its Ren'Py game-thread capture time so delayed HTTP responses cannot produce misleading before/after events.
 
 The server stays available until the game exits. Closing a browser tab does **not** stop the game or its server. The F8 handler displays a brief Ren'Py notification only if the local server or browser cannot be opened. Some games suppress Ren'Py overlay screens; F8 and refreshes may be unavailable during those moments.
 
