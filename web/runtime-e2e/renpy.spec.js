@@ -308,6 +308,8 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect.poll(async () => (await gameValue()).value, { timeout: 16000 }).toBe('2');
     await expect.poll(async () => (await getSnapshot()).generation,
       { timeout: 10000 }).toBeGreaterThan(beforeLoad);
+    expect((await getSnapshot()).runtime?.events?.some(
+      (event) => event.kind === 'restoration' && event.signal === 'after_load')).toBeTruthy();
 
     // The pin lives in inspector-owned preferences, not Ren'Py save state.
     await page.getByRole('tab', { name: /Favourites \(1\)/ }).click();
@@ -331,6 +333,12 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     await expect.poll(async () => (await getSnapshot()).generation,
       { timeout: 12000 }).toBeGreaterThan(beforeRollback);
     expect(['1', '2', '3']).toContain((await gameValue()).value);
+    const rollbackTimeline = (await getSnapshot()).runtime?.events ?? [];
+    expect(rollbackTimeline.some((event) => event.kind === 'restoration' &&
+      ['after_default', 'legacy_rollback'].includes(event.signal))).toBeTruthy();
+    await page.getByRole('tab', { name: 'Runtime' }).click();
+    await expect(page.getByText('Runtime & rollback context')).toBeVisible();
+    await expect(page.getByText('Observed timeline')).toBeVisible();
 
     // A generation reset intentionally discards prior search/reveal and
     // virtual-tree scroll state. Check connection, not an off-screen row.
