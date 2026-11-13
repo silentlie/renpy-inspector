@@ -745,7 +745,11 @@ class InspectorBridge(object):
                     scope, path = job['args'][0], job['args'][1]
                     result['current_target'] = inspect_edit_target(
                         self.inspector._providers, scope, path)
-                    lock_state = self.variable_locks.state(scope, path)
+                    previous_lock_revision = self.variable_locks.revision
+                    lock_state = self.variable_locks.observe(
+                        scope, path, result['current_target'], time.time())
+                    if self.variable_locks.revision != previous_lock_revision:
+                        self._publish_lock_metadata()
                     result['current_target'].update({
                         'generation': self.generation,
                         'locked': lock_state['locked'],
