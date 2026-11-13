@@ -631,7 +631,7 @@ class InspectorBridge(object):
                     elif job['kind'] == 'edit':
                         scope, path, expected_generation, expected, typename, text = job['args']
                         if expected_generation != self.generation:
-                            raise EditConflict('Game state generation changed')
+                            raise EditConflict('Game state generation changed', 'generation_changed')
                         lock_state = self._current_lock_state(scope, path)
                         if lock_state['locked']:
                             raise EditLocked(
@@ -651,7 +651,7 @@ class InspectorBridge(object):
                     elif job['kind'] == 'edit_history':
                         action, expected_generation, entry_id = job['args']
                         if expected_generation != self.generation:
-                            raise EditConflict('Game state generation changed')
+                            raise EditConflict('Game state generation changed', 'generation_changed')
                         result = self.edit_history.apply(
                             self.inspector._providers, action, entry_id,
                             self._current_lock_state)
@@ -664,7 +664,7 @@ class InspectorBridge(object):
                     elif job['kind'] == 'lock':
                         action, scope, path, expected_generation = job['args']
                         if expected_generation != self.generation:
-                            raise EditConflict('Game state generation changed')
+                            raise EditConflict('Game state generation changed', 'generation_changed')
                         target = None
                         if action in ('lock', 'refresh'):
                             target = inspect_edit_target(self.inspector._providers, scope, path)
