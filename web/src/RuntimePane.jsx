@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Empty, Select, Tag, Typography } from 'antd';
+import { Button, Empty, Select, Tag, Typography } from 'antd';
+import { sourceTargetForContext } from './scripts.js';
 import { filteredRuntimeEvents, runtimeEventDescription } from './runtime-history.js';
 
 const { Text, Title } = Typography;
@@ -8,7 +9,7 @@ function sampledTime(timestamp) {
   return Number.isFinite(timestamp) ? new Date(timestamp * 1000).toLocaleTimeString() : 'Time unavailable';
 }
 
-export default function RuntimePane({ snapshot }) {
+export default function RuntimePane({ snapshot, onOpenSource }) {
   const [filter, setFilter] = useState('all');
   const game = snapshot?.game ?? {};
   const timeline = snapshot?.runtime ?? {};
@@ -32,6 +33,8 @@ export default function RuntimePane({ snapshot }) {
         <div><Text type="secondary">Rollback indicator</Text><Text>{rollback}</Text></div>
         <div><Text type="secondary">Last snapshot</Text><Text>{sampledTime(snapshot?.captured_at)}</Text></div>
       </div>
+      {sourceTargetForContext(game) && <Button size="small" className="runtime-source-link"
+        onClick={() => onOpenSource(game)}>View current in Scripts</Button>}
       <Text type="secondary" className="runtime-disclaimer">
         Return destinations are not the Python call stack. A false or unavailable rollback indicator
         does not prove no rollback happened between samples. Restorations reset variable Compare
@@ -63,6 +66,10 @@ export default function RuntimePane({ snapshot }) {
             <Text type="secondary">{sampledTime(entry.captured_at)} · epoch {entry.generation}</Text>
           </div>
           <Text className="runtime-mono">{description.detail}</Text>
+          {entry.kind === "location" && sourceTargetForContext(entry) &&
+            <Button size="small" type="link" className="runtime-source-link"
+              aria-label={`View source for ${entry.filename}:${entry.line}`}
+              onClick={() => onOpenSource(entry)}>View in Scripts</Button>}
           <Text type="secondary">{description.note}</Text>
         </article>;
       }) : <Empty description={filter === 'all'

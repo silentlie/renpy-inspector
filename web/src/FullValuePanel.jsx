@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Space, Tag, Typography } from 'antd';
 import { CopyOutlined, ReloadOutlined } from '@ant-design/icons';
 import { decodeTreeKey, formatTypedPath } from './tree.js';
+import { fullValueTone } from './value-format.js';
 
 const { Text } = Typography;
 const DISPLAY_KINDS = new Set(['string', 'number', 'boolean', 'null']);
@@ -109,7 +110,7 @@ export default function FullValuePanel({ selection, generation, bridge, token })
             {Number.isSafeInteger(value.length) &&
               <Text type="secondary">{value.length.toLocaleString()} {value.length_unit || 'characters'} in source</Text>}
           </Space>
-          <pre aria-label="Full variable value" className="detail-full-value-text"
+          <pre aria-label="Full variable value" className={`detail-full-value-text value-tone-${fullValueTone(value.kind)}`}
             style={{
               marginTop: 10, maxHeight: '38vh', overflow: 'auto',
               whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',

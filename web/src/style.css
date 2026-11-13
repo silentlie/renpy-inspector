@@ -255,3 +255,20 @@ html, body { overscroll-behavior: none; }
   .runtime-history-header { padding:9px 10px; }
   .runtime-history-list { padding:5px 10px 18px; }
 }
+
+
+/* PR #28: lexical source highlighting. All tokens are React text nodes. */
+.source-token-keyword { color:#83b6ff; font-weight:600; }
+.source-token-string { color:#e4bf88; }
+.source-token-comment { color:#7a94ae; font-style:italic; }
+.source-token-literal { color:#c6a2f1; }
+.source-token-number { color:#a6d5f2; }
+.source-token-plain { color:inherit; }
+/* Full raw values and sampled previews are never parsed or evaluated as Python. */
+.value-tone-string { color:#e4bf88!important; }
+.value-tone-number { color:#a6d5f2!important; }
+.value-tone-boolean { color:#89dcba!important; }
+.value-tone-null { color:#c6a2f1!important; }
+.value-tone-muted { color:#9aaac0!important; }
+.detail-source-actions { display:flex;gap:8px;flex-wrap:wrap;margin:10px 0; }
+.runtime-source-link { align-self:flex-start; }

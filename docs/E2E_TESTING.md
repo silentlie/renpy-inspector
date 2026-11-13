@@ -247,3 +247,15 @@ FileLoad produces an `after_load` signal and rollback invalidation produces
 an `after_default` (or legacy fallback) signal. These are callback observations,
 not exact rollback destinations or interaction counts. The bridge timeline
 keeps at most 64 events in RAM and adds no HTTP endpoint or background scanner.
+
+
+## Value rendering and source navigation (PR #28, v0.7.10)
+
+Node tests cover lossless text tokenisation, strings containing #, escaped quotes,
+triple strings, keyword highlighting, type descriptions, bounded excerpts, and
+unsafe source-path rejection. Chromium exercises source context navigation
+from variable details, Runtime and Compare via the real authenticated bridge,
+including syntax token elements. Graphical Ren'Py 7.8.7/8.5.3 E2E also checks
+that an actual game-owned .rpy excerpt renders highlighted source tokens.
+Full primitive values are not treated as Python source, all fragments render
+as React text nodes, and navigation is read-only.

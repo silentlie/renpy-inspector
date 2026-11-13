@@ -410,6 +410,27 @@ required before merging.
 - **Deferred:** full interaction logging, rollback destination reconstruction,
   semantic call stack/mutation causes, variable writes and undo.
 
+## Milestone: PR #28 — Better value rendering and source navigation (v0.7.10 experimental)
+
+- Colour bounded game-owned .rpy excerpts with an isolated, browser-only,
+  best-effort Ren'Py/Python lexer. Tokens render through escaped React text
+  nodes, never innerHTML/eval, editor links or a source interpreter. Triple
+  quotes are handled within the captured excerpt; full Python semantics and
+  strings begun before the window are not claimed.
+- Enrich variable type labels with explanatory, read-only classifications for
+  built-in mappings, sequences, sets, primitives, missing and unknown types.
+  Colour raw previews, Compare samples and on-demand primitive values by
+  type without reinterpreting arbitrary game text as code.
+- Navigate from the current Runtime sample, recorded location observations,
+  Compare's **sampled** file:line, and the details drawer's current context
+  to the existing guarded source excerpt endpoint. A sampled location is not
+  a proven assignment site or historical mutation cause.
+- Preserve a full-height virtualised tree, the two tab rows, and F8-only
+  integration. No new HTTP endpoints, full object repr, added polling, value
+  writes, state locks or persisted game data.
+- Run JS lexer/path/type tests, browser-to-bridge integration tests, graphical
+  Ren'Py 7.8.7/8.5.3 source-colouring checks and both verified v0.7.10 ZIPs.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,

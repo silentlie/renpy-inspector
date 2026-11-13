@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normaliseGameScriptFile, safeScriptLine, appendScriptLabels } from './scripts.js';
+import { normaliseGameScriptFile, safeScriptLine, appendScriptLabels, sourceTargetForContext } from './scripts.js';
 
 test('current location only permits game-relative RenPy source files', () => {
   assert.equal(normaliseGameScriptFile('game/script.rpy'), 'script.rpy');
@@ -22,4 +22,14 @@ test('paginated script labels retain stable order without duplicate rows', () =>
   assert.equal(merged.length, 2);
   assert.equal(merged[0].name, 'start');
   assert.equal(merged[1].line, 12);
+});
+
+test('sampled source navigation validates relative paths and line bounds', () => {
+  assert.deepEqual(sourceTargetForContext({ filename: 'game/script.rpy', line: '12' }),
+    { file: 'script.rpy', line: 12 });
+  assert.deepEqual(sourceTargetForContext({ file: 'chapter/scene.rpy', line: 5 }),
+    { file: 'chapter/scene.rpy', line: 5 });
+  assert.equal(sourceTargetForContext({ filename: '../private.rpy', line: 5 }), null);
+  assert.equal(sourceTargetForContext({ filename: 'script.rpyc', line: 1 }), null);
+  assert.equal(sourceTargetForContext({ filename: 'script.rpy', line: 999999 }), null);
 });

@@ -62,6 +62,53 @@ test('Runtime shows bounded observations without inventing rollback turns', asyn
     .toBeTruthy();
 });
 
+test('source highlighting, rich type labels, and navigation reuse the read-only bridge', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Inspect score' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Variable details' });
+  await expect(drawer.getByText('Integer', { exact: true })).toBeVisible();
+  await expect(drawer.getByText(/numeric preview, not an editable Python value/i)).toBeVisible();
+  await drawer.getByRole('button', { name: 'View current script context' }).click();
+  await expect(page.getByRole('tab', { name: 'Scripts' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
+  const source = page.locator('.script-source-lines');
+  await expect(source.locator('.source-token-keyword').filter({ hasText: 'label' }).first()).toBeVisible();
+  await expect(source.locator('.script-source-active')).toHaveCount(1);
+  await page.getByRole('tab', { name: 'Runtime' }).click();
+  await expect(page.getByRole('button', { name: 'View current in Scripts' })).toBeVisible();
+  await page.getByRole('button', { name: 'View current in Scripts' }).click();
+  await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
+  await page.getByRole('tab', { name: 'Variables' }).click();
+  await game.command('set_score', { value: 17 });
+  await page.getByRole('tab', { name: /Compare \(/ }).click();
+  const changed = page.locator('.compare-entry').filter({ hasText: 'store.score' });
+  await expect(changed).toBeVisible({ timeout: 12000 });
+  await changed.getByRole('button', { name: 'View sampled source' }).click();
+  await expect(page.getByRole('tab', { name: 'Scripts' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
+
+  // A later Find References must not be replaced by an earlier source request
+  // when the Scripts panel unmounts and mounts again.
+  await page.getByRole('tab', { name: 'Variables' }).click();
+  // The preceding step was in Compare. Switching the top-level tab does not
+  // change the nested variable scope, so explicitly return to Store.
+  await page.getByRole('tab', { name: 'Store', exact: true }).click();
+  await page.getByRole('button', { name: 'Inspect score' }).click();
+  await page.getByRole('dialog', { name: 'Variable details' })
+    .getByRole('button', { name: 'Find references in Scripts' }).click();
+  await expect(page.getByRole('textbox', { name: 'Search source text' })).toHaveValue('score');
+  await expect(page.getByRole('region', { name: 'Script source context' }))
+    .toContainText('Choose a label or view the current statement');
+
+  // The reverse order must also work: a source navigation should replace a
+  // previous literal reference search, never resurrect that search on remount.
+  await page.getByRole('tab', { name: 'Runtime' }).click();
+  await page.getByRole('button', { name: 'View current in Scripts' }).click();
+  await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
+  await expect(page.getByRole('textbox', { name: 'Search script labels or filenames' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Search script labels or filenames' })).toHaveValue('');
+});
+
 test('pinned values update and survive a simulated game reload', async ({ page, game }) => {
   await page.goto(game.url);
   await page.getByRole('tab', { name: 'Overview' }).click();

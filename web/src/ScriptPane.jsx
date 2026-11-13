@@ -3,6 +3,8 @@ import { Button, Empty, Input, Segmented, Spin, Tag, Typography } from 'antd';
 import { CopyOutlined, SearchOutlined } from '@ant-design/icons';
 import { appendScriptLabels, normaliseGameScriptFile, safeScriptLine } from './scripts.js';
 import SourceTextResults from './SourceTextResults.jsx';
+import SourceCode from './SourceCode.jsx';
+import { sourceTargetForContext } from './scripts.js';
 
 const { Text, Title } = Typography;
 const PAGE_SIZE = 40;
@@ -10,7 +12,7 @@ const PAGE_SIZE = 40;
 /** Read-only browser navigation over game-owned Ren'Py script metadata.
  * Selecting a source location never changes the game's execution point.
  */
-export default function ScriptPane({ token, bridge, activeGame, generation, findRequest }) {
+export default function ScriptPane({ token, bridge, activeGame, generation, findRequest, sourceRequest }) {
   const [filter, setFilter] = useState('');
   const [mode, setMode] = useState('labels');
   const [page, setPage] = useState({ query: '', offset: 0 });
@@ -97,8 +99,22 @@ export default function ScriptPane({ token, bridge, activeGame, generation, find
     if (!findRequest?.id || !findRequest?.term) return;
     setMode('source');
     setFilter(findRequest.term.slice(0, 64));
+    // Keep label pagination consistent when returning to the Labels view.
+    setPage({ query: findRequest.term.slice(0, 64), offset: 0 });
     setSelected(null);
   }, [findRequest?.id]);
+
+  useEffect(() => {
+    if (!sourceRequest?.id || sourceRequest.generation !== generation) return;
+    const target = sourceTargetForContext(sourceRequest);
+    if (!target) return;
+    // Navigation is browser-only; game execution never jumps.
+    setMode('labels');
+    // A previous literal source-text search must not silently filter labels.
+    setFilter('');
+    setPage({ query: '', offset: 0 });
+    setSelected({ name: sourceRequest.name || 'Sampled script location', ...target });
+  }, [sourceRequest?.id, generation]);
 
   const filteredCount = useMemo(() => labels.length, [labels.length]);
   const openLocation = (entry) => {
@@ -187,14 +203,7 @@ export default function ScriptPane({ token, bridge, activeGame, generation, find
           <Tag color="gold">Source unavailable</Tag>
           <Text type="secondary">{source.reason || 'This game may contain only compiled .rpyc files.'}</Text>
         </div>}
-        {source?.available && <div className="script-source-lines" role="list">
-          {source.lines.map((entry) =>
-            <div key={entry.line} className={'script-source-line' +
-              (entry.line === source.line ? ' script-source-active' : '')} role="listitem">
-              <span className="script-source-number">{entry.line}</span>
-              <code>{entry.text}</code>
-            </div>)}
-        </div>}
+        {source?.available && <SourceCode lines={source.lines} activeLine={source.line} />}
       </> : <Empty className="script-source-empty"
         description="Choose a label or view the current statement to inspect its source location." />}
     </div>
