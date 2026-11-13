@@ -17,7 +17,7 @@ class VariableLocksTests(unittest.TestCase):
     def test_lock_is_exact_path_and_idempotent(self):
         locks = VariableLocks()
         self.assertTrue(locks.lock('store', self.path, 1.0, 'a' * 64, 'int'))
-        self.assertFalse(locks.lock('store', self.path, 2.0, 'a'.repeat(64), 'int'))
+        self.assertFalse(locks.lock('store', self.path, 2.0, 'a' * 64, 'int'))
         self.assertTrue(locks.is_locked('store', self.path))
         self.assertFalse(locks.is_locked('store', (('attribute', 'player'),)))
         snapshot = locks.snapshot()
@@ -31,23 +31,23 @@ class VariableLocksTests(unittest.TestCase):
         locks = VariableLocks()
         true_path = (('attribute', 'flags'), ('key', True))
         one_path = (('attribute', 'flags'), ('key', 1))
-        self.assertTrue(locks.lock('store', true_path, 1.0, 'a'.repeat(64), 'int'))
+        self.assertTrue(locks.lock('store', true_path, 1.0, 'a' * 64, 'int'))
         self.assertTrue(locks.is_locked('store', one_path))
-        self.assertFalse(locks.lock('store', one_path, 2.0, 'a'.repeat(64), 'int'))
+        self.assertFalse(locks.lock('store', one_path, 2.0, 'a' * 64, 'int'))
         self.assertEqual(locks.snapshot()['entries'][0]['path'][-1], ['key', True])
         self.assertTrue(locks.unlock('store', one_path))
         self.assertFalse(locks.is_locked('store', true_path))
 
         false_path = (('attribute', 'flags'), ('key', False))
         zero_path = (('attribute', 'flags'), ('key', 0))
-        self.assertTrue(locks.lock('store', false_path, 3.0, 'a'.repeat(64), 'int'))
+        self.assertTrue(locks.lock('store', false_path, 3.0, 'a' * 64, 'int'))
         self.assertTrue(locks.is_locked('store', zero_path))
         self.assertTrue(locks.unlock('store', zero_path))
 
     def test_unlock_is_idempotent_and_does_not_touch_game_state(self):
         locks = VariableLocks()
         self.assertFalse(locks.unlock('store', self.path))
-        locks.lock('store', self.path, 1.0, 'a'.repeat(64), 'int')
+        locks.lock('store', self.path, 1.0, 'a' * 64, 'int')
         self.assertTrue(locks.unlock('store', self.path))
         self.assertFalse(locks.unlock('store', self.path))
         self.assertFalse(locks.is_locked('store', self.path))
@@ -138,7 +138,7 @@ class VariableLocksTests(unittest.TestCase):
     def test_reset_drops_locks_and_advances_revision(self):
 
         locks = VariableLocks()
-        locks.lock('store', self.path, 1.0, 'a'.repeat(64), 'int')
+        locks.lock('store', self.path, 1.0, 'a' * 64, 'int')
         revision = locks.revision
         locks.reset('after_load')
         self.assertFalse(locks.is_locked('store', self.path))
