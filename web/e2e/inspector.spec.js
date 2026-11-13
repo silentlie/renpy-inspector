@@ -29,7 +29,7 @@ test('real bridge authentication, browser startup and navigation', async ({ page
   await page.getByRole('tab', { name: 'Overview' }).click();
   await expect(page.getByText('Playwright Fixture')).toBeVisible();
   await expect(page.getByText('Connected', { exact: true })).toBeVisible();
-  await expect(page.getByText('Read-only queue (sampled)')).toBeVisible();
+  await expect(page.getByText('Game-thread queue (sampled)')).toBeVisible();
   await page.getByRole('tab', { name: 'Variables' }).click();
   await expect(page.getByRole('button', { name: 'Inspect score' })).toBeVisible();
   // The browser UI and queue GETs must not allow writes to game variables.
