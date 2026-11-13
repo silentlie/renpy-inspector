@@ -45,6 +45,7 @@ test('primitive writes are disabled on the unconfigured bridge', async ({ page, 
     headers: { 'X-Inspector-Token': game.token },
   })).json();
   expect(snapshot.capabilities.primitive_edits).toBe(false);
+  await expect(page.getByRole('tab', { name: /Edits \(/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Inspect score' }).click();
   await expect(page.getByRole('button', { name: 'Open primitive editor' })).toHaveCount(0);
   const disabledWrite = await page.request.put(game.origin + '/api/v1/edit', {
