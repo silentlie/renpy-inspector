@@ -234,3 +234,16 @@ matrix in [COMPATIBILITY.md](COMPATIBILITY.md) and
 The separate graphical SDK suite above now exercises this workflow for
 Ren'Py 7.8.7 and 8.5.3; browser-only synthetic coverage still has its own
 distinct contract and does not substitute for native engine tests.
+
+
+## Runtime and restoration evidence (PR #27, v0.7.9)
+
+Python 2/3 tests exercise bounded deduplicated location samples, callback source
+labels, malicious filename objects, and optional rollback indicator sampling.
+The Chromium browser-to-real-bridge test changes a **synthetic** script line
+through the fixture process's stdin and checks timeline display and filtering.
+The real graphical Ren'Py 7.8.7/8.5.3 suite separately asserts that native
+FileLoad produces an `after_load` signal and rollback invalidation produces
+an `after_default` (or legacy fallback) signal. These are callback observations,
+not exact rollback destinations or interaction counts. The bridge timeline
+keeps at most 64 events in RAM and adds no HTTP endpoint or background scanner.
