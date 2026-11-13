@@ -9,7 +9,6 @@ changing variables during normal gameplay.
 from __future__ import unicode_literals
 
 import json
-import re
 
 from .bridge_paging import validate_tree_request
 from .compat import integer_types, string_types, text_type, to_text
@@ -18,7 +17,7 @@ MAX_VARIABLE_LOCKS = 128
 MAX_VARIABLE_LOCKS_BYTES = 32 * 1024
 MAX_VARIABLE_LOCK_REQUEST_BYTES = 4096
 MAX_LOCK_CHECKS_PER_PUBLISH = 8
-_HEX = re.compile(r'\A[a-f0-9]{64}\Z')
+_HEX_CHARS = 'abcdef0123456789'
 _EDITABLE_TYPES = ('str', 'unicode', 'int', 'long', 'float', 'bool')
 
 
@@ -113,12 +112,13 @@ class VariableLocks(object):
         }
 
     def lock(self, scope, path, locked_at, expected, typename):
-        if (type(expected) not in string_types or
-                type(typename) not in string_types):
+        if (not isinstance(expected, string_types) or
+                not isinstance(typename, string_types)):
             raise ValueError('variable lock needs a supported primitive fingerprint')
         expected = to_text(expected)
         typename = to_text(typename)
-        if _HEX.match(expected) is None or typename not in _EDITABLE_TYPES:
+        if (len(expected) != 64 or
+                any(character not in _HEX_CHARS for character in expected)) or typename not in _EDITABLE_TYPES:
             raise ValueError('variable lock needs a supported primitive fingerprint')
         key = self._key(scope, path)
         if key in self._by_key:
@@ -193,12 +193,13 @@ class VariableLocks(object):
         entry = self._by_key.get(self._key(scope, path))
         if entry is None:
             raise VariableLockMissing('No active lock exists for this path')
-        if (type(expected) not in string_types or
-                type(typename) not in string_types):
+        if (not isinstance(expected, string_types) or
+                not isinstance(typename, string_types)):
             raise ValueError('variable lock needs a supported primitive fingerprint')
         expected = to_text(expected)
         typename = to_text(typename)
-        if _HEX.match(expected) is None or typename not in _EDITABLE_TYPES:
+        if (len(expected) != 64 or
+                any(character not in _HEX_CHARS for character in expected)) or typename not in _EDITABLE_TYPES:
             raise ValueError('variable lock needs a supported primitive fingerprint')
         new_size = self._size(
             entry['_key'], entry['_display_key'], expected, typename)
