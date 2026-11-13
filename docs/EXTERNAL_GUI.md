@@ -1,11 +1,13 @@
 # External Ant Design workspace
 
+**PR #27 Runtime & Rollback History (v0.7.9).** The dedicated Runtime tab displays bounded, in-memory script-location observations, after-load/default callback signals, and the optional sampled rollback indicator. A default callback alone does not prove a rollback, and no SugarCube turns or exact dialogue interaction history are invented. This uses the existing authenticated snapshots, with no new game-state writes or polling.
+
 **PR #26 Structured Set Inspection (v0.7.8).** Safe scalar members of Python sets/frozensets can now expand, reveal and pin by typed value. **PR #25 Enhanced Compare & History (v0.7.7)** remains available. Small exact scalar captures and filtered, precision-labelled Compare histories now work in the existing read-only browser. **PR #24 Source Text Search (v0.7.6)** remains available. Scripts now supports bounded literal .rpy text lookup and Find References from variables. **PR #23 Direct Path Navigation (v0.7.5)** remains available. Exact store/persistent typed paths now navigate within the existing search popup, without evaluating Python. **PR #22 Full Value Inspector (v0.7.4)** also remains supported. The details drawer now provides bounded, on-demand primitive value inspection, including multiline text and explicit copy actions. **PR #20 graphical engine E2E (v0.7.3)** also remains supported. Native Ren'Py 7.8.7 and 8.5.3 SDK test games now exercise F8, browser startup, save/load, rollback and live Store values under Xvfb. Other versions and customised game overlays remain unverified automatically. See [E2E testing](E2E_TESTING.md).
 
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #26](https://github.com/silentlie/renpy-inspector/pull/26) once CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #27](https://github.com/silentlie/renpy-inspector/pull/27) once CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
@@ -26,7 +28,7 @@ A short in-game error notification may appear if static assets are missing or th
 
 ## Browser interaction
 
-The browser has top-level **Overview / Variables / Scripts** tabs, nested **Store / Persistent / Favourites** scopes, a virtual tree, a popover search, details drawers and browser-local favourites. The tree occupies the available viewport, without permanent header or footer. Search via the icon or `/`; type at least two characters. Global name/path results are shown only in the popup and include bounded previews. Enter reveals the first result, or click a hit to materialise its verified ancestor chain, expand the path and scroll to it in the virtualised Store/Persistent tree. Escape closes search. No permanent search bar is added.
+The browser has top-level **Overview / Variables / Scripts / Runtime** tabs, nested **Store / Persistent / Favourites** scopes, a virtual tree, a popover search, details drawers and browser-local favourites. The tree occupies the available viewport, without permanent header or footer. Search via the icon or `/`; type at least two characters. Global name/path results are shown only in the popup and include bounded previews. Enter reveals the first result, or click a hit to materialise its verified ancestor chain, expand the path and scroll to it in the virtualised Store/Persistent tree. Escape closes search. No permanent search bar is added.
 
 On branch expansion, the browser requests its first **80** children over the authenticated GET-only API. As the virtualised list scrolls and its pagination sentinel enters the viewport, it requests the next 80 automatically. The tree renders only visible rows, even if hundreds of nodes have been loaded. A retry control appears only after a failed page request. The connection state, capture timestamp, coverage warning, and read-only status live in **Overview**; there is no manual refresh button.
 
