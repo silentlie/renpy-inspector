@@ -733,8 +733,6 @@ class InspectorBridge(object):
                 }
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
-                if job['kind'] == 'edit_history':
-                    result['edit_history'] = self.edit_history.snapshot(self.generation)
             except EditConflict as reason:
                 status = 409
                 result = {'error': str(reason), 'code': reason.code}
@@ -751,8 +749,6 @@ class InspectorBridge(object):
                         'lock_revision': self.variable_locks.revision,
                     })
                     result['locks'] = self.variable_locks.snapshot()
-                if job['kind'] == 'edit_history':
-                    result['edit_history'] = self.edit_history.snapshot(self.generation)
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
             except VariableLockLimit:
