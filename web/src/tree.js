@@ -108,6 +108,18 @@ export function decodeTreeKey(key) {
   } catch { return null; }
 }
 
+/** Canonical identity for inspector locks. Python dictionary keys
+ * consider True/1 and False/0 equivalent even though typed JSON paths differ.
+ */
+export function lockIdentity(key) {
+  const decoded = decodeTreeKey(key);
+  if (!decoded) return key;
+  const path = decoded.path.map(([kind, value]) =>
+    kind === 'key' && typeof value === 'boolean'
+      ? [kind, Number(value)] : [kind, value]);
+  return JSON.stringify([decoded.scope, path]);
+}
+
 /** An exact, copyable Python-style path built from trusted typed segments.
  * Snapshot path labels are capped at 230 chars, so do not copy those previews.
  * This formats text only. It does NOT evaluate expressions in the game.

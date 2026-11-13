@@ -35,6 +35,7 @@ class AntDesignPackagingTests(unittest.TestCase):
             with ZipFile(archive) as zf:
                 names = zf.namelist()
                 self.assertIn('game/renpy_inspector/edit_history.py', names)
+                self.assertIn('game/renpy_inspector/variable_locks.py', names)
                 self.assertIn('game/renpy_inspector_web/index.html', names)
                 self.assertIn('game/renpy_inspector_web/assets/main.js', names)
                 self.assertFalse(any('node_modules' in n for n in names))

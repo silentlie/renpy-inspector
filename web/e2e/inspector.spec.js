@@ -45,6 +45,7 @@ test('primitive writes are disabled on the unconfigured bridge', async ({ page, 
     headers: { 'X-Inspector-Token': game.token },
   })).json();
   expect(snapshot.capabilities.primitive_edits).toBe(false);
+  expect(snapshot.locks.entries).toHaveLength(0);
   await expect(page.getByRole('tab', { name: /Edits \(/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Inspect score' }).click();
   await expect(page.getByRole('button', { name: 'Open primitive editor' })).toHaveCount(0);
@@ -115,6 +116,76 @@ test('explicit game opt-in permits a confirmed primitive edit and rejects stale 
         expected: target.expected, text: '300' },
     });
     expect(stale.status()).toBe(409);
+  } finally { await game.stop(); }
+});
+
+test('variable locks protect inspector writes without freezing game state', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const headers = { 'X-Inspector-Token': game.token };
+    const snapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json();
+    expect(snapshot.locks.entries).toHaveLength(0);
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const editor = page.getByRole('region', { name: 'Primitive variable editing' });
+    await editor.getByRole('button', { name: 'Open primitive editor' }).click();
+    await expect(editor.getByRole('textbox', { name: 'New literal value' })).toHaveValue('2');
+
+    await editor.getByRole('button', { name: 'Lock variable' }).click();
+    await expect(editor.getByRole('button', { name: 'Unlock variable' })).toBeVisible();
+    await expect(editor).toContainText('does not prevent game scripts');
+    await expect(page.locator('.variable-lock-indicator')).toHaveAttribute(
+      'aria-label', 'Locked against Inspector writes');
+    const params = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'score']]),
+    });
+    const target = await (await page.request.get(
+      game.origin + '/api/v1/edit-target?' + params, { headers })).json();
+    expect(target.locked).toBe(true);
+    expect(target.generation).toBe(snapshot.generation);
+
+    const denied = await page.request.put(game.origin + '/api/v1/edit', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'score']],
+        generation: target.generation, expected: target.expected,
+        type: target.type, text: '100' },
+    });
+    expect(denied.status()).toBe(423);
+    expect((await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json()).scopes.store.find((item) => item.name === 'score')?.preview).toBe('2');
+
+    await editor.getByRole('button', { name: 'Unlock variable' }).click();
+    await expect(page.locator('.variable-lock-indicator')).toHaveCount(0);
+    await editor.getByRole('textbox', { name: 'New literal value' }).fill('17');
+    await editor.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+    await editor.getByRole('button', { name: 'Apply primitive edit' }).click();
+    await expect(page.getByRole('dialog', { name: 'Variable details' })).toHaveCount(0);
+    await expect(page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^score$/ }),
+    }).locator('.variable-preview')).toHaveText('17', { timeout: 12000 });
+    const latest = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json();
+    expect(latest.locks.entries).toHaveLength(0);
+
+    // Locks also protect Undo, not just the editor's Apply button.
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const secondEditor = page.getByRole('region', { name: 'Primitive variable editing' });
+    await secondEditor.getByRole('button', { name: 'Open primitive editor' }).click();
+    await secondEditor.getByRole('button', { name: 'Lock variable' }).click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: /Edits/ }).click();
+    const history = page.getByRole('region', { name: 'Inspector edit history' });
+    await history.getByRole('checkbox', {
+      name: 'I understand Undo/Redo writes to the running game',
+    }).check();
+    await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
+    await expect(history).toContainText('locked against Inspector writes');
   } finally { await game.stop(); }
 });
 

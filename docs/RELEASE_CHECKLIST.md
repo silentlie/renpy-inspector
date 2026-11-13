@@ -1,4 +1,4 @@
-# Release and upgrade acceptance (PR #30, v0.7.12)
+# Release and upgrade acceptance (PR #31, v0.7.13)
 
 This remains a **prerelease**. Passing tests, packaging checks and SDK lint
 does not certify that F8, rollback or rendering works in every Ren'Py game.
@@ -7,7 +7,7 @@ performance regression is visible.
 
 ## Automated checks (run before publishing)
 
-1. Python 2.7 compatibility tests; Python 3.9/3.13 unit tests.
+1. Python 2.7 compatibility tests; Python 3.9/3.13 unit tests, including lock lifecycle and inspector-only enforcement.
 2. Official SDK lint on Ren'Py 7.4.11, 7.8.7, 8.4.1, and 8.5.3.
 3. Ant Design UI unit tests and a production Vite build.
 4. Build both engine-labelled ZIP files, calculate SHA256 checksums, then
@@ -21,8 +21,8 @@ To verify downloaded archives from a source checkout:
 
 ```sh
 python scripts/verify_release.py \
-  dist/renpy-inspector-v0.7.12-renpy7.zip \
-  dist/renpy-inspector-v0.7.12-renpy8.zip
+  dist/renpy-inspector-v0.7.13-renpy7.zip \
+  dist/renpy-inspector-v0.7.13-renpy8.zip
 ```
 
 Keep each `.zip.sha256` file alongside its corresponding ZIP. Different
@@ -39,8 +39,8 @@ native-screen modules into the release archive.
 
 1. Back up the **whole** game directory and existing save directory first.
    Choose a game you have permission to inspect or a disposable test project.
-2. Obtain `renpy-inspector-v0.7.12-renpy7.zip` or
-   `renpy-inspector-v0.7.12-renpy8.zip` from the PR preview. If downloaded
+2. Obtain `renpy-inspector-v0.7.13-renpy7.zip` or
+   `renpy-inspector-v0.7.13-renpy8.zip` from the PR preview. If downloaded
    from GitHub Actions, extract the **outer artifact ZIP** before selecting
    the one correct engine installer.
 3. Extract that **inner** archive into the installation root (the directory
@@ -67,12 +67,15 @@ native-screen modules into the release archive.
 7. On one actual Ren'Py 7 and one Ren'Py 8 game, verify live root and nested
    values, paging, deep favourite paths, global popup search/reveal,
    current script navigation, default-deny editing, and the opt-in Edits tab's
-confirmed undo/redo, same-generation conflict handling, redo-branch discard,
-and load/rollback history reset.
-8. Save a game, change variables, load, then rollback two steps. Values and
-   Compare should discard old-generation state; favourites must survive as
-   paths and reconnect or show missing status. Test an overlay/menu where the
-   inspector may not receive interaction ticks.
+   confirmed undo/redo, same-generation conflict handling and redo-branch discard.
+   With editing opted in, lock a supported Store primitive, confirm the tree
+   padlock appears and Inspector Edit/Undo return HTTP 423 without changing the
+   value. Unlock it, confirm writes work again, and verify game-script assignment
+   still works while a variable is locked.
+8. Save a game, change variables, load, then rollback two steps. Values,
+   Compare, edit reversal history and locks should discard old-generation state;
+   favourites must survive as paths and reconnect or show missing status. Test
+   an overlay/menu where the inspector may not receive interaction ticks.
 9. Try a game distributing only `.rpyc`: label navigation may work, while
    missing `.rpy` source excerpts should produce an unavailable state.
 10. Exit the game and confirm the localhost service ends. Compare an ordinary
