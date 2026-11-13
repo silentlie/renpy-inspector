@@ -12,7 +12,7 @@ import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
   integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
   readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
-  staleSample, formatTypedPath,
+  staleSample, formatTypedPath, lockIdentity,
 } from './tree.js';
 import {
   collectWatchedPages, combineScopedWatches, nextEligibleWatchBatch,
@@ -215,7 +215,7 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
           const pinned = favKeys.has(`${originScope}:${sourceKey}`);
           return <TreeRow node={{ ...node, expanded: expandedSet.has(node.key) }}
             isFavourite={pinned}
-            isLocked={originScope === 'store' && lockedKeys?.has(sourceKey)}
+            isLocked={originScope === 'store' && lockedKeys?.has(lockIdentity(sourceKey))}
             isActive={(selected?.scope === originScope && selected?.key === sourceKey) ||
               (revealTarget?.scope === originScope && revealTarget?.key === sourceKey)}
             onToggle={hasQuery ? undefined : () => {
@@ -370,7 +370,7 @@ export default function App() {
   const revealCounterRef = useRef(0);
   const [selected, setSelected] = useState(null);
   const lockedKeys = useMemo(() => new Set((snapshot?.locks?.entries ?? [])
-    .map((entry) => entry.key).filter((key) => typeof key === 'string')), [snapshot?.locks]);
+    .map((entry) => lockIdentity(entry.key)).filter((key) => typeof key === 'string')), [snapshot?.locks]);
   const syncLocks = useCallback((locks) => {
     setSnapshot((current) => current ? { ...current, locks } : current);
   }, []);
