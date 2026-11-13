@@ -12,11 +12,14 @@ export function runtimeEventDescription(event) {
       note: 'Observed during a periodic snapshot; intermediate statements may be missed.',
     };
   }
-  if (event.kind === 'invalidation' && event.signal === 'edit') {
+  if (event.kind === 'invalidation' && ['edit', 'undo', 'redo'].includes(event.signal)) {
     return {
-      title: 'Confirmed inspector edit',
-      detail: 'Game-thread Store primitive changed',
-      note: 'A successful explicit write advanced inspector generation. This is not a rollback or undo event.',
+      title: event.signal === 'undo' ? 'Inspector edit undone' :
+        event.signal === 'redo' ? 'Inspector edit redone' : 'Confirmed inspector edit',
+      detail: event.signal === 'undo' ? 'Game-thread Store primitive restored' :
+        event.signal === 'redo' ? 'Game-thread Store primitive reapplied' :
+          'Game-thread Store primitive changed',
+      note: 'An explicit inspector write advanced generation. This is not a Ren’Py rollback or a reconstructed game turn.',
     };
   }
   if (event.kind === 'invalidation') {
