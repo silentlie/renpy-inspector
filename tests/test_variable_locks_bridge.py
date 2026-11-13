@@ -200,6 +200,8 @@ class VariableLocksHTTPTests(unittest.TestCase):
 
         fresh = self.target()
         self.assertEqual(self.lock('lock', fresh)[0], 200)
+        self.bridge.invalidate(reason='legacy_rollback')
+        self.assertEqual(self.bridge.variable_locks.snapshot()['entries'], [])
         self.bridge.configure_variable_editing(False)
         self.assertEqual(self.bridge.variable_locks.snapshot()['entries'], [])
         self.assertEqual(self.request('PUT', '/api/v1/locks', {
