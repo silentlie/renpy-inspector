@@ -117,7 +117,8 @@ export default function EditValuePanel({
   };
 
   const toggleLock = async () => {
-    if (!valid || !target?.editable || !Number.isSafeInteger(target.generation) || busy) return;
+    if (!valid || !target || (!isLocked && !target.editable) ||
+        !Number.isSafeInteger(target.generation) || busy) return;
     const action = isLocked ? 'unlock' : 'lock';
     setBusy(true); setError(''); setSaved('');
     const request = new AbortController();
@@ -188,7 +189,7 @@ export default function EditValuePanel({
       {target && !target.editable && <Text type="secondary" role="status">
         {target.reason || 'This value is not eligible for editing.'}
       </Text>}
-      {target?.editable && <>
+      {target && (target.editable || isLocked) && <>
         <Space wrap className="detail-lock-controls">
           <Tag color={isLocked ? 'warning' : 'default'}>{isLocked ? 'Locked' : 'Unlocked'}</Tag>
           <Button size="small" disabled={busy} onClick={toggleLock}
@@ -200,6 +201,8 @@ export default function EditValuePanel({
           A lock blocks this Inspector's edits and Undo/Redo for this exact path. It does not
           prevent game scripts or Ren'Py from changing the variable during normal gameplay.
         </Text>
+      </>}
+      {target?.editable && <>
         <Text type="secondary">Current type: {target.type}. The type cannot be changed.
           {target.type === 'bool' ? ' Enter True or False.' : ''}
         </Text>
