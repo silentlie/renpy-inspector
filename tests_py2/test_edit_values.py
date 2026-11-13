@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(
 from renpy_inspector.edit_values import (
     EditConflict, apply_primitive_edit, inspect_edit_target, validate_edit_request,
 )
+from renpy_inspector.compat import integer_types
 
 
 class PrimitiveEditPython2Tests(unittest.TestCase):
@@ -20,7 +21,7 @@ class PrimitiveEditPython2Tests(unittest.TestCase):
         self.root.score = 10
         self.root.text = u'Snow: \u2603'
         self.root.utf8_bytes = b'ascii only'
-        self.root.legacy = long(12345678901234567890)
+        self.root.legacy = integer_types[-1](12345678901234567890)
         self.root.flags = {'enabled': True, 'inventory': [0, 1]}
         self.providers = {'store': lambda: self.root, 'persistent': lambda: {}}
 
@@ -38,8 +39,8 @@ class PrimitiveEditPython2Tests(unittest.TestCase):
                 result['type'], candidate)['applied'])
         self.assertEqual(self.root.score, 12)
         self.assertEqual(self.root.text, u'New \u2603')
-        self.assertEqual(self.root.legacy, long(12345678901234567891))
-        self.assertIs(type(self.root.legacy), long)
+        self.assertEqual(self.root.legacy, integer_types[-1](12345678901234567891))
+        self.assertIs(type(self.root.legacy), integer_types[-1])
         self.assertIs(self.root.flags['enabled'], False)
         self.assertEqual(self.root.flags['inventory'][1], 99)
 
