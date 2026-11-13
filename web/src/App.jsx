@@ -4,7 +4,7 @@ import {
   Select, Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
 } from 'antd';
 import {
-  CheckCircleFilled, CopyOutlined, DisconnectOutlined,
+  CheckCircleFilled, CopyOutlined, DisconnectOutlined, LockOutlined,
   EyeOutlined, RightOutlined, DownOutlined, SearchOutlined,
   StarFilled, StarOutlined, WarningOutlined,
 } from '@ant-design/icons';
@@ -100,7 +100,7 @@ function AutoPageSentinel({ scope, offset, loading, error, requestPage }) {
   </span>;
 }
 
-function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite }) {
+function TreeRow({ node, isFavourite, isActive, isLocked, onToggle, onDetails, onFavourite }) {
   const canExpand = Boolean(node.expandable || node.children?.length) && typeof onToggle === 'function';
   const displayedType = valuePresentation(node.type, node.state);
   return <span className={`variable-row${isActive ? ' variable-row-active' : ''}`}>
@@ -116,6 +116,9 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
       <span className="variable-key" title={node.path}>{node.name}</span>
       <span className="variable-colon">:</span>
       <Tooltip title={`${displayedType.category}: ${displayedType.detail}`}><span className="variable-type">{node.type}</span></Tooltip>
+      {isLocked && <Tooltip title="Protected from Inspector edits and Undo/Redo. Game scripts can still change this variable.">
+        <span className="variable-lock-indicator" role="status" aria-label="Locked against Inspector writes"><LockOutlined /></span>
+      </Tooltip>}
       {node.capped && <Tooltip title="Partial collection: some entries are unsupported or exceed inspection limits.">
         <span className="variable-partial-icon" role="status"
           aria-label="Partial collection coverage"><WarningOutlined /></span>
@@ -142,7 +145,7 @@ function TreeRow({ node, isFavourite, isActive, onToggle, onDetails, onFavourite
 }
 
 function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite,
-  expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
+  lockedKeys, expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
   const viewportRef = useRef(null);
   const treeRef = useRef(null);
   const [height, setHeight] = useState(450);
@@ -212,6 +215,7 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
           const pinned = favKeys.has(`${originScope}:${sourceKey}`);
           return <TreeRow node={{ ...node, expanded: expandedSet.has(node.key) }}
             isFavourite={pinned}
+            isLocked={originScope === 'store' && lockedKeys?.has(sourceKey)}
             isActive={(selected?.scope === originScope && selected?.key === sourceKey) ||
               (revealTarget?.scope === originScope && revealTarget?.key === sourceKey)}
             onToggle={hasQuery ? undefined : () => {
@@ -365,6 +369,11 @@ export default function App() {
   const [revealError, setRevealError] = useState('');
   const revealCounterRef = useRef(0);
   const [selected, setSelected] = useState(null);
+  const lockedKeys = useMemo(() => new Set((snapshot?.locks?.entries ?? [])
+    .map((entry) => JSON.stringify([entry.scope, entry.path]))), [snapshot?.locks]);
+  const syncLocks = useCallback((locks) => {
+    setSnapshot((current) => current ? { ...current, locks } : current);
+  }, []);
   const [findRequest, setFindRequest] = useState(null);
   const [sourceRequest, setSourceRequest] = useState(null);
   const sourceRequestIdRef = useRef(0);
@@ -955,7 +964,7 @@ export default function App() {
               : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
-                expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
+                lockedKeys={lockedKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
                 loadingPages={loadingPages} pageErrors={pageErrors}
                 revealTarget={revealTarget} />}
         </div>}
@@ -1053,7 +1062,7 @@ export default function App() {
               key={JSON.stringify(['edit', treePages?.generation, selected.scope, selected.key])}
               enabled={snapshot.capabilities.primitive_edits} selection={selected}
               generation={treePages?.generation} bridge={bridge} token={token}
-              onApplied={() => setSelected(null)} />}
+              onApplied={() => setSelected(null)} onLocksChanged={syncLocks} />
           {(activeNode?.limited || activeNode?.capped) &&
             <Tag color="gold">Some descendants were omitted by type or inspection limits</Tag>}
           <div className="detail-history">
