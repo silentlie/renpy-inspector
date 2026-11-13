@@ -56,8 +56,14 @@ export default function EditHistoryPane({
       }
       if (!response.ok) {
         throw new Error(response.status === 409
-          ? (data.error || 'Conflict: the recorded value or game generation changed.')
-          : response.status === 423 ? 'This variable is locked against Inspector writes. Unlock it from the variable details before undoing or redoing.'
+          ? (data.code === 'history_value_changed'
+            ? 'The game changed the recorded value. This reversal was retired without overwriting gameplay.'
+            : data.code === 'generation_changed'
+              ? 'Game state changed in another browser or during gameplay. Refresh the Edits tab before retrying.'
+              : (data.error || 'Conflict: the recorded value or game generation changed.'))
+          : response.status === 423 ? (data.lock_stale
+            ? 'Gameplay changed this variable after it was locked. The lock still blocks Undo/Redo; refresh or unlock it in variable details.'
+            : 'This variable is locked against Inspector writes. Unlock it from the variable details before undoing or redoing.')
             : response.status === 403 ? 'Editing has been disabled by the game.'
               : response.status === 503
               ? 'The game may have completed this action. Refresh and inspect the current value before retrying.'
@@ -68,6 +74,7 @@ export default function EditHistoryPane({
         throw new Error('The reversal was not confirmed. Refresh and inspect the current value.');
       }
     } catch (reason) {
+      setConfirmed(false);
       setError(reason.message || 'Undo/Redo failed.');
     } finally {
       setBusy(false);
@@ -75,8 +82,9 @@ export default function EditHistoryPane({
   };
 
   const entries = Array.isArray(history?.entries) ? [...history.entries].reverse() : [];
-  const canUndo = enabled && Boolean(history?.can_undo && history?.undo_entry_id);
-  const canRedo = enabled && Boolean(history?.can_redo && history?.redo_entry_id);
+  const historyCurrent = Number.isSafeInteger(generation) && history?.generation === generation;
+  const canUndo = enabled && historyCurrent && Boolean(history?.can_undo && history?.undo_entry_id);
+  const canRedo = enabled && historyCurrent && Boolean(history?.can_redo && history?.redo_entry_id);
 
   return <section className="edit-history-workspace" aria-label="Inspector edit history">
     <div className="edit-history-toolbar">
@@ -100,6 +108,9 @@ export default function EditHistoryPane({
         </Checkbox>
       </div>
     </div>
+    {!historyCurrent && <Text type="warning" role="status">
+      Game state changed in another browser or during gameplay. Waiting for the current edit history before enabling Undo/Redo.
+    </Text>}
     {error && <Text type="danger" role="alert">{error}</Text>}
     <div className="edit-history-list" role="region" aria-label="Explicit edit records">
       {entries.length ? entries.map((entry) => {

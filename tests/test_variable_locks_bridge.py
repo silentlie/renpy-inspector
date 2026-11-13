@@ -69,6 +69,30 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.thread_names[:] = []
         return result[0]
 
+    def simultaneous(self, requests):
+        results = [None] * len(requests)
+        threads = []
+        for index, (method, path, payload) in enumerate(requests):
+            thread = threading.Thread(target=lambda i=index, m=method, p=path, body=payload:
+                                      results.__setitem__(i, self.request(m, p, body)))
+            threads.append(thread)
+            thread.start()
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            with self.bridge.lock:
+                if len(self.bridge.pending_pages) >= len(requests):
+                    break
+            time.sleep(0.01)
+        with self.bridge.lock:
+            self.assertGreaterEqual(len(self.bridge.pending_pages), len(requests))
+        self.bridge.tick()
+        for thread in threads:
+            thread.join(4)
+            self.assertFalse(thread.is_alive())
+        self.assertTrue(all(name == self.game_thread for name in self.thread_names))
+        self.thread_names[:] = []
+        return results
+
     def target(self, path=None):
         path = path or [['attribute', 'score']]
         query = urlencode({'scope': 'store', 'path': json.dumps(path)})
@@ -89,6 +113,14 @@ class VariableLocksHTTPTests(unittest.TestCase):
             'scope': 'store', 'path': path, 'generation': target['generation'],
             'expected': target['expected'], 'type': target['type'], 'text': str(value),
         })
+
+    def test_refresh_without_an_active_lock_returns_a_stable_conflict(self):
+        target = self.target()
+        status, response = self.lock('refresh', target)
+        self.assertEqual(status, 409)
+        self.assertEqual(response['code'], 'lock_missing')
+        self.assertFalse(self.bridge.variable_locks.is_locked(
+            'store', (('attribute', 'score'),)))
 
     def test_lock_blocks_inspector_edit_but_does_not_advance_game_generation(self):
         target = self.target()
@@ -201,8 +233,17 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.store.score = 99
         self.assertTrue(self.bridge.variable_locks.is_locked(
             'store', (('attribute', 'score'),)))
+        self.bridge.publish()  # Background monitoring runs on the game thread.
+        cached = json.loads(self.bridge.cached_bytes.decode('ascii'))
+        self.assertTrue(cached['locks']['entries'][0]['stale'])
+        self.assertEqual(cached['diagnostics']['lock_checks'], 1)
+        self.assertLessEqual(cached['diagnostics']['lock_checks'],
+                             cached['diagnostics']['lock_check_limit'])
+        self.assertGreaterEqual(cached['diagnostics']['lock_check_ms'], 0)
         fresh = self.target()
         self.assertTrue(fresh['locked'])
+        self.assertTrue(fresh['lock_stale'])
+        self.assertEqual(fresh['lock_stale_reason'], 'value_changed')
         self.assertEqual(fresh['text'], '99')
         self.assertEqual(self.store.score, 99)
 
@@ -213,11 +254,135 @@ class VariableLocksHTTPTests(unittest.TestCase):
         changed = self.target()
         self.assertFalse(changed['editable'])
         self.assertTrue(changed['locked'])
+        self.assertTrue(changed['lock_stale'])
+        self.assertEqual(changed['lock_stale_reason'], 'target_unavailable')
         status, unlocked = self.lock('unlock', changed)
         self.assertEqual(status, 200)
         self.assertFalse(unlocked['locked'])
         self.assertFalse(self.bridge.variable_locks.is_locked(
             'store', (('attribute', 'score'),)))
+
+    def test_stale_lock_blocks_writes_until_explicit_refresh_or_unlock(self):
+        target = self.target()
+        self.assertEqual(self.lock('lock', target)[0], 200)
+        self.store.score = 99
+        self.bridge.publish()
+        changed = self.target()
+        self.assertTrue(changed['locked'])
+        self.assertTrue(changed['lock_stale'])
+
+        status, denied = self.edit(changed, 100)
+        self.assertEqual(status, 423)
+        self.assertTrue(denied['lock_stale'])
+        self.assertEqual(self.store.score, 99)
+
+        status, refreshed = self.lock('refresh', changed)
+        self.assertEqual(status, 200)
+        self.assertTrue(refreshed['locked'])
+        self.assertFalse(refreshed['lock_stale'])
+        self.assertEqual(refreshed['action'], 'refresh')
+
+        current = self.target()
+        self.assertTrue(current['locked'])
+        self.assertFalse(current['lock_stale'])
+        self.assertEqual(self.lock('unlock', current)[0], 200)
+        current = self.target()
+        self.assertEqual(self.edit(current, 100)[0], 200)
+        self.assertEqual(self.store.score, 100)
+
+    def test_stale_lock_does_not_hide_external_conflict_from_undo(self):
+        target = self.target()
+        status, edited = self.edit(target, 17)
+        self.assertEqual(status, 200)
+        history = edited['edit_history']
+        current = self.target()
+        self.assertEqual(self.lock('lock', current)[0], 200)
+        self.store.score = 99
+
+        undo = self.threaded('PUT', '/api/v1/edit-history', {
+            'action': 'undo', 'generation': history['generation'],
+            'entry_id': history['undo_entry_id'],
+        })
+        self.assertEqual(undo[0], 423)
+        self.assertTrue(undo[1]['lock_stale'])
+        self.assertTrue(undo[1]['edit_history']['can_undo'])
+        self.assertEqual(self.store.score, 99)
+
+        current = self.target()
+        self.assertTrue(current['lock_stale'])
+        self.assertEqual(self.lock('refresh', current)[0], 200)
+        current = self.target()
+        self.assertEqual(self.lock('unlock', current)[0], 200)
+        undo = self.threaded('PUT', '/api/v1/edit-history', {
+            'action': 'undo', 'generation': history['generation'],
+            'entry_id': history['undo_entry_id'],
+        })
+        self.assertEqual(undo[0], 409)
+        self.assertEqual(undo[1]['code'], 'history_value_changed')
+        self.assertEqual(self.store.score, 99)
+        self.assertEqual(undo[1]['edit_history']['entries'][0]['status'], 'conflicted')
+
+    def test_two_concurrent_browser_writes_from_one_generation_apply_at_most_once(self):
+        target = self.target()
+        payload_a = {
+            'scope': 'store', 'path': [['attribute', 'score']],
+            'generation': target['generation'], 'expected': target['expected'],
+            'type': target['type'], 'text': '17',
+        }
+        payload_b = dict(payload_a, text='18')
+        results = self.simultaneous([
+            ('PUT', '/api/v1/edit', payload_a),
+            ('PUT', '/api/v1/edit', payload_b),
+        ])
+        self.assertEqual(sorted(result[0] for result in results), [200, 409])
+        self.assertIn(self.store.score, (17, 18))
+        history = self.bridge.edit_history.snapshot(self.bridge.generation)
+        self.assertEqual(len(history['entries']), 1)
+        self.assertTrue(history['can_undo'])
+        self.assertEqual(history['generation'], self.bridge.generation)
+
+    def test_concurrent_lock_and_edit_cannot_both_succeed(self):
+        target = self.target()
+        lock_payload = {
+            'action': 'lock', 'scope': 'store',
+            'path': [['attribute', 'score']], 'generation': target['generation'],
+        }
+        edit_payload = {
+            'scope': 'store', 'path': [['attribute', 'score']],
+            'generation': target['generation'], 'expected': target['expected'],
+            'type': target['type'], 'text': '17',
+        }
+        results = self.simultaneous([
+            ('PUT', '/api/v1/locks', lock_payload),
+            ('PUT', '/api/v1/edit', edit_payload),
+        ])
+        statuses = sorted(result[0] for result in results)
+        self.assertEqual(statuses[0], 200)
+        self.assertIn(statuses[1], (409, 423))
+        self.assertFalse(statuses == [200, 200])
+        if self.bridge.variable_locks.is_locked('store', (('attribute', 'score'),)):
+            self.assertEqual(self.store.score, 2)
+        else:
+            self.assertEqual(self.store.score, 17)
+
+    def test_repeated_load_and_rollback_cycles_clear_locks_and_history(self):
+        for index, reason in enumerate(('after_load', 'legacy_rollback', 'after_load')):
+            target = self.target()
+            status, edited = self.edit(target, 10 + index)
+            self.assertEqual(status, 200)
+            current = self.target()
+            self.assertEqual(self.lock('lock', current)[0], 200)
+            old_generation = self.bridge.generation
+            self.bridge.invalidate(reason=reason)
+            self.assertGreater(self.bridge.generation, old_generation)
+            snapshot = json.loads(self.bridge.cached_bytes.decode('ascii'))
+            self.assertEqual(snapshot['locks']['entries'], [])
+            self.assertEqual(snapshot['edit_history']['entries'], [])
+            self.assertFalse(self.bridge.variable_locks.is_locked(
+                'store', (('attribute', 'score'),)))
+            stale = self.edit(current, 55)
+            self.assertEqual(stale[0], 409)
+            self.assertEqual(stale[1]['code'], 'generation_changed')
 
     def test_load_rollback_and_edit_disable_clear_locks(self):
 

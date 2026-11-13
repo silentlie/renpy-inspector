@@ -1,31 +1,47 @@
-# Current delivery plan (9 November 2026)
+# Current delivery plan (13 November 2026)
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #31 — Variable Locks (v0.7.13 experimental)
+## Milestone: PR #32 — Edit Safety & State Consistency (v0.7.14 experimental)
 
-- Build on PR #29's trusted game-init opt-in and PR #30's bounded edit history.
-  Locks remain unavailable when primitive editing is disabled.
-- Add session-only, exact typed-path locks for existing editable Store
-  primitives. Bound retention to 128 paths / 32 KiB; never retain game objects.
-- Add authenticated `PUT /api/v1/locks` lock/unlock actions. Validate the
-  current game generation and resolve lock targets on the Ren'Py interaction
-  thread. Lock metadata changes do not mutate variables or advance generation.
-- Enforce locks in both explicit `/api/v1/edit` and Undo/Redo paths. Reject
-  inspector writes with HTTP 423 and leave the edit history stack unchanged.
-- Locks are an inspector-only guard, not Python object locks or monkey-patches.
-  They never prevent game scripts, Ren'Py, save/load or rollback from changing
-  Store values. Existing exact-value compare-and-swap still detects such writes.
-- Clear locks on game load, rollback, any unclassified generation invalidation,
-  bridge restart and editing disablement. A new edit/undo/redo preserves locks.
-- Show lock state in the variable tree and provide contextual Lock/Unlock
-  controls in the primitive editor. Explain the game-script limitation.
-- Test Python 2/3, Unicode typed paths, bounded count/bytes, auth, queue/thread
-  ownership, lock/edit and lock/undo conflicts, lifecycle reset and real Ren'Py
-  default-deny behaviour. Include the new module in the closed installer manifest.
-- Graphical Ren'Py 7/8 E2E and closed-manifest v0.7.13 preview packaging gate.
-- **Deferred:** locks that intercept game-script assignments, object-wide locks,
-  Persistent locks, durable locks and lock ownership/lease semantics.
+- Build on PR #29-31's trusted opt-in, compare-and-swap writes, bounded edit
+  history and exact-path locks. Editing and locks remain disabled by default.
+- Bind each lock to the exact supported primitive fingerprint and built-in type
+  captured when it is created. Never retain game objects or raw game values.
+- Monitor locked paths on the Ren'Py interaction thread. Check at most eight
+  rotating paths per root publish (128 locks maximum); mark value, type or path
+  changes as stale. Sampling is intentionally bounded and cannot detect a
+  transient value change that occurs and reverts between checks.
+- A stale lock remains active. It continues blocking Inspector Edit/Undo/Redo
+  until the user explicitly refreshes its baseline or unlocks it. Add a
+  generation-checked refresh action to PUT /api/v1/locks; refresh requires the
+  path to remain an eligible primitive and updates the editor's current
+  target without changing gameplay or state generation.
+- Return stable conflict codes and a fresh current target for stale edits.
+  Preserve the user's draft but require renewed confirmation; distinguish
+  changed values/types, missing paths, stale generations, lock conflicts and
+  retired history entries.
+- Treat all browser tabs as clients of one serialized bridge session. Concurrent
+  writes from one generation may apply at most once; later stale requests
+  receive 409 and clients converge on shared lock/history revisions.
+- Repeated load/rollback invalidations must clear both locks and reversal
+  history. External game-side writes must never be overwritten by edit, undo or
+  redo conflict recovery.
+- Test Python 2/3 compatibility, bounded rotating lock checks, stale refresh,
+  unsupported/missing targets, current-target conflict payloads, concurrent
+  lock/edit and edit/edit races, two independent browser sessions, and repeated
+  lifecycle resets. Run both real Ren'Py graphical suites and both preview ZIPs.
+- **Deferred:** interception of game-script assignments, durable lock ownership,
+  cross-game locks, automatic stale-lock release and unbounded mutation logs.
+
+## Previous milestone: PR #31 — Variable Locks (v0.7.13 experimental)
+
+- Session-only, exact typed-path locks for existing editable Store primitives.
+- Locks guard only Inspector Edit/Undo/Redo; they never intercept game scripts
+  or prevent Ren'Py from changing values.
+- Bounded to 128 paths / 32 KiB; reset on load, rollback, bridge restart,
+  editing disablement or other unclassified generation changes.
+- Authenticated game-thread lock/unlock API and contextual tree/detail controls.
 
 ## Previous milestone: PR #30 — Undo/Redo & Edit History (v0.7.12 experimental)
 

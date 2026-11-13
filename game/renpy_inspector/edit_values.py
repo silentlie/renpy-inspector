@@ -33,14 +33,24 @@ _FLOAT = re.compile(r'\A[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)
 
 class EditConflict(Exception):
     """Expected generation or exact primitive changed since the editor opened."""
+    def __init__(self, message, code='value_changed'):
+        Exception.__init__(self, message)
+        self.code = code
 
 
 class EditUnsupported(Exception):
     """The current location or primitive is not editable under the MVP rules."""
+    def __init__(self, message, code='unsupported_target'):
+        Exception.__init__(self, message)
+        self.code = code
 
 
 class EditLocked(Exception):
     """The exact Store path is protected from inspector-side writes."""
+    def __init__(self, message, stale=False, stale_reason=None):
+        Exception.__init__(self, message)
+        self.stale = bool(stale)
+        self.stale_reason = stale_reason
 
 
 def validate_edit_request(payload):
@@ -123,10 +133,10 @@ def _target(providers, scope, path):
         visible, unused = child_descriptors(
             owner, MAX_BRANCH, is_store_root=(depth == 0))
         if segment not in [entry[0] for entry in visible]:
-            raise EditConflict('Variable is no longer visible')
+            raise EditConflict('Variable is no longer visible', 'path_unavailable')
         child = read_child(owner, segment)
         if child is MISSING:
-            raise EditConflict('Variable no longer exists')
+            raise EditConflict('Variable no longer exists', 'path_missing')
         if depth == len(path) - 1:
             return owner, segment, child
         owner = child
@@ -160,7 +170,7 @@ def inspect_edit_target(providers, scope, path):
 
 def _parse_candidate(typename, text, original):
     if typename != type(original).__name__:
-        raise EditConflict('Variable type changed')
+        raise EditConflict('Variable type changed', 'type_changed')
     if typename in ('str', 'unicode'):
         # Python 2 byte strings are intentionally NOT exposed as editable.
         if type(original) is not text_type:
@@ -194,10 +204,10 @@ def apply_primitive_edit(providers, scope, path, expected, typename, text):
     owner, segment, current = _target(providers, scope, path)
     scalar = _scalar(current)
     if scalar is None:
-        raise EditConflict('Variable is no longer a supported primitive')
+        raise EditConflict('Variable is no longer a supported primitive', 'unsupported_value')
     kind, old_text = scalar
     if kind != typename or _fingerprint(kind, old_text) != expected:
-        raise EditConflict('Variable value or type changed')
+        raise EditConflict('Variable value or type changed', 'value_changed')
     candidate = _parse_candidate(typename, text, current)
     if type(candidate) is not type(current):
         raise EditUnsupported('Type-changing writes are forbidden')

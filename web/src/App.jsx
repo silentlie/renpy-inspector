@@ -12,7 +12,7 @@ import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
   integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
   readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
-  staleSample, formatTypedPath, lockIdentity,
+  staleSample, formatTypedPath, lockIdentity, preserveNewerLockSnapshot,
 } from './tree.js';
 import {
   collectWatchedPages, combineScopedWatches, nextEligibleWatchBatch,
@@ -100,7 +100,7 @@ function AutoPageSentinel({ scope, offset, loading, error, requestPage }) {
   </span>;
 }
 
-function TreeRow({ node, isFavourite, isActive, isLocked, onToggle, onDetails, onFavourite }) {
+function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle, onDetails, onFavourite }) {
   const canExpand = Boolean(node.expandable || node.children?.length) && typeof onToggle === 'function';
   const displayedType = valuePresentation(node.type, node.state);
   return <span className={`variable-row${isActive ? ' variable-row-active' : ''}`}>
@@ -116,8 +116,13 @@ function TreeRow({ node, isFavourite, isActive, isLocked, onToggle, onDetails, o
       <span className="variable-key" title={node.path}>{node.name}</span>
       <span className="variable-colon">:</span>
       <Tooltip title={`${displayedType.category}: ${displayedType.detail}`}><span className="variable-type">{node.type}</span></Tooltip>
-      {isLocked && <Tooltip title="Protected from Inspector edits and Undo/Redo. Game scripts can still change this variable.">
-        <span className="variable-lock-indicator" role="status" aria-label="Locked against Inspector writes"><LockOutlined /></span>
+      {isLocked && <Tooltip title={isLockStale
+        ? 'Stale lock: gameplay changed this path after it was locked. Inspector writes remain blocked.'
+        : 'Protected from Inspector edits and Undo/Redo. Game scripts can still change this variable.'}>
+        <span className={`variable-lock-indicator${isLockStale ? ' is-stale' : ''}`} role="status"
+          aria-label={isLockStale ? 'Stale lock, protected from Inspector writes' : 'Locked against Inspector writes'}>
+          <LockOutlined />
+        </span>
       </Tooltip>}
       {node.capped && <Tooltip title="Partial collection: some entries are unsupported or exceed inspection limits.">
         <span className="variable-partial-icon" role="status"
@@ -145,7 +150,7 @@ function TreeRow({ node, isFavourite, isActive, isLocked, onToggle, onDetails, o
 }
 
 function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite,
-  lockedKeys, expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
+  lockedKeys, staleLockKeys, expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
   const viewportRef = useRef(null);
   const treeRef = useRef(null);
   const [height, setHeight] = useState(450);
@@ -216,6 +221,7 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
           return <TreeRow node={{ ...node, expanded: expandedSet.has(node.key) }}
             isFavourite={pinned}
             isLocked={originScope === 'store' && lockedKeys?.has(lockIdentity(sourceKey))}
+            isLockStale={originScope === 'store' && staleLockKeys?.has(lockIdentity(sourceKey))}
             isActive={(selected?.scope === originScope && selected?.key === sourceKey) ||
               (revealTarget?.scope === originScope && revealTarget?.key === sourceKey)}
             onToggle={hasQuery ? undefined : () => {
@@ -371,8 +377,16 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const lockedKeys = useMemo(() => new Set((snapshot?.locks?.entries ?? [])
     .map((entry) => lockIdentity(entry.key)).filter((key) => typeof key === 'string')), [snapshot?.locks]);
+  const staleLockKeys = useMemo(() => new Set((snapshot?.locks?.entries ?? [])
+    .filter((entry) => entry.stale === true)
+    .map((entry) => lockIdentity(entry.key)).filter((key) => typeof key === 'string')), [snapshot?.locks]);
   const syncLocks = useCallback((locks) => {
-    setSnapshot((current) => current ? { ...current, locks } : current);
+    setSnapshot((current) => {
+      if (!current || !locks || !Number.isSafeInteger(locks.revision)) return current;
+      if (Number.isSafeInteger(current.locks?.revision) &&
+          locks.revision < current.locks.revision) return current;
+      return { ...current, locks };
+    });
   }, []);
   const [findRequest, setFindRequest] = useState(null);
   const [sourceRequest, setSourceRequest] = useState(null);
@@ -500,7 +514,7 @@ export default function App() {
             }
           }
           publishChanges();
-          setSnapshot(data);
+          setSnapshot((current) => preserveNewerLockSnapshot(data, current));
           setTreePages((prior) => {
             const next = mergeRootSnapshot(prior, data);
             treePagesRef.current = next;
@@ -964,7 +978,7 @@ export default function App() {
               : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
-                lockedKeys={lockedKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
+                lockedKeys={lockedKeys} staleLockKeys={staleLockKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
                 loadingPages={loadingPages} pageErrors={pageErrors}
                 revealTarget={revealTarget} />}
         </div>}
@@ -980,7 +994,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.13 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.14 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -991,7 +1005,11 @@ export default function App() {
               { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
               { key: 'performance', label: 'Root scan (sampled)', children:
                 Number.isFinite(snapshot?.diagnostics?.root_scan_ms)
-                  ? snapshot.diagnostics.root_scan_ms + ' ms, excludes serialization/transfer'
+                  ? snapshot.diagnostics.root_scan_ms + ' ms, excludes lock checks/serialization/transfer'
+                  : 'Waiting for game-thread capture' },
+              { key: 'lockchecks', label: 'Lock monitor (sampled)', children:
+                snapshot?.diagnostics
+                  ? `${snapshot.diagnostics.lock_checks ?? 0} / ${snapshot.diagnostics.lock_check_limit ?? 8} paths · ${snapshot.diagnostics.lock_check_ms ?? 0} ms · ${(snapshot.locks?.entries ?? []).filter((entry) => entry.stale).length} stale`
                   : 'Waiting for game-thread capture' },
               { key: 'queue', label: 'Game-thread queue (sampled)', children:
                 snapshot?.diagnostics

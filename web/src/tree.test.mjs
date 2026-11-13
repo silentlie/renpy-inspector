@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites, formatTypedPath, lockIdentity } from './tree.js';
+import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites, formatTypedPath, lockIdentity, preserveNewerLockSnapshot } from './tree.js';
 
 const sample = [
   { key: 'a', name: 'player', path: 'store.player', type: 'dict', preview: '2 items', children: [
@@ -490,4 +490,23 @@ test('lock identity follows Python dictionary boolean/integer key equivalence', 
   assert.notEqual(lockIdentity(key(true)), lockIdentity(key(0)));
   assert.notEqual(lockIdentity(key(true)), lockIdentity(1, 'index'));
   assert.equal(lockIdentity('invalid path'), 'invalid path');
+});
+
+test('older in-flight snapshot cannot regress a newer lock revision', () => {
+  const currentLocks = { revision: 5, entries: [{ key: 'locked', stale: true }] };
+  const current = { generation: 9, locks: currentLocks, scopes: { store: ['current'] } };
+  const delayed = { generation: 9, locks: { revision: 4, entries: [] },
+    scopes: { store: ['fresh tree data'] } };
+  const merged = preserveNewerLockSnapshot(delayed, current);
+  assert.deepEqual(merged.scopes, delayed.scopes);
+  assert.equal(merged.locks, currentLocks);
+
+  const newer = { generation: 9, locks: { revision: 6, entries: [] }, scopes: {} };
+  assert.equal(preserveNewerLockSnapshot(newer, current), newer);
+
+  const reset = { generation: 10, locks: { revision: 1, entries: [] }, scopes: {} };
+  assert.equal(preserveNewerLockSnapshot(reset, current), reset);
+
+  const legacy = { generation: 9, scopes: {} };
+  assert.equal(preserveNewerLockSnapshot(legacy, current).locks, currentLocks);
 });

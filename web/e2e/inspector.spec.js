@@ -157,6 +157,17 @@ test('variable locks protect inspector writes without freezing game state', asyn
       headers,
     })).json()).scopes.store.find((item) => item.name === 'score')?.preview).toBe('2');
 
+    // Game-side assignments do not bypass a lock. Background game-thread
+    // checks mark it stale, and the user explicitly rebases or releases it.
+    await game.command('set_score', { value: 99 });
+    await expect(editor).toContainText('Stale lock', { timeout: 12000 });
+    await expect(page.locator('.variable-lock-indicator')).toHaveAttribute(
+      'aria-label', 'Stale lock, protected from Inspector writes');
+    await expect(editor).toContainText('Gameplay changed this value after the lock was created.');
+    await editor.getByRole('button', { name: 'Refresh variable lock' }).click();
+    await expect(editor).toContainText('Lock refreshed against the current game value.');
+    await expect(editor.getByRole('textbox', { name: 'New literal value' })).toHaveValue('99');
+
     await editor.getByRole('button', { name: 'Unlock variable' }).click();
     await expect(page.locator('.variable-lock-indicator')).toHaveCount(0);
     await editor.getByRole('textbox', { name: 'New literal value' }).fill('17');
@@ -187,6 +198,79 @@ test('variable locks protect inspector writes without freezing game state', asyn
     await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
     await expect(history).toContainText('locked against Inspector writes');
   } finally { await game.stop(); }
+});
+
+test('edit conflicts preserve the draft and require fresh confirmation against the current value', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const editor = page.getByRole('region', { name: 'Primitive variable editing' });
+    await editor.getByRole('button', { name: 'Open primitive editor' }).click();
+    const input = editor.getByRole('textbox', { name: 'New literal value' });
+    await input.fill('17');
+    await editor.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+
+    await game.command('set_score', { value: 9 });
+    await editor.getByRole('button', { name: 'Apply primitive edit' }).click();
+    await expect(editor).toContainText('The game changed this variable after it was read.');
+    await expect(editor).toContainText('Current value: 9');
+    await expect(input).toHaveValue('17');
+    const confirmation = editor.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    });
+    await expect(confirmation).not.toBeChecked();
+    await expect(editor.getByRole('button', { name: 'Apply primitive edit' })).toBeDisabled();
+
+    await confirmation.check();
+    await editor.getByRole('button', { name: 'Apply primitive edit' }).click();
+    await expect(page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^score$/ }),
+    }).locator('.variable-preview')).toHaveText('17', { timeout: 12000 });
+  } finally { await game.stop(); }
+});
+
+test('two browser sessions share one edit epoch and cannot double-apply stale writes', async ({ page, browser }) => {
+  const game = await startBridgeFixture({ editing: true });
+  const second = await browser.newPage();
+  try {
+    await Promise.all([page.goto(game.url), second.goto(game.url)]);
+    await expect(page.getByRole('button', { name: 'Inspect score' })).toBeVisible();
+    await expect(second.getByRole('button', { name: 'Inspect score' })).toBeVisible();
+    const headers = { 'X-Inspector-Token': game.token };
+    const params = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'score']]),
+    });
+    const target = await (await page.request.get(
+      game.origin + '/api/v1/edit-target?' + params, { headers })).json();
+    const makeWrite = (text) => ({
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'score']],
+        generation: target.generation, expected: target.expected,
+        type: target.type, text },
+    });
+    const responses = await Promise.all([
+      page.request.put(game.origin + '/api/v1/edit', makeWrite('17')),
+      second.request.put(game.origin + '/api/v1/edit', makeWrite('18')),
+    ]);
+    expect(responses.map((response) => response.status()).sort()).toEqual([200, 409]);
+    const snapshot = await (await second.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json();
+    expect(['17', '18']).toContain(
+      snapshot.scopes.store.find((item) => item.name === 'score')?.preview);
+    expect(snapshot.edit_history.entries).toHaveLength(1);
+    expect(snapshot.edit_history.can_undo).toBe(true);
+
+    // Both independent React clients converge on the same server history.
+    await expect(page.getByRole('tab', { name: /Edits \(1\)/ })).toBeVisible({ timeout: 12000 });
+    await expect(second.getByRole('tab', { name: /Edits \(1\)/ })).toBeVisible({ timeout: 12000 });
+  } finally {
+    await second.close();
+    await game.stop();
+  }
 });
 
 test('explicit edit history performs confirmed undo and redo without mixing with Compare', async ({ page }) => {

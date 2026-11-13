@@ -1,5 +1,7 @@
 # External Ant Design workspace
 
+**PR #32 Edit Safety & State Consistency (v0.7.14).** Each lock stores the exact primitive fingerprint/type from creation. The bridge checks at most eight rotating locked paths per snapshot publish on the Ren'Py interaction thread; a detected game-side value/type/path change marks the lock stale but keeps it active. **Refresh lock** explicitly rebases the baseline to the current eligible primitive; **Unlock variable** releases it. Detection is sampled and can miss a value that changes and reverts between checks. Conflicts return stable reason codes and the fresh current target; a browser draft is preserved but must be confirmed again. All browser tabs share one serialized generation and history, so same-generation concurrent writes cannot both apply.
+
 **PR #31 Variable Locks (v0.7.13).** Locks are exact-path, session-only protections for the inspector's own Store primitive edit and Undo/Redo endpoints. They do not intercept game-script writes or freeze Ren'Py state. At most 128 paths / 32 KiB are retained, and locks clear on load, rollback, other generation resets, bridge restart or editing disablement. They require the existing trusted game-init edit opt-in.
 
 **PR #30 Undo/Redo & Edit History (v0.7.12).** Read-only by default. A trusted game
@@ -25,7 +27,7 @@ See [README opt-in instructions](../README.md#optional-store-primitive-editing-p
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #31](https://github.com/silentlie/renpy-inspector/pull/31) after CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #32](https://github.com/silentlie/renpy-inspector/pull/32) after CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 

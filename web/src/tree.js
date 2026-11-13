@@ -120,6 +120,23 @@ export function lockIdentity(key) {
   return JSON.stringify([decoded.scope, path]);
 }
 
+/** Keep direct lock updates when an older in-flight snapshot poll completes.
+ * Lock revisions are monotonic within one bridge generation. A new generation
+ * is authoritative and may replace the previous lock registry.
+ */
+export function preserveNewerLockSnapshot(incoming, current) {
+  if (!incoming || !current || incoming.generation !== current.generation) {
+    return incoming;
+  }
+  const currentRevision = current.locks?.revision;
+  const incomingRevision = incoming.locks?.revision;
+  if (Number.isSafeInteger(currentRevision) &&
+      (!Number.isSafeInteger(incomingRevision) || incomingRevision < currentRevision)) {
+    return { ...incoming, locks: current.locks };
+  }
+  return incoming;
+}
+
 /** An exact, copyable Python-style path built from trusted typed segments.
  * Snapshot path labels are capped at 230 chars, so do not copy those previews.
  * This formats text only. It does NOT evaluate expressions in the game.
