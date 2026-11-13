@@ -19,14 +19,24 @@ def install(store_provider, persistent_provider, restart_interaction, savedir=No
     bridge.configure_favourites_directory(savedir)
 
 
-def reset_lifecycle():
+def reset_lifecycle(reason='unspecified'):
     """Invalidate read-only caches after load or default-state restoration.
 
     Ren'Py runs after_default_callbacks following rollback as well as during
     startup/load. These callbacks never change gameplay variables or saves.
     """
     inspector.reset()
-    bridge.invalidate()
+    bridge.invalidate(reason=reason)
+
+
+def after_load_lifecycle():
+    """A save-load callback ran; its exact slot is not inferred."""
+    reset_lifecycle('after_load')
+
+
+def after_default_lifecycle():
+    """Default restoration: rollback, startup or load are possible."""
+    reset_lifecycle('after_default')
 
 
 def observe_legacy_rollback(renpy_api):
@@ -42,7 +52,7 @@ def observe_legacy_rollback(renpy_api):
     except Exception:
         return
     if rolling:
-        reset_lifecycle()
+        reset_lifecycle('legacy_rollback')
 
 
 def register_named_store(name, provider):
