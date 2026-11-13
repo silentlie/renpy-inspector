@@ -90,11 +90,7 @@ class VariableLocks(object):
         self.revision += 1
         event = {'action': action, 'revision': self.revision}
         if entry is not None:
-            event.update({
-                'scope': entry['scope'],
-                'path': [list(segment) for segment in entry['path']],
-                'key': entry['_display_key'],
-            })
+            event['scope'] = entry['scope']
         if reason:
             event['reason'] = reason
         if at is not None:
