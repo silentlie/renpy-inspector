@@ -56,7 +56,9 @@ class RuntimeTimeline(object):
             signal = 'unspecified'
         self.last_location = None
         self.last_rollback = None
-        self._append('restoration', generation, captured_at, signal=signal)
+        # Cache-only invalidations are not Ren'Py restoration callbacks.
+        kind = 'invalidation' if signal == 'unspecified' else 'restoration'
+        self._append(kind, generation, captured_at, signal=signal)
 
     def observe(self, context, generation, captured_at):
         if not isinstance(context, dict):
