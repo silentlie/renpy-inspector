@@ -196,6 +196,13 @@ class VariableLocks(object):
         if (type(expected) is not text_type or _HEX.match(expected) is None or
                 type(typename) is not text_type or typename not in _EDITABLE_TYPES):
             raise ValueError('variable lock needs a supported primitive fingerprint')
+        new_size = self._size(
+            entry['_key'], entry['_display_key'], expected, typename)
+        delta = new_size - entry['_size']
+        if self.bytes_used + delta > MAX_VARIABLE_LOCKS_BYTES:
+            raise VariableLockLimit('variable lock capacity reached')
+        self.bytes_used += delta
+        entry['_size'] = new_size
         entry['baseline_expected'] = expected
         entry['baseline_type'] = typename
         entry['stale'] = False
