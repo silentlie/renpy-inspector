@@ -1,8 +1,9 @@
 """Opt-in, authenticated loopback bridge for the Ant Design inspector UI.
 
-HTTP workers never read gameplay objects. Game state is inspected only by
-Ren'Py's interaction-thread tick/publish. The only preference write permitted
-is an authenticated, bounded inspector-only JSON file, never game state.
+HTTP workers never inspect or mutate gameplay objects. Game state is read and,
+only when trusted game init explicitly enables primitive editing, mutated by
+Ren'Py's interaction-thread tick. Filesystem writes remain limited to the
+bounded, authenticated inspector-preferences file.
 """
 from __future__ import unicode_literals
 
@@ -476,7 +477,7 @@ class InspectorBridge(object):
                 self.pending_pages.remove(job)
 
     def tick(self):
-        """Ren'Py interaction thread: at most two page jobs per 250ms tick."""
+        """Ren'Py interaction thread: service at most two queued jobs per tick."""
         if not self.running:
             return
         with self.lock:
