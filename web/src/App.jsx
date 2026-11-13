@@ -996,7 +996,11 @@ export default function App() {
               { key: 'capture', label: 'Last capture', children: captureTime(snapshot?.captured_at) },
               { key: 'performance', label: 'Root scan (sampled)', children:
                 Number.isFinite(snapshot?.diagnostics?.root_scan_ms)
-                  ? snapshot.diagnostics.root_scan_ms + ' ms, excludes serialization/transfer'
+                  ? snapshot.diagnostics.root_scan_ms + ' ms, excludes lock checks/serialization/transfer'
+                  : 'Waiting for game-thread capture' },
+              { key: 'lockchecks', label: 'Lock monitor (sampled)', children:
+                snapshot?.diagnostics
+                  ? `${snapshot.diagnostics.lock_checks ?? 0} / ${snapshot.diagnostics.lock_check_limit ?? 8} paths · ${snapshot.diagnostics.lock_check_ms ?? 0} ms · ${(snapshot.locks?.entries ?? []).filter((entry) => entry.stale).length} stale`
                   : 'Waiting for game-thread capture' },
               { key: 'queue', label: 'Game-thread queue (sampled)', children:
                 snapshot?.diagnostics
