@@ -27,6 +27,23 @@ class VariableLocksTests(unittest.TestCase):
         self.assertEqual(snapshot['entries'][0]['key'],
                          '["store",[["attribute","player"],["key","hp"]]]')
 
+    def test_python_dictionary_boolean_integer_aliases_share_lock_identity(self):
+        locks = VariableLocks()
+        true_path = (('attribute', 'flags'), ('key', True))
+        one_path = (('attribute', 'flags'), ('key', 1))
+        self.assertTrue(locks.lock('store', true_path, 1.0))
+        self.assertTrue(locks.is_locked('store', one_path))
+        self.assertFalse(locks.lock('store', one_path, 2.0))
+        self.assertEqual(locks.snapshot()['entries'][0]['path'][-1], ['key', True])
+        self.assertTrue(locks.unlock('store', one_path))
+        self.assertFalse(locks.is_locked('store', true_path))
+
+        false_path = (('attribute', 'flags'), ('key', False))
+        zero_path = (('attribute', 'flags'), ('key', 0))
+        self.assertTrue(locks.lock('store', false_path, 3.0))
+        self.assertTrue(locks.is_locked('store', zero_path))
+        self.assertTrue(locks.unlock('store', zero_path))
+
     def test_unlock_is_idempotent_and_does_not_touch_game_state(self):
         locks = VariableLocks()
         self.assertFalse(locks.unlock('store', self.path))
