@@ -1,6 +1,6 @@
 /** Observed engine signals only. Never derive dialogue turns from samples. */
 export const RUNTIME_LIMIT = 64;
-export const RUNTIME_KINDS = ['location', 'restoration', 'rollback_flag'];
+export const RUNTIME_KINDS = ['location', 'restoration', 'invalidation', 'rollback_flag'];
 
 export function runtimeEventDescription(event) {
   if (!event || !RUNTIME_KINDS.includes(event.kind)) return null;
@@ -10,6 +10,13 @@ export function runtimeEventDescription(event) {
       detail: typeof event.filename === 'string' && Number.isSafeInteger(event.line)
         ? `${event.filename}:${event.line}` : 'Location unavailable',
       note: 'Observed during a periodic snapshot; intermediate statements may be missed.',
+    };
+  }
+  if (event.kind === 'invalidation') {
+    return {
+      title: 'Inspector state invalidated',
+      detail: 'Inspector bridge cache reset',
+      note: 'An internal reset, not evidence of a Ren\'Py load, rollback or restoration callback.',
     };
   }
   if (event.kind === 'rollback_flag') {
