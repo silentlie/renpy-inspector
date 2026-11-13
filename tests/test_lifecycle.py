@@ -77,8 +77,20 @@ class LifecycleTests(unittest.TestCase):
             engine.rolling = True
             renpy_inspector.observe_legacy_rollback(engine)
             self.assertEqual(self.bridge.generation, before + 1)
-            renpy_inspector.observe_legacy_rollback(object())
+            # Sustained true across interactions must not flood the timeline
+            # or repeatedly invalidate the same restored game state.
+            renpy_inspector.observe_legacy_rollback(engine)
             self.assertEqual(self.bridge.generation, before + 1)
+            engine.rolling = False
+            renpy_inspector.observe_legacy_rollback(engine)
+            engine.rolling = True
+            renpy_inspector.observe_legacy_rollback(engine)
+            self.assertEqual(self.bridge.generation, before + 2)
+            renpy_inspector.observe_legacy_rollback(object())
+            self.assertEqual(self.bridge.generation, before + 2)
+            timeline = json.loads(self.bridge.cached_bytes)['runtime']['events']
+            self.assertEqual([e['signal'] for e in timeline if e['kind'] == 'restoration'],
+                             ['legacy_rollback', 'legacy_rollback'])
 
     def test_integration_registers_both_load_and_rollback_safe_hooks(self):
         script = Path(__file__).resolve().parents[1] / 'game' / 'renpy_inspector.rpy'
