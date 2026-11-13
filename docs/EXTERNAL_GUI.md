@@ -1,6 +1,6 @@
 # External Ant Design workspace
 
-**PR #29 Variable Editing MVP (v0.7.11).** Read-only by default. A trusted game
+**PR #30 Undo/Redo & Edit History (v0.7.12).** Read-only by default. A trusted game
 init script can call `renpy_inspector.bridge.configure_variable_editing(True)`.
 The browser then exposes a contextual, confirmation-gated primitive editor for
 existing Store fields and plain dict/list entries only. Each write validates
@@ -18,7 +18,7 @@ See [README opt-in instructions](../README.md#optional-store-primitive-editing-p
 ## Install and launch
 
 1. Back up the game directory and saves.
-2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #29](https://github.com/silentlie/renpy-inspector/pull/29) after CI publishes it. Otherwise use the latest published GitHub release.
+2. For the experimental graphical engine E2E build, get the engine-specific preview ZIP from [PR #30](https://github.com/silentlie/renpy-inspector/pull/30) after CI publishes it. Otherwise use the latest published GitHub release.
 3. If downloading a CI artifact, extract the **outer artifact ZIP** first, then extract exactly one of the contained `-renpy7.zip` / `-renpy8.zip` installers into the game installation root.
 4. Verify the actual installed paths:
 
