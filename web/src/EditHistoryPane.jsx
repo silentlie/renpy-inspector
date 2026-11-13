@@ -74,6 +74,7 @@ export default function EditHistoryPane({
         throw new Error('The reversal was not confirmed. Refresh and inspect the current value.');
       }
     } catch (reason) {
+      setConfirmed(false);
       setError(reason.message || 'Undo/Redo failed.');
     } finally {
       setBusy(false);
