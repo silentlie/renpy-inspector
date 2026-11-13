@@ -842,7 +842,7 @@ class InspectorBridge(object):
                 self.runtime_history.observe(info, self.generation, data['captured_at'])
                 data['runtime'] = self.runtime_history.snapshot()
                 # A snapshot of the queue, not exact real-time HTTP latency.
-                # root_scan_ms excludes JSON encoding and HTTP transfer.
+                # root_scan_ms excludes lock checks, JSON encoding and HTTP transfer.
                 data['diagnostics'] = {
                     'root_scan_ms': scan_ms,
                     'lock_check_ms': lock_check_ms,
