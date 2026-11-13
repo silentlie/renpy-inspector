@@ -272,3 +272,14 @@ html, body { overscroll-behavior: none; }
 .value-tone-muted { color:#9aaac0!important; }
 .detail-source-actions { display:flex;gap:8px;flex-wrap:wrap;margin:10px 0; }
 .runtime-source-link { align-self:flex-start; }
+
+
+/* PR #29: opt-in primitive writes live only in the contextual drawer. */
+.detail-edit-panel { margin-top:18px; padding-top:14px; border-top:1px solid #35455a;
+  display:flex; flex-direction:column; gap:9px; align-items:stretch; min-width:0; }
+.detail-edit-panel > .ant-space { align-self:flex-start; }
+.detail-edit-warning { display:block; line-height:1.55; }
+.detail-edit-label { font-size:12px; color:#b4cbe4; }
+.detail-edit-panel textarea { font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+  white-space:pre-wrap; overflow-wrap:anywhere; }
+.detail-edit-panel .ant-btn-primary { align-self:flex-start; }
