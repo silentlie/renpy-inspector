@@ -273,3 +273,16 @@ flag. Tests cover no edit UI/no HTTP mutation by default, then separately
 enable editing and exercise the full confirmation flow, same-generation
 fingerprint conflicts, stale-generation rejection and snapshot refresh.
 No game-owned Python code executes on HTTP worker threads.
+
+
+## Undo/Redo and bounded edit history validation (PR #30, v0.7.12)
+
+Python 2/3 tests verify bounded UTF-8 accounting, the 50-record retention
+limit, exact same-type compare-and-swap reversals, conflicting game-side writes,
+redo-branch invalidation after a new edit, stale-generation rejection and
+history reset on load/rollback. HTTP tests prove authenticated requests only
+queue primitive arguments and all target reads/writes execute on the game
+interaction thread. Browser E2E covers the separate Edits tab, per-operation
+confirmation, Undo/Redo round trips and redo-branch discard. Runtime history
+labels explicit edit/undo/redo invalidations without calling them Ren'Py
+rollback events or reconstructed turns.
