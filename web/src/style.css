@@ -228,3 +228,30 @@ html, body { overscroll-behavior: none; }
   white-space:pre-wrap; overflow-wrap:anywhere; }
 .script-search-disclaimer { display:block; padding:10px 11px; font-size:11px;
   line-height:1.5; border-bottom:1px solid #2b3f58; }
+
+
+/* Dedicated runtime timeline: no footer or permanent tree controls. */
+.runtime-workspace { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; min-width:0; overflow:hidden; }
+.runtime-summary { padding:15px 19px 13px; display:flex;flex-direction:column;gap:8px;
+  border-bottom:1px solid #2b3f58;flex:0 0 auto; }
+.runtime-summary h4 { margin:0!important; }
+.runtime-summary-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px; }
+.runtime-summary-grid > div { min-width:0;display:flex;flex-direction:column;gap:3px; }
+.runtime-summary-grid .ant-typography { overflow-wrap:anywhere; }
+.runtime-mono { font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere; }
+.runtime-disclaimer { font-size:11px;line-height:1.5;max-width:1050px; }
+.runtime-history-header { display:flex;align-items:center;justify-content:space-between;
+  gap:10px;padding:10px 19px;border-bottom:1px solid #2b3f58;flex:0 0 auto; }
+.runtime-history-header > div { display:flex;flex-direction:column;min-width:0; }
+.runtime-history-header .ant-select { min-width:175px; }
+.runtime-history-list { flex:1 1 auto; min-height:0;overflow:auto;overscroll-behavior:contain;padding:7px 19px 20px; }
+.runtime-event { display:flex;flex-direction:column;gap:5px;border-bottom:1px solid #25384d;padding:11px 0; }
+.runtime-event-header { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.runtime-event-header .ant-typography:last-child { margin-left:auto;font-size:11px; }
+.runtime-event > .ant-typography:last-child { font-size:11px; }
+@media (max-width:720px) {
+  .runtime-summary { padding:10px; }
+  .runtime-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+  .runtime-history-header { padding:9px 10px; }
+  .runtime-history-list { padding:5px 10px 18px; }
+}
