@@ -33,4 +33,12 @@ def collect_context(renpy, config):
             result['return_labels'] = ', '.join(labels[-4:]) if labels else '(none available)'
     except Exception:
         pass
+    try:
+        # Public engine indicator, sampled only. False does not establish
+        # that no rollback took place between inspector snapshots.
+        rolling = renpy.in_rollback()
+        if type(rolling) is bool:
+            result['rollback_active'] = rolling
+    except Exception:
+        pass
     return result
