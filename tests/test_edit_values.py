@@ -178,7 +178,10 @@ class EditHTTPTests(unittest.TestCase):
             with urlopen(req, timeout=5) as response:
                 return response.status, json.loads(response.read().decode('ascii'))
         except HTTPError as error:
-            return error.code, None
+            try:
+                return error.code, json.loads(error.read().decode('ascii'))
+            except (ValueError, UnicodeError):
+                return error.code, None
 
     def target_url(self):
         return '/api/v1/edit-target?' + urlencode(
@@ -228,12 +231,17 @@ class EditHTTPTests(unittest.TestCase):
         timeline = json.loads(self.bridge.cached_bytes)['runtime']['events']
         self.assertTrue(any(e['kind'] == 'invalidation' and e['signal'] == 'edit' for e in timeline))
         self.thread_names[:] = []
-        conflict = self.run_threaded('PUT', '/api/v1/edit', payload)
+        fresh_code, fresh_target = self.run_threaded('GET', self.target_url())
+        self.assertEqual(fresh_code, 200)
+        self.store.score = 35  # Simulate a game script assignment without an Inspector epoch.
+        stale_payload = dict(payload, generation=fresh_target['generation'],
+                              expected=fresh_target['expected'], text='36')
+        conflict = self.run_threaded('PUT', '/api/v1/edit', stale_payload)
         self.assertEqual(conflict[0], 409)
         self.assertEqual(conflict[1]['code'], 'value_changed')
-        self.assertEqual(conflict[1]['current_target']['text'], '34')
+        self.assertEqual(conflict[1]['current_target']['text'], '35')
         self.assertEqual(conflict[1]['current_target']['generation'], self.bridge.generation)
-        self.assertEqual(self.store.score, 34)
+        self.assertEqual(self.store.score, 35)
 
     def test_http_auth_origin_and_invalid_payload_fail_closed(self):
         self.bridge.configure_variable_editing(True)
