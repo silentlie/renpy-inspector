@@ -726,6 +726,8 @@ class InspectorBridge(object):
                 }
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
+                if job['kind'] == 'edit_history':
+                    result['edit_history'] = self.edit_history.snapshot(self.generation)
             except EditConflict as reason:
                 status = 409
                 result = {'error': str(reason), 'code': reason.code}
@@ -733,6 +735,7 @@ class InspectorBridge(object):
                     scope, path = job['args'][0], job['args'][1]
                     result['current_target'] = inspect_edit_target(
                         self.inspector._providers, scope, path)
+                    result['current_target']['generation'] = self.generation
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
                 if job['kind'] == 'edit_history':
