@@ -233,6 +233,7 @@ class EditHTTPTests(unittest.TestCase):
         self.thread_names[:] = []
         fresh_code, fresh_target = self.run_threaded('GET', self.target_url())
         self.assertEqual(fresh_code, 200)
+        self.thread_names[:] = []
         self.store.score = 35  # Simulate a game script assignment without an Inspector epoch.
         stale_payload = dict(payload, generation=fresh_target['generation'],
                               expected=fresh_target['expected'], text='36')
