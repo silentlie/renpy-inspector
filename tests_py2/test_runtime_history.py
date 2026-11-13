@@ -26,6 +26,8 @@ class RuntimeHistoryCompatibilityTests(unittest.TestCase):
         self.assertEqual(history.events[-1]['signal'], 'after_default')
         self.assertEqual(history.events[-1]['kind'], 'restoration')
         self.assertNotIn('turn', history.snapshot())
+        history.restoration('unspecified', 4, 124.0)
+        self.assertEqual(history.events[-1]['kind'], 'invalidation')
 
 
 if __name__ == '__main__':
