@@ -102,6 +102,16 @@ class EditValueTests(unittest.TestCase):
         self.assertEqual(self.get(('attribute', 'no_such_variable'))['reason'],
                          'Variable is no longer visible')
 
+    def test_signed_zero_float_edits_preserve_the_ieee_sign(self):
+        path = (('attribute', 'decimal'),)
+        self.store.decimal = 0.0
+        positive = self.get(*path)
+        self.assertTrue(self.apply(path, positive, '-0.0')['applied'])
+        self.assertEqual(repr(self.store.decimal), '-0.0')
+        negative = self.get(*path)
+        self.assertTrue(self.apply(path, negative, '0.0')['applied'])
+        self.assertEqual(repr(self.store.decimal), '0.0')
+
     def test_float_inf_boolean_and_unbounded_text_rejected(self):
         float_path = (('attribute', 'decimal'),)
         before = self.get(*float_path)
