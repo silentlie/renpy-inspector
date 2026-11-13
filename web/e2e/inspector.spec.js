@@ -161,6 +161,8 @@ test('variable locks protect inspector writes without freezing game state', asyn
     // checks mark it stale, and the user explicitly rebases or releases it.
     await game.command('set_score', { value: 99 });
     await expect(editor).toContainText('Stale lock', { timeout: 12000 });
+    await expect(page.locator('.variable-lock-indicator')).toHaveAttribute(
+      'aria-label', 'Stale lock, protected from Inspector writes');
     await expect(editor).toContainText('Gameplay changed this value after the lock was created.');
     await editor.getByRole('button', { name: 'Refresh variable lock' }).click();
     await expect(editor).toContainText('Lock refreshed against the current game value.');
