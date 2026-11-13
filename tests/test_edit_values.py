@@ -228,7 +228,11 @@ class EditHTTPTests(unittest.TestCase):
         timeline = json.loads(self.bridge.cached_bytes)['runtime']['events']
         self.assertTrue(any(e['kind'] == 'invalidation' and e['signal'] == 'edit' for e in timeline))
         self.thread_names[:] = []
-        self.assertEqual(self.run_threaded('PUT', '/api/v1/edit', payload)[0], 409)
+        conflict = self.run_threaded('PUT', '/api/v1/edit', payload)
+        self.assertEqual(conflict[0], 409)
+        self.assertEqual(conflict[1]['code'], 'value_changed')
+        self.assertEqual(conflict[1]['current_target']['text'], '34')
+        self.assertEqual(conflict[1]['current_target']['generation'], self.bridge.generation)
         self.assertEqual(self.store.score, 34)
 
     def test_http_auth_origin_and_invalid_payload_fail_closed(self):
