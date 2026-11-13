@@ -4,6 +4,15 @@ import { formatTypedPath } from './tree.js';
 
 const { Text } = Typography;
 
+function newerHistory(incoming, current) {
+  if (!incoming) return false;
+  if (!current) return true;
+  const generation = incoming.generation ?? -1;
+  const previousGeneration = current.generation ?? -1;
+  if (generation !== previousGeneration) return generation > previousGeneration;
+  return (incoming.revision ?? 0) >= (current.revision ?? 0);
+}
+
 const STATUS = {
   applied: { label: 'Applied', color: 'blue' },
   undone: { label: 'Undone', color: 'default' },
@@ -25,8 +34,7 @@ export default function EditHistoryPane({
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setHistory((current) => !current || (value?.generation ?? -1) >= current.generation
-      ? value : current);
+    setHistory((current) => newerHistory(value, current) ? value : current);
   }, [value]);
 
   const run = async (action) => {
@@ -43,8 +51,8 @@ export default function EditHistoryPane({
       });
       const data = await response.json().catch(() => ({}));
       if (data.edit_history) {
-        setHistory((current) => !current ||
-          data.edit_history.generation >= current.generation ? data.edit_history : current);
+        setHistory((current) => newerHistory(data.edit_history, current)
+          ? data.edit_history : current);
       }
       if (!response.ok) {
         throw new Error(response.status === 409
