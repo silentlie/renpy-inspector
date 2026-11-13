@@ -347,6 +347,11 @@ export default function App() {
   const [error, setError] = useState('');
   const [section, setSection] = useState('variables');
   const [scope, setScope] = useState('store');
+  useEffect(() => {
+    if (scope === 'edits' && snapshot?.capabilities?.primitive_edits !== true) {
+      setScope('store');
+    }
+  }, [scope, snapshot?.capabilities?.primitive_edits]);
   const [lastTreeScope, setLastTreeScope] = useState('store');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
