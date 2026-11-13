@@ -42,7 +42,8 @@ from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
 from .edit_history import (PrimitiveEditHistory, MAX_HISTORY_REQUEST_BYTES,
                            validate_edit_history_request)
 from .variable_locks import (VariableLocks, MAX_VARIABLE_LOCK_REQUEST_BYTES,
-                             VariableLockLimit, validate_variable_lock_request)
+                             VariableLockLimit, VariableLockMissing,
+                             validate_variable_lock_request)
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -535,6 +536,34 @@ class InspectorBridge(object):
             return False
         return self.open_browser()
 
+    def _publish_lock_metadata(self):
+        """Refresh shared lock/history metadata without rescanning Store roots."""
+        with self.lock:
+            try:
+                data = json.loads(self.cached_bytes.decode('utf-8'))
+            except (ValueError, TypeError, UnicodeError):
+                data = {'protocol': PROTOCOL, 'generation': self.generation,
+                        'scopes': {'store': [], 'persistent': []}}
+            data['generation'] = self.generation
+            data['locks'] = self.variable_locks.snapshot()
+            data['edit_history'] = self.edit_history.snapshot(self.generation)
+            self.cached_bytes = encode_snapshot(data)
+
+    def _current_lock_state(self, scope, path):
+        """Observe one exact path before an Inspector write or reversal."""
+        target = inspect_edit_target(self.inspector._providers, scope, path)
+        previous_revision = self.variable_locks.revision
+        state = self.variable_locks.observe(scope, path, target, time.time())
+        if self.variable_locks.revision != previous_revision:
+            self._publish_lock_metadata()
+        return state
+
+    def _check_variable_locks(self):
+        """Check a small rotating batch so monitoring stays within a fixed budget."""
+        for scope, path in self.variable_locks.next_check_batch():
+            target = inspect_edit_target(self.inspector._providers, scope, path)
+            self.variable_locks.observe(scope, path, target, time.time())
+
     def cancel_all_tree_pages(self):
         with self.lock:
             queued, self.pending_pages = self.pending_pages, []
@@ -581,23 +610,33 @@ class InspectorBridge(object):
                 with self.lock:
                     valid = job['generation'] == self.generation and self.running
                 if not valid:
-                    status, result = 409, {'error': 'Game state changed'}
+                    status, result = 409, {
+                        'error': 'Game state changed', 'code': 'generation_changed'}
                 else:
                     status = 200
                     if job['kind'] in ('edit_target', 'edit', 'edit_history', 'lock') and not self.editing_enabled:
                         status, result = 403, {'error': 'Primitive editing disabled'}
                     elif job['kind'] == 'edit_target':
                         result = inspect_edit_target(self.inspector._providers, *job['args'])
-                        result['locked'] = self.variable_locks.is_locked(*job['args'])
+                        lock_state = self.variable_locks.observe(
+                            job['args'][0], job['args'][1], result, time.time())
+                        result['locked'] = lock_state['locked']
+                        result['lock_stale'] = lock_state['stale']
+                        result['lock_stale_reason'] = lock_state['stale_reason']
                         result['lock_revision'] = self.variable_locks.revision
+                        if lock_state['stale']:
+                            self._publish_lock_metadata()
                         result['captured_at'] = time.time()
                         status = 200
                     elif job['kind'] == 'edit':
                         scope, path, expected_generation, expected, typename, text = job['args']
                         if expected_generation != self.generation:
                             raise EditConflict('Game state generation changed')
-                        if self.variable_locks.is_locked(scope, path):
-                            raise EditLocked('Variable is locked against inspector writes')
+                        lock_state = self._current_lock_state(scope, path)
+                        if lock_state['locked']:
+                            raise EditLocked(
+                                'Variable is locked against inspector writes',
+                                lock_state['stale'], lock_state['stale_reason'])
                         result = apply_primitive_edit(
                             self.inspector._providers, scope, path, expected, typename, text)
                         self.edit_history.record(
@@ -615,7 +654,7 @@ class InspectorBridge(object):
                             raise EditConflict('Game state generation changed')
                         result = self.edit_history.apply(
                             self.inspector._providers, action, entry_id,
-                            self.variable_locks.is_locked)
+                            self._current_lock_state)
                         self.invalidate(reason=action)
                         self.publish()
                         job['generation'] = self.generation
@@ -626,17 +665,33 @@ class InspectorBridge(object):
                         action, scope, path, expected_generation = job['args']
                         if expected_generation != self.generation:
                             raise EditConflict('Game state generation changed')
-                        if action == 'lock':
+                        target = None
+                        if action in ('lock', 'refresh'):
                             target = inspect_edit_target(self.inspector._providers, scope, path)
+                            self.variable_locks.observe(scope, path, target, time.time())
                             if not target.get('editable'):
-                                raise EditUnsupported('Only existing Store primitives can be locked')
-                            changed = self.variable_locks.lock(scope, path, time.time())
+                                raise EditUnsupported(
+                                    'Only existing supported Store primitives can be locked or refreshed')
+                        if action == 'lock':
+                            changed = self.variable_locks.lock(
+                                scope, path, time.time(), target['expected'], target['type'])
+                        elif action == 'refresh':
+                            try:
+                                changed = self.variable_locks.refresh(
+                                    scope, path, time.time(), target['expected'], target['type'])
+                            except VariableLockMissing:
+                                raise EditConflict(
+                                    'No active lock exists to refresh', 'lock_missing')
                         else:
-                            changed = self.variable_locks.unlock(scope, path)
+                            changed = self.variable_locks.unlock(scope, path, time.time())
                         self.publish()
+                        lock_state = self.variable_locks.state(scope, path)
                         result = {
                             'protocol': 1, 'action': action,
-                            'locked': self.variable_locks.is_locked(scope, path),
+                            'locked': lock_state['locked'],
+                            'lock_stale': lock_state['stale'],
+                            'lock_stale_reason': lock_state['stale_reason'],
+                            'lock_revision': self.variable_locks.revision,
                             'changed': changed,
                             'locks': self.variable_locks.snapshot(),
                         }
@@ -660,21 +715,32 @@ class InspectorBridge(object):
                     # Timestamp when the game-thread read actually occurred.
                     # Clients use this to discard delayed overlapping samples.
                     result['captured_at'] = time.time()
-            except EditLocked:
+            except EditLocked as reason:
                 status = 423
-                result = {'error': 'Variable is locked against inspector writes',
-                          'locks': self.variable_locks.snapshot()}
+                result = {
+                    'error': 'Variable is locked against inspector writes',
+                    'code': 'variable_locked',
+                    'lock_stale': reason.stale,
+                    'lock_stale_reason': reason.stale_reason,
+                    'locks': self.variable_locks.snapshot(),
+                }
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
-            except EditConflict:
+            except EditConflict as reason:
                 status = 409
-                result = {'error': 'Variable, generation or edit history changed'}
+                result = {'error': str(reason), 'code': reason.code}
+                if job['kind'] == 'edit':
+                    scope, path = job['args'][0], job['args'][1]
+                    result['current_target'] = inspect_edit_target(
+                        self.inspector._providers, scope, path)
+                if job['kind'] == 'edit_history':
+                    result['edit_history'] = self.edit_history.snapshot(self.generation)
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
             except VariableLockLimit:
                 status, result = 429, {'error': 'Variable lock capacity reached'}
-            except EditUnsupported:
-                status, result = 422, {'error': 'Variable not editable'}
+            except EditUnsupported as reason:
+                status, result = 422, {'error': str(reason), 'code': reason.code}
             except ValueError:
                 status, result = (400 if job['kind'] in ('edit', 'lock') else 404), {
                     'error': 'Invalid edit or lock request' if job['kind'] in ('edit', 'lock') else 'Tree path unavailable'}
@@ -684,7 +750,8 @@ class InspectorBridge(object):
                 status, result = 500, {'error': 'Read-only inspection failed'}
             with self.lock:
                 if job['generation'] != self.generation:
-                    status, result = 409, {'error': 'Game state changed'}
+                    status, result = 409, {
+                        'error': 'Game state changed', 'code': 'generation_changed'}
                 if not job['cancelled']:
                     result['generation'] = self.generation
                     try:
@@ -745,6 +812,7 @@ class InspectorBridge(object):
             info = (self.inspector._context_info()
                     if self.inspector._context_provider else {})
             data = build_lazy_snapshot(self.inspector._providers, game_info=info)
+            self._check_variable_locks()
             scan_ms = round(max(0.0, monotonic_time() - started) * 1000.0, 2)
             with self.lock:
                 data['generation'] = self.generation
