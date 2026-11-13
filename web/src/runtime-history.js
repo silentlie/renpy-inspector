@@ -12,6 +12,13 @@ export function runtimeEventDescription(event) {
       note: 'Observed during a periodic snapshot; intermediate statements may be missed.',
     };
   }
+  if (event.kind === 'invalidation' && event.signal === 'edit') {
+    return {
+      title: 'Confirmed inspector edit',
+      detail: 'Game-thread Store primitive changed',
+      note: 'A successful explicit write advanced inspector generation. This is not a rollback or undo event.',
+    };
+  }
   if (event.kind === 'invalidation') {
     return {
       title: 'Inspector state invalidated',
