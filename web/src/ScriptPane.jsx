@@ -99,6 +99,8 @@ export default function ScriptPane({ token, bridge, activeGame, generation, find
     if (!findRequest?.id || !findRequest?.term) return;
     setMode('source');
     setFilter(findRequest.term.slice(0, 64));
+    // Keep label pagination consistent when returning to the Labels view.
+    setPage({ query: findRequest.term.slice(0, 64), offset: 0 });
     setSelected(null);
   }, [findRequest?.id]);
 
@@ -108,6 +110,9 @@ export default function ScriptPane({ token, bridge, activeGame, generation, find
     if (!target) return;
     // Navigation is browser-only; game execution never jumps.
     setMode('labels');
+    // A previous literal source-text search must not silently filter labels.
+    setFilter('');
+    setPage({ query: '', offset: 0 });
     setSelected({ name: sourceRequest.name || 'Sampled script location', ...target });
   }, [sourceRequest?.id, generation]);
 
