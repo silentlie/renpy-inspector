@@ -10,7 +10,7 @@ from renpy_inspector.edit_history import (
     validate_edit_history_request,
 )
 from renpy_inspector.edit_values import (
-    EditConflict, apply_primitive_edit, inspect_edit_target,
+    EditConflict, EditLocked, apply_primitive_edit, inspect_edit_target,
 )
 
 
@@ -65,6 +65,22 @@ class PrimitiveEditHistoryTests(unittest.TestCase):
         self.assertTrue(snapshot['can_redo'])
         self.assertEqual(snapshot['entries'][0]['status'], 'conflicted')
         self.assertEqual(snapshot['entries'][1]['status'], 'undone')
+
+    def test_stale_lock_rejects_undo_without_retiring_history(self):
+        history = PrimitiveEditHistory()
+        entry_id = self.edit('score', '7', history)
+        with self.assertRaises(EditLocked) as caught:
+            history.apply(self.providers, 'undo', entry_id,
+                          lambda scope, path: {
+                              'locked': True, 'stale': True,
+                              'stale_reason': 'value_changed',
+                          })
+        self.assertTrue(caught.exception.stale)
+        self.assertEqual(caught.exception.stale_reason, 'value_changed')
+        self.assertEqual(self.store.score, 7)
+        snapshot = history.snapshot(0)
+        self.assertTrue(snapshot['can_undo'])
+        self.assertEqual(snapshot['entries'][0]['status'], 'applied')
 
     def test_new_edit_discards_redo_branch_but_keeps_audit_record(self):
         history = PrimitiveEditHistory()
