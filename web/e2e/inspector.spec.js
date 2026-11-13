@@ -72,7 +72,7 @@ test('source highlighting, rich type labels, and navigation reuse the read-only 
   await expect(page.getByRole('tab', { name: 'Scripts' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
   const source = page.locator('.script-source-lines');
-  await expect(source.locator('.source-token-keyword').filter({ hasText: 'label' })).toBeVisible();
+  await expect(source.locator('.source-token-keyword').filter({ hasText: 'label' }).first()).toBeVisible();
   await expect(source.locator('.script-source-active')).toHaveCount(1);
   await page.getByRole('tab', { name: 'Runtime' }).click();
   await expect(page.getByRole('button', { name: 'View current in Scripts' })).toBeVisible();
