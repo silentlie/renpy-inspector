@@ -17,7 +17,7 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
     def test_unicode_typed_path_round_trip(self):
         locks = VariableLocks()
         path = (('attribute', u'player'), ('key', u'生命'))
-        self.assertTrue(locks.lock('store', path, 1.0))
+        self.assertTrue(locks.lock('store', path, 1.0, 'a'.repeat(64), 'int'))
         entry = locks.snapshot()['entries'][0]
         self.assertEqual(entry['path'], [
             ['attribute', u'player'], ['key', u'生命']])
@@ -29,9 +29,9 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
         locks = VariableLocks()
         bool_path = (('attribute', u'flags'), ('key', True))
         int_path = (('attribute', u'flags'), ('key', 1))
-        self.assertTrue(locks.lock('store', bool_path, 1.0))
+        self.assertTrue(locks.lock('store', bool_path, 1.0, 'a'.repeat(64), 'int'))
         self.assertTrue(locks.is_locked('store', int_path))
-        self.assertFalse(locks.lock('store', int_path, 2.0))
+        self.assertFalse(locks.lock('store', int_path, 2.0, 'a'.repeat(64), 'int'))
         self.assertTrue(locks.unlock('store', int_path))
         self.assertFalse(locks.is_locked('store', bool_path))
 
