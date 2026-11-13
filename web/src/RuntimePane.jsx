@@ -69,7 +69,7 @@ export default function RuntimePane({ snapshot, onOpenSource }) {
           {entry.kind === "location" && sourceTargetForContext(entry) &&
             <Button size="small" type="link" className="runtime-source-link"
               aria-label={`View source for ${entry.filename}:${entry.line}`}
-              onClick={() => onOpenSource(entry)}>View in Scripts</Button>
+              onClick={() => onOpenSource(entry)}>View in Scripts</Button>}
           <Text type="secondary">{description.note}</Text>
         </article>;
       }) : <Empty description={filter === 'all'
