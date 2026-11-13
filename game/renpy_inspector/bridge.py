@@ -139,6 +139,41 @@ class _Handler(BaseHTTPRequestHandler):
         status, response = job['response']
         self._send(status, response, 'application/json; charset=utf-8', origin=origin)
 
+    def _write_edit_history(self, origin):
+        # Queue a bounded undo/redo action; never inspect game state here.
+        bridge = self.server.bridge
+        if not self.headers.get('X-Inspector-Token') or self.headers.get('X-Inspector-Token') != bridge.token:
+            self._send(401, b'Unauthorized', origin=origin)
+            return
+        with bridge.lock:
+            if not bridge.editing_enabled:
+                self._send(403, b'Primitive editing is not enabled in game config', origin=origin)
+                return
+        try:
+            raw_size = self.headers.get('Content-Length', '')
+            if not raw_size.isdigit():
+                raise ValueError('missing request size')
+            size = int(raw_size)
+            if size < 1 or size > MAX_HISTORY_REQUEST_BYTES:
+                raise ValueError('edit history request exceeds size limit')
+            if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
+                raise ValueError('edit history actions require JSON')
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            arguments = validate_edit_history_request(payload)
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+            self._send(400, b'Invalid edit history action', origin=origin)
+            return
+        job = bridge.enqueue_tree_page(arguments, kind='edit_history')
+        if job is None:
+            self._send(429, b'Inspector queue is busy', origin=origin)
+            return
+        if not job['event'].wait(3.0):
+            bridge.cancel_tree_page(job)
+            self._send(503, b'Game interaction paused; inspect current state before retrying', origin=origin)
+            return
+        status, response = job['response']
+        self._send(status, response, 'application/json; charset=utf-8', origin=origin)
+
     def do_PUT(self):
         """Inspector preferences OR game-config-enabled primitive writes."""
         if not self._allowed_origin():
@@ -147,6 +182,9 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if urlsplit(self.path).path == '/api/v1/edit':
             self._write_edit(origin)
+            return
+        if urlsplit(self.path).path == '/api/v1/edit-history':
+            self._write_edit_history(origin)
             return
         if urlsplit(self.path).path != '/api/v1/favourites':
             self._send(405, origin=origin)
