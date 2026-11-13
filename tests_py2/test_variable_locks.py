@@ -47,6 +47,14 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
         locks.refresh('store', path, 3.0, 'b' * 64, u'int')
         self.assertFalse(locks.state('store', path)['stale'])
 
+    def test_bridge_fingerprint_byte_strings_normalize_on_python2(self):
+        locks = VariableLocks()
+        path = (('attribute', u'score'),)
+        self.assertTrue(locks.lock('store', path, 1.0, b'a' * 64, b'int'))
+        self.assertEqual(locks.state('store', path)['baseline_type'], u'int')
+        locks.refresh('store', path, 2.0, b'b' * 64, b'long')
+        self.assertEqual(locks.state('store', path)['baseline_type'], u'long')
+
     def test_strict_generation_and_action_validation(self):
         payload = {'action': u'lock', 'scope': u'store',
                    'path': [['attribute', u'score']], 'generation': 3}
