@@ -1,4 +1,4 @@
-# Current delivery plan (9 November 2026)
+# Current delivery plan (13 November 2026)
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
