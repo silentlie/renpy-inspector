@@ -1,4 +1,5 @@
-# Ren'Py Inspector: read-only external workspace, F8-only game hotkey.
+# Ren'Py Inspector: read-only by default; F8-only browser hotkey.
+# Trusted game init code can opt in to Store primitive editing separately.
 # Python package state is separate from Ren'Py's rollback-aware gameplay stores.
 init -100 python:
     import renpy_inspector
