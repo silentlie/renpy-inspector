@@ -392,6 +392,24 @@ required before merging.
 - **Deferred:** arbitrary hashable object members, unordered mutable-object
   inspection, engine-native custom containers, game-state editing.
 
+## Milestone: PR #27 — Runtime & rollback context (v0.7.9 experimental)
+
+- Show a dedicated full-height Runtime tab with current sampled file:line,
+  best-effort return destinations and the optional public rollback indicator.
+- Record at most 64 **observed** script location transitions and lifecycle
+  callbacks in an inspector-owned, in-memory bounded bridge timeline.
+- Keep callback provenance distinct: after_load denotes an after-load signal;
+  after_default can mean rollback, game startup or load; a legacy rollback
+  probe is an indicator, not a full turn history.
+- Retain those bounded signals across generation invalidation. Continue to
+  reset variable Compare, expanded tree caches, selections and queued requests.
+- No Ren'Py gameplay writes, extra transport endpoints, event hooks in game
+  variables, invented SugarCube turns, or per-interaction guarantees.
+- Python 2/3 regression coverage, frontend timeline tests, real browser-to-bridge
+  fixture, graphical Ren'Py 7.8.7/8.5.3 checks and v0.7.9 packages.
+- **Deferred:** full interaction logging, rollback destination reconstruction,
+  semantic call stack/mutation causes, variable writes and undo.
+
 ## Later milestones (not PR #9)
 
 - **Freshness for expanded branches:** refresh only watched/visible child pages,
