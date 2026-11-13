@@ -197,7 +197,11 @@ def apply_primitive_edit(providers, scope, path, expected, typename, text):
     candidate = _parse_candidate(typename, text, current)
     if type(candidate) is not type(current):
         raise EditUnsupported('Type-changing writes are forbidden')
-    if candidate == current:
+    candidate_scalar = _scalar(candidate)
+    # Equality alone collapses +0.0 and -0.0, although their IEEE-754 sign
+    # bits differ and are observable (for example via copysign or division).
+    # Compare the exact supported scalar representation instead.
+    if candidate_scalar == scalar:
         raise ValueError('No change to apply')
     last_kind, key = segment
     if isinstance(owner, ModuleType) and last_kind == 'attribute':
