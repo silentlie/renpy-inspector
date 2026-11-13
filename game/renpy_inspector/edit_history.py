@@ -8,7 +8,7 @@ from __future__ import unicode_literals
 
 import json
 
-from .compat import integer_types, text_type
+from .compat import integer_types, string_types, text_type, to_text
 from .edit_values import (
     MAX_EDIT_TEXT, EditConflict, EditUnsupported, _fingerprint,
     apply_primitive_edit,
@@ -57,9 +57,13 @@ class PrimitiveEditHistory(object):
 
     def record(self, scope, path, typename, before, after, captured_at):
         """Record a successful write; drop the redo branch after a new edit."""
-        if (scope != 'store' or type(typename) is not text_type or
-                type(before) is not text_type or type(after) is not text_type or
-                len(before) > MAX_EDIT_TEXT or len(after) > MAX_EDIT_TEXT):
+        if (scope != 'store' or type(typename) not in string_types or
+                type(before) not in string_types or type(after) not in string_types):
+            raise ValueError('invalid primitive edit history record')
+        typename = to_text(typename)
+        before = to_text(before)
+        after = to_text(after)
+        if len(before) > MAX_EDIT_TEXT or len(after) > MAX_EDIT_TEXT:
             raise ValueError('invalid primitive edit history record')
         if before == after:
             raise ValueError('no-op edit history record')
