@@ -198,6 +198,38 @@ test('variable locks protect inspector writes without freezing game state', asyn
   } finally { await game.stop(); }
 });
 
+test('edit conflicts preserve the draft and require fresh confirmation against the current value', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const editor = page.getByRole('region', { name: 'Primitive variable editing' });
+    await editor.getByRole('button', { name: 'Open primitive editor' }).click();
+    const input = editor.getByRole('textbox', { name: 'New literal value' });
+    await input.fill('17');
+    await editor.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+
+    await game.command('set_score', { value: 9 });
+    await editor.getByRole('button', { name: 'Apply primitive edit' }).click();
+    await expect(editor).toContainText('The game changed this variable after it was read.');
+    await expect(editor).toContainText('Current value: 9');
+    await expect(input).toHaveValue('17');
+    const confirmation = editor.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    });
+    await expect(confirmation).not.toBeChecked();
+    await expect(editor.getByRole('button', { name: 'Apply primitive edit' })).toBeDisabled();
+
+    await confirmation.check();
+    await editor.getByRole('button', { name: 'Apply primitive edit' }).click();
+    await expect(page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^score$/ }),
+    }).locator('.variable-preview')).toHaveText('17', { timeout: 12000 });
+  } finally { await game.stop(); }
+});
+
 test('two browser sessions share one edit epoch and cannot double-apply stale writes', async ({ page, browser }) => {
   const game = await startBridgeFixture({ editing: true });
   const second = await browser.newPage();
