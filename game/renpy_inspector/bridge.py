@@ -38,9 +38,11 @@ from .compat import monotonic_time
 from .runtime_history import RuntimeTimeline
 from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
                           inspect_edit_target, apply_primitive_edit,
-                          EditConflict, EditUnsupported)
+                          EditConflict, EditLocked, EditUnsupported)
 from .edit_history import (PrimitiveEditHistory, MAX_HISTORY_REQUEST_BYTES,
                            validate_edit_history_request)
+from .variable_locks import (VariableLocks, MAX_VARIABLE_LOCK_REQUEST_BYTES,
+                             validate_variable_lock_request)
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -96,7 +98,8 @@ class _Handler(BaseHTTPRequestHandler):
                 '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
                 '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source',
                 '/api/v1/source-search', '/api/v1/edit-target',
-                '/api/v1/edit', '/api/v1/edit-history') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/edit', '/api/v1/edit-history',
+                '/api/v1/locks') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -360,6 +363,7 @@ class InspectorBridge(object):
         # Must be explicitly enabled in trusted game init code, never by HTTP.
         self.editing_enabled = False
         self.edit_history = PrimitiveEditHistory()
+        self.variable_locks = VariableLocks()
         self.script_runtime = None
         self.script_game_dir = None
         self.error = ''
@@ -390,6 +394,7 @@ class InspectorBridge(object):
             self.editing_enabled = enabled
             if not enabled:
                 self.edit_history.reset('editing_disabled')
+                self.variable_locks.reset('editing_disabled')
         # Advertise current capability on the next game-thread snapshot.
 
     def configure_game_directory(self, directory):
@@ -444,6 +449,7 @@ class InspectorBridge(object):
             self.error = ''
             self.runtime_history = RuntimeTimeline()
             self.edit_history.reset('bridge_started')
+            self.variable_locks.reset('bridge_started')
             self._legacy_rollback_active = False
             self.publish()
         except (IOError, OSError, RuntimeError) as exc:
@@ -506,7 +512,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history'):
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history', 'lock'): 
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -539,16 +545,20 @@ class InspectorBridge(object):
                     status, result = 409, {'error': 'Game state changed'}
                 else:
                     status = 200
-                    if job['kind'] in ('edit_target', 'edit', 'edit_history') and not self.editing_enabled:
+                    if job['kind'] in ('edit_target', 'edit', 'edit_history', 'lock') and not self.editing_enabled:
                         status, result = 403, {'error': 'Primitive editing disabled'}
                     elif job['kind'] == 'edit_target':
                         result = inspect_edit_target(self.inspector._providers, *job['args'])
+                        result['locked'] = self.variable_locks.is_locked(*job['args'])
+                        result['lock_revision'] = self.variable_locks.revision
                         result['captured_at'] = time.time()
                         status = 200
                     elif job['kind'] == 'edit':
                         scope, path, expected_generation, expected, typename, text = job['args']
                         if expected_generation != self.generation:
                             raise EditConflict('Game state generation changed')
+                        if self.variable_locks.is_locked(scope, path):
+                            raise EditLocked('Variable is locked against inspector writes')
                         result = apply_primitive_edit(
                             self.inspector._providers, scope, path, expected, typename, text)
                         self.edit_history.record(
@@ -565,7 +575,8 @@ class InspectorBridge(object):
                         if expected_generation != self.generation:
                             raise EditConflict('Game state generation changed')
                         result = self.edit_history.apply(
-                            self.inspector._providers, action, entry_id)
+                            self.inspector._providers, action, entry_id,
+                            self.variable_locks.is_locked)
                         self.invalidate(reason=action)
                         self.publish()
                         job['generation'] = self.generation
@@ -655,6 +666,7 @@ class InspectorBridge(object):
                 'root_pages': {}, 'game': {},
                 'capabilities': {'primitive_edits': self.editing_enabled},
                 'edit_history': self.edit_history.snapshot(self.generation),
+                'locks': self.variable_locks.snapshot(),
                 'runtime': self.runtime_history.snapshot()})
 
     def publish(self):
@@ -671,6 +683,7 @@ class InspectorBridge(object):
                 data['generation'] = self.generation
                 data['capabilities'] = {'primitive_edits': self.editing_enabled}
                 data['edit_history'] = self.edit_history.snapshot(self.generation)
+                data['locks'] = self.variable_locks.snapshot()
                 self.runtime_history.observe(info, self.generation, data['captured_at'])
                 data['runtime'] = self.runtime_history.snapshot()
                 # A snapshot of the queue, not exact real-time HTTP latency.
