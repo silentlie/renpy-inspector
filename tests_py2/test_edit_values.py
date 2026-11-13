@@ -19,7 +19,7 @@ class PrimitiveEditPython2Tests(unittest.TestCase):
         self.root = ModuleType(str('store'))
         self.root.score = 10
         self.root.text = u'Snow: \u2603'
-        self.root.utf8_bytes = 'ascii only'
+        self.root.utf8_bytes = b'ascii only'
         self.root.legacy = long(12345678901234567890)
         self.root.flags = {'enabled': True, 'inventory': [0, 1]}
         self.providers = {'store': lambda: self.root, 'persistent': lambda: {}}
