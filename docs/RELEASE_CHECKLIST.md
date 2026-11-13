@@ -66,7 +66,9 @@ native-screen modules into the release archive.
    local session, and closing the browser must not kill the game.
 7. On one actual Ren'Py 7 and one Ren'Py 8 game, verify live root and nested
    values, paging, deep favourite paths, global popup search/reveal,
-   current script navigation, and read-only behavior.
+   current script navigation, default-deny editing, and the opt-in Edits tab's
+confirmed undo/redo, same-generation conflict handling, redo-branch discard,
+and load/rollback history reset.
 8. Save a game, change variables, load, then rollback two steps. Values and
    Compare should discard old-generation state; favourites must survive as
    paths and reconnect or show missing status. Test an overlay/menu where the
