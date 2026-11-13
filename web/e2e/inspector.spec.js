@@ -851,7 +851,7 @@ test('locked variables workspace lists, refreshes and releases active locks', as
     await createLock([['attribute', 'player_stats'], ['key', 'hp']]);
     await createLock([['attribute', 'memo']]);
 
-    const lockedTab = page.getByRole('tab', { name: /Locked \\(3\\)/ });
+    const lockedTab = page.getByRole('tab', { name: /Locked \(3\)/ });
     await expect(lockedTab).toBeVisible({ timeout: 10000 });
     await lockedTab.click();
     const workspace = page.getByRole('region', { name: 'Locked variables workspace' });
@@ -871,11 +871,11 @@ test('locked variables workspace lists, refreshes and releases active locks', as
     await playerEntry.getByRole('button', {
       name: 'Unlock store.player_stats["hp"]',
     }).click();
-    await expect(page.getByRole('tab', { name: /Locked \\(2\\)/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Locked \(2\)/ })).toBeVisible();
 
     await workspace.getByRole('button', { name: 'Unlock all variables' }).click();
     await page.getByRole('button', { name: 'Unlock all' }).click();
-    await expect(page.getByRole('tab', { name: /Locked \\(0\\)/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Locked \(0\)/ })).toBeVisible();
     await expect(workspace.getByText(
       'No locked variables. Lock an eligible Store primitive from its details drawer.',
     )).toBeVisible();

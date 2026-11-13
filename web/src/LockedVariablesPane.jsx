@@ -137,8 +137,7 @@ export default function LockedVariablesPane({
         okText="Unlock all"
         cancelText="Cancel"
         okButtonProps={{ danger: true }}
-        onConfirm={unlockAll}
-        disabled={!entries.length || bulkBusy || Boolean(busyKey)}>
+        onConfirm={unlockAll}>
         <Button danger size="small" disabled={!entries.length || bulkBusy || Boolean(busyKey)}
           loading={bulkBusy} aria-label="Unlock all variables">
           Unlock all

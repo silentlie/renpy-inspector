@@ -983,7 +983,7 @@ export default function App() {
                 ? <EditHistoryPane value={snapshot?.edit_history}
                     generation={treePages?.generation} enabled={true}
                     bridge={bridge} token={token} />
-              : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
+                : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
                 lockedKeys={lockedKeys} staleLockKeys={staleLockKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
