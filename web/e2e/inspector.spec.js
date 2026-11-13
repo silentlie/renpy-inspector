@@ -90,6 +90,9 @@ test('source highlighting, rich type labels, and navigation reuse the read-only 
   // A later Find References must not be replaced by an earlier source request
   // when the Scripts panel unmounts and mounts again.
   await page.getByRole('tab', { name: 'Variables' }).click();
+  // The preceding step was in Compare. Switching the top-level tab does not
+  // change the nested variable scope, so explicitly return to Store.
+  await page.getByRole('tab', { name: 'Store', exact: true }).click();
   await page.getByRole('button', { name: 'Inspect score' }).click();
   await page.getByRole('dialog', { name: 'Variable details' })
     .getByRole('button', { name: 'Find references in Scripts' }).click();
