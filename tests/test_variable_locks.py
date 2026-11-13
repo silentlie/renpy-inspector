@@ -46,7 +46,23 @@ class VariableLocksTests(unittest.TestCase):
         self.assertEqual(len(snapshot['entries']), MAX_VARIABLE_LOCKS)
         self.assertLessEqual(snapshot['bytes_used'], MAX_VARIABLE_LOCKS_BYTES)
 
+    def test_serialized_path_budget_is_enforced_before_count_limit(self):
+        locks = VariableLocks()
+        for index in range(MAX_VARIABLE_LOCKS):
+            path = tuple(
+                [('attribute', 'v{}{}'.format(index, 'x' * 200))] +
+                [('key', 'y' * 200) for unused in range(7)])
+            try:
+                locks.lock('store', path, float(index))
+            except VariableLockLimit:
+                break
+        snapshot = locks.snapshot()
+        self.assertGreater(len(snapshot['entries']), 1)
+        self.assertLess(len(snapshot['entries']), MAX_VARIABLE_LOCKS)
+        self.assertLessEqual(snapshot['bytes_used'], MAX_VARIABLE_LOCKS_BYTES)
+
     def test_reset_drops_locks_and_advances_revision(self):
+
         locks = VariableLocks()
         locks.lock('store', self.path, 1.0)
         revision = locks.revision
