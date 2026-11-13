@@ -101,8 +101,10 @@ export default function EditValuePanel({
       const data = await result.json().catch(() => ({}));
       if (!result.ok) {
         if (result.status === 409 && data.current_target) {
+          if (Array.isArray(data.locks?.entries)) onLocksChanged?.(data.locks);
           setTarget({ ...data.current_target, generation: data.generation,
-            locked: false, lock_stale: false });
+            locked: data.current_target.locked === true,
+            lock_stale: data.current_target.lock_stale === true });
           setConfirmed(false);
           throw new Error(data.code === 'value_changed' || data.code === 'type_changed'
             ? 'The game changed this variable after it was read. Current value: ' +
