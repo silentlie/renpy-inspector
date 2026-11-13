@@ -96,7 +96,8 @@ class EditValueTests(unittest.TestCase):
         self.assertEqual(self.store.score, 2)
         with self.assertRaises(ValueError):
             self.apply(path, target, '2')
-        self.assertFalse(self.get(('attribute', '__dict__'))['editable'])
+        with self.assertRaises(ValueError):
+            self.get(('attribute', '__dict__'))
         self.assertFalse(self.get(('attribute', 'no_such_variable'))['editable'])
         self.assertEqual(self.get(('attribute', 'no_such_variable'))['reason'],
                          'Variable is no longer visible')
