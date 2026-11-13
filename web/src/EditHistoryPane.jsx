@@ -56,8 +56,14 @@ export default function EditHistoryPane({
       }
       if (!response.ok) {
         throw new Error(response.status === 409
-          ? (data.error || 'Conflict: the recorded value or game generation changed.')
-          : response.status === 423 ? 'This variable is locked against Inspector writes. Unlock it from the variable details before undoing or redoing.'
+          ? (data.code === 'history_value_changed'
+            ? 'The game changed the recorded value. This reversal was retired without overwriting gameplay.'
+            : data.code === 'generation_changed'
+              ? 'Game state changed in another browser or during gameplay. Refresh the Edits tab before retrying.'
+              : (data.error || 'Conflict: the recorded value or game generation changed.'))
+          : response.status === 423 ? (data.lock_stale
+            ? 'Gameplay changed this variable after it was locked. The lock still blocks Undo/Redo; refresh or unlock it in variable details.'
+            : 'This variable is locked against Inspector writes. Unlock it from the variable details before undoing or redoing.')
             : response.status === 403 ? 'Editing has been disabled by the game.'
               : response.status === 503
               ? 'The game may have completed this action. Refresh and inspect the current value before retrying.'
