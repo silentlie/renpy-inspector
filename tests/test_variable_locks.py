@@ -133,7 +133,7 @@ class VariableLocksTests(unittest.TestCase):
     def test_full_lock_set_is_checked_in_sixteen_bounded_batches(self):
         locks = VariableLocks()
         for index in range(MAX_VARIABLE_LOCKS):
-            path = (('attribute', 'variable_{}'.format(index)),)
+            path = (('attribute', 'v{}'.format(index)),)
             locks.lock('store', path, float(index), 'a' * 64, 'int')
         batches = [locks.next_check_batch() for unused in range(
             MAX_VARIABLE_LOCKS // MAX_LOCK_CHECKS_PER_PUBLISH)]
