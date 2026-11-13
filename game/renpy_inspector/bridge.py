@@ -695,6 +695,13 @@ class InspectorBridge(object):
                             'changed': changed,
                             'locks': self.variable_locks.snapshot(),
                         }
+                        if target is not None:
+                            result['target'] = dict(target)
+                            result['target']['generation'] = self.generation
+                            result['target']['locked'] = lock_state['locked']
+                            result['target']['lock_stale'] = lock_state['stale']
+                            result['target']['lock_stale_reason'] = lock_state['stale_reason']
+                            result['target']['lock_revision'] = self.variable_locks.revision
                         status = 200
                     elif job['kind'] == 'full_value':
                         result = build_full_value(self.inspector._providers, *job['args'])
