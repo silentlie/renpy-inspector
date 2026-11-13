@@ -187,7 +187,21 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.assertEqual(fresh['text'], '99')
         self.assertEqual(self.store.score, 99)
 
+    def test_locked_path_can_be_unlocked_after_game_changes_it_to_unsupported_type(self):
+        target = self.target()
+        self.assertEqual(self.lock('lock', target)[0], 200)
+        self.store.score = object()
+        changed = self.target()
+        self.assertFalse(changed['editable'])
+        self.assertTrue(changed['locked'])
+        status, unlocked = self.lock('unlock', changed)
+        self.assertEqual(status, 200)
+        self.assertFalse(unlocked['locked'])
+        self.assertFalse(self.bridge.variable_locks.is_locked(
+            'store', (('attribute', 'score'),)))
+
     def test_load_rollback_and_edit_disable_clear_locks(self):
+
         target = self.target()
         self.assertEqual(self.lock('lock', target)[0], 200)
         self.bridge.invalidate(reason='after_load')
