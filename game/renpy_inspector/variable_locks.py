@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 import json
 
 from .bridge_paging import validate_tree_request
-from .compat import integer_types, string_types, text_type, to_text
+from .compat import integer_types, text_type, to_text
 
 MAX_VARIABLE_LOCKS = 128
 MAX_VARIABLE_LOCKS_BYTES = 32 * 1024
@@ -112,11 +112,11 @@ class VariableLocks(object):
         }
 
     def lock(self, scope, path, locked_at, expected, typename):
-        if (not isinstance(expected, string_types) or
-                not isinstance(typename, string_types)):
+        try:
+            expected = to_text(expected)
+            typename = to_text(typename)
+        except (TypeError, ValueError, UnicodeError):
             raise ValueError('variable lock needs a supported primitive fingerprint')
-        expected = to_text(expected)
-        typename = to_text(typename)
         if (len(expected) != 64 or any(
                 character not in _HEX_CHARS for character in expected)):
             raise ValueError('variable lock needs a supported primitive fingerprint')
@@ -195,11 +195,11 @@ class VariableLocks(object):
         entry = self._by_key.get(self._key(scope, path))
         if entry is None:
             raise VariableLockMissing('No active lock exists for this path')
-        if (not isinstance(expected, string_types) or
-                not isinstance(typename, string_types)):
+        try:
+            expected = to_text(expected)
+            typename = to_text(typename)
+        except (TypeError, ValueError, UnicodeError):
             raise ValueError('variable lock needs a supported primitive fingerprint')
-        expected = to_text(expected)
-        typename = to_text(typename)
         if (len(expected) != 64 or any(
                 character not in _HEX_CHARS for character in expected)):
             raise ValueError('variable lock needs a supported primitive fingerprint')
