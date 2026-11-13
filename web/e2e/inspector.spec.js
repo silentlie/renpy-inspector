@@ -103,6 +103,7 @@ test('source highlighting, rich type labels, and navigation reuse the read-only 
   await page.getByRole('button', { name: 'View current in Scripts' }).click();
   await expect(page.getByRole('region', { name: 'Script source context' })).toContainText('script.rpy:1');
   await expect(page.getByRole('textbox', { name: 'Search script labels or filenames' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Search script labels or filenames' })).toHaveValue('');
 });
 
 test('pinned values update and survive a simulated game reload', async ({ page, game }) => {
