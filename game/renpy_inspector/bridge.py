@@ -41,7 +41,9 @@ from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
                           EditConflict, EditLocked, EditUnsupported)
 from .edit_history import (PrimitiveEditHistory, MAX_HISTORY_REQUEST_BYTES,
                            validate_edit_history_request)
-from .variable_locks import (VariableLocks, MAX_VARIABLE_LOCK_REQUEST_BYTES,
+from .variable_locks import (VariableLocks, MAX_VARIABLE_LOCKS,
+                             MAX_LOCK_CHECKS_PER_PUBLISH,
+                             MAX_VARIABLE_LOCK_REQUEST_BYTES,
                              VariableLockLimit, VariableLockMissing,
                              validate_variable_lock_request)
 
@@ -560,9 +562,11 @@ class InspectorBridge(object):
 
     def _check_variable_locks(self):
         """Check a small rotating batch so monitoring stays within a fixed budget."""
-        for scope, path in self.variable_locks.next_check_batch():
+        batch = self.variable_locks.next_check_batch(MAX_LOCK_CHECKS_PER_PUBLISH)
+        for scope, path in batch:
             target = inspect_edit_target(self.inspector._providers, scope, path)
             self.variable_locks.observe(scope, path, target, time.time())
+        return len(batch)
 
     def cancel_all_tree_pages(self):
         with self.lock:
@@ -826,8 +830,10 @@ class InspectorBridge(object):
             info = (self.inspector._context_info()
                     if self.inspector._context_provider else {})
             data = build_lazy_snapshot(self.inspector._providers, game_info=info)
-            self._check_variable_locks()
             scan_ms = round(max(0.0, monotonic_time() - started) * 1000.0, 2)
+            lock_check_started = monotonic_time()
+            lock_checks = self._check_variable_locks()
+            lock_check_ms = round(max(0.0, monotonic_time() - lock_check_started) * 1000.0, 2)
             with self.lock:
                 data['generation'] = self.generation
                 data['capabilities'] = {'primitive_edits': self.editing_enabled}
@@ -839,6 +845,10 @@ class InspectorBridge(object):
                 # root_scan_ms excludes JSON encoding and HTTP transfer.
                 data['diagnostics'] = {
                     'root_scan_ms': scan_ms,
+                    'lock_check_ms': lock_check_ms,
+                    'lock_checks': lock_checks,
+                    'lock_check_limit': MAX_LOCK_CHECKS_PER_PUBLISH,
+                    'lock_limit': MAX_VARIABLE_LOCKS,
                     'queue_pending': len(self.pending_pages),
                     'queue_peak': self.queue_peak,
                     'queue_capacity': 8,
