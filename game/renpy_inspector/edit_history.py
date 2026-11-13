@@ -98,7 +98,7 @@ class PrimitiveEditHistory(object):
                                if item['id'] != removed['id']]
         return entry['id']
 
-    def apply(self, providers, action, entry_id, lock_state=None):
+    def apply(self, providers, action, entry_id, is_locked=None):
         """Apply the current stack head only if its exact recorded value remains."""
         if action == 'undo':
             stack = self.undo_stack
@@ -113,8 +113,8 @@ class PrimitiveEditHistory(object):
         if not stack or stack[-1]['id'] != entry_id:
             raise EditConflict('Edit history changed; refresh before retrying', 'history_changed')
         entry = stack[-1]
-        if lock_state:
-            current_lock = lock_state(
+        if is_locked:
+            current_lock = is_locked(
                 entry['scope'], tuple((segment[0], segment[1]) for segment in entry['path']))
             if isinstance(current_lock, dict):
                 if current_lock.get('locked'):
