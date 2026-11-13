@@ -106,6 +106,7 @@ class VariableLocks(object):
             'byte_limit': MAX_VARIABLE_LOCKS_BYTES,
             'entries': [{
                 'scope': entry['scope'],
+                'key': entry['_key'],
                 'path': [list(segment) for segment in entry['path']],
                 'locked_at': entry['locked_at'],
             } for entry in self.entries],
