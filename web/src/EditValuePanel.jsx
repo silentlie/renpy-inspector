@@ -102,6 +102,7 @@ export default function EditValuePanel({
       });
       const data = await result.json().catch(() => ({}));
       if (!result.ok) {
+        setConfirmed(false);
         if (result.status === 409 && data.current_target) {
           if (Array.isArray(data.locks?.entries)) onLocksChanged?.(data.locks);
           setTarget({ ...data.current_target, generation: data.generation,
@@ -128,9 +129,12 @@ export default function EditValuePanel({
                 : 'Gameplay changed this variable after it was locked. The lock remains active. Refresh the lock to the current value or unlock it.')
             : 'This variable is locked against Inspector writes. Unlock it before editing.');
         }
+        if (result.status === 409 || result.status === 503) {
+          setTarget((current) => current ? { ...current, generation: -1 } : current);
+        }
         throw new Error(result.status === 422 ? 'The variable is no longer editable.' :
           result.status === 403 ? 'Editing has been disabled by the game.' :
-            result.status === 503 ? 'Game interaction paused. Inspect the current value before retrying.' :
+            result.status === 503 ? 'Game interaction paused. Reload the current value before retrying; the write outcome may be unknown.' :
               result.status === 400 ? 'Invalid value for the existing primitive type.' :
                 (data.error || 'Edit failed (HTTP ' + result.status + ')'));
       }
@@ -168,10 +172,13 @@ export default function EditValuePanel({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (response.status === 409 || response.status === 503) {
+          setTarget((current) => current ? { ...current, generation: -1 } : current);
+        }
         throw new Error(response.status === 409
           ? (data.code === 'lock_missing'
-            ? 'The lock no longer exists. Reopen the variable to inspect its current state.'
-            : 'Game state changed. Reopen the variable before changing its lock.')
+            ? 'The lock no longer exists. Reload the variable to inspect its current state.'
+            : 'Game state changed. Reload the variable before changing its lock.')
           : response.status === 422
             ? 'Only an existing supported Store primitive can be locked.'
             : response.status === 429
