@@ -29,9 +29,9 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
         locks = VariableLocks()
         bool_path = (('attribute', u'flags'), ('key', True))
         int_path = (('attribute', u'flags'), ('key', 1))
-        self.assertTrue(locks.lock('store', bool_path, 1.0, 'a'.repeat(64), 'int'))
+        self.assertTrue(locks.lock('store', bool_path, 1.0, 'a' * 64, 'int'))
         self.assertTrue(locks.is_locked('store', int_path))
-        self.assertFalse(locks.lock('store', int_path, 2.0, 'a'.repeat(64), 'int'))
+        self.assertFalse(locks.lock('store', int_path, 2.0, 'a' * 64, 'int'))
         self.assertTrue(locks.unlock('store', int_path))
         self.assertFalse(locks.is_locked('store', bool_path))
 
