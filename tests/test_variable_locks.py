@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'game'))
 from renpy_inspector.variable_locks import (
-    MAX_VARIABLE_LOCKS, MAX_VARIABLE_LOCKS_BYTES, VariableLocks,
-    validate_variable_lock_request,
+    MAX_VARIABLE_LOCKS, MAX_VARIABLE_LOCKS_BYTES, VariableLockLimit,
+    VariableLocks, validate_variable_lock_request,
 )
 
 
@@ -40,7 +40,7 @@ class VariableLocksTests(unittest.TestCase):
         locks = VariableLocks()
         for index in range(MAX_VARIABLE_LOCKS):
             locks.lock('store', (('attribute', 'v{}'.format(index)),), float(index))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(VariableLockLimit):
             locks.lock('store', (('attribute', 'overflow'),), 999.0)
         snapshot = locks.snapshot()
         self.assertEqual(len(snapshot['entries']), MAX_VARIABLE_LOCKS)
