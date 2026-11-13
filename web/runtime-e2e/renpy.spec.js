@@ -208,6 +208,13 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     const initial = await getSnapshot();
     expect(initial.game?.version).toContain(process.env.RENPY_VERSION);
     expect(initial.capabilities?.primitive_edits).toBe(false);
+    expect(initial.locks?.entries ?? []).toEqual([]);
+    const disabledLock = await page.request.put(origin + '/api/v1/locks', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { action: 'lock', scope: 'store', path: [['attribute', 'e2e_value']],
+        generation: initial.generation }, timeout: 5000,
+    });
+    expect(disabledLock.status()).toBe(403);
     const disabledEditPath = new URLSearchParams({
       scope: 'store', path: JSON.stringify([['attribute', 'e2e_value']]),
     });
