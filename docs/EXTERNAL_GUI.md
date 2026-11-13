@@ -6,7 +6,11 @@ The browser then exposes a contextual, confirmation-gated primitive editor for
 existing Store fields and plain dict/list entries only. Each write validates
 generation, exact previous-value fingerprint and unchanged built-in type before
 the interaction-thread mutation. Persistent/custom/immutable targets and all
-Python evaluation remain forbidden. No Undo/Redo, locks or edit log yet.
+Python evaluation remain forbidden. The Edits tab retains at most 50 explicit
+writes / 64 KiB in bridge-session memory. Confirmed Undo/Redo use exact-value
+compare-and-swap and retire conflicting entries; new edits discard the redo
+branch. Load/rollback clears reversal history. Locks and durable edit logs
+remain out of scope.
 See [README opt-in instructions](../README.md#optional-store-primitive-editing-pr-29).
 
 **PR #28 Better Value Rendering (v0.7.10).** Source excerpts in Scripts have escaped, browser-only Python/Ren'Py token colours; variable previews and on-demand values show explanatory type categories without interpreting game text as code. Runtime/Compare/detail source links are based on verified game-relative .rpy locations and never jump game execution. A sampled file:line is observation, not proven variable mutation causation.
