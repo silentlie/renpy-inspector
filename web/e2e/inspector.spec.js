@@ -194,6 +194,16 @@ test('explicit edit history performs confirmed undo and redo without mixing with
       entry.id === edited.edit_history.entries[0].id)?.status).toBe('superseded');
     expect(undoneSnapshot.edit_history.can_redo).toBe(true);
     await expect(history.getByRole('button', { name: 'Redo last inspector edit' })).toBeDisabled();
+
+    // Same-generation game-side changes are not overwritten by Undo.
+    await game.command('set_score', { value: 99 });
+    await confirm.check();
+    await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
+    await expect(history).toContainText('Conflict');
+    const currentTarget = await (await page.request.get(
+      game.origin + '/api/v1/edit-target?' + params, { headers })).json();
+    expect(currentTarget.text).toBe('99');
+
   } finally { await game.stop(); }
 });
 
