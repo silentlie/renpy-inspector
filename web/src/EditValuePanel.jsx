@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Input, Space, Tag, Typography } from 'antd';
-import { decodeTreeKey } from './tree.js';
+import { decodeTreeKey, lockIdentity } from './tree.js';
 
 const { Text } = Typography;
 const MAX_EDIT_TEXT = 1024;
@@ -23,7 +23,7 @@ export default function EditValuePanel({
   const controller = useRef(null);
   const selectedLockKey = selection?.key;
   const lockedFromSnapshot = Array.isArray(locks?.entries)
-    ? locks.entries.some((entry) => entry.key === selectedLockKey)
+    ? locks.entries.some((entry) => lockIdentity(entry.key) === lockIdentity(selectedLockKey))
     : undefined;
   const targetLockIsNewer = Number.isSafeInteger(target?.lock_revision) &&
     Number.isSafeInteger(locks?.revision) && target.lock_revision > locks.revision;
