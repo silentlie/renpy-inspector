@@ -121,6 +121,25 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.assertTrue(applied['applied'])
         self.assertEqual(self.store.score, 17)
 
+    def test_python_dictionary_boolean_integer_alias_cannot_bypass_lock(self):
+        self.store.flags = {True: 'guarded'}
+        bool_path = [['attribute', 'flags'], ['key', True]]
+        target = self.target(bool_path)
+        self.assertTrue(target['editable'])
+        self.assertEqual(self.lock('lock', target, bool_path)[0], 200)
+
+        # Python resolves dict[True] and dict[1] to the same stored entry.
+        int_alias_path = [['attribute', 'flags'], ['key', 1]]
+        status, rejected = self.edit(target, 'changed', int_alias_path)
+        self.assertEqual(status, 423)
+        self.assertEqual(self.store.flags[True], 'guarded')
+        self.assertIn('locked', rejected['error'].lower())
+
+        # Either typed spelling must also be able to release that same lock.
+        status, unlocked = self.lock('unlock', target, int_alias_path)
+        self.assertEqual(status, 200)
+        self.assertFalse(unlocked['locked'])
+
     def test_lock_blocks_undo_without_retiring_history_then_unlock_allows_it(self):
         target = self.target()
         status, edited = self.edit(target, 17)
