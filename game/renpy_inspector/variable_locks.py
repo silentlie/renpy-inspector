@@ -12,7 +12,7 @@ import json
 import re
 
 from .bridge_paging import validate_tree_request
-from .compat import integer_types, text_type
+from .compat import integer_types, string_types, text_type, to_text
 
 MAX_VARIABLE_LOCKS = 128
 MAX_VARIABLE_LOCKS_BYTES = 32 * 1024
@@ -117,8 +117,12 @@ class VariableLocks(object):
         }
 
     def lock(self, scope, path, locked_at, expected, typename):
-        if (type(expected) is not text_type or _HEX.match(expected) is None or
-                type(typename) is not text_type or typename not in _EDITABLE_TYPES):
+        if (type(expected) not in string_types or _HEX.match(expected) is None or
+                type(typename) not in string_types):
+            raise ValueError('variable lock needs a supported primitive fingerprint')
+        expected = to_text(expected)
+        typename = to_text(typename)
+        if typename not in _EDITABLE_TYPES:
             raise ValueError('variable lock needs a supported primitive fingerprint')
         key = self._key(scope, path)
         if key in self._by_key:
@@ -193,8 +197,12 @@ class VariableLocks(object):
         entry = self._by_key.get(self._key(scope, path))
         if entry is None:
             raise VariableLockMissing('No active lock exists for this path')
-        if (type(expected) is not text_type or _HEX.match(expected) is None or
-                type(typename) is not text_type or typename not in _EDITABLE_TYPES):
+        if (type(expected) not in string_types or _HEX.match(expected) is None or
+                type(typename) not in string_types):
+            raise ValueError('variable lock needs a supported primitive fingerprint')
+        expected = to_text(expected)
+        typename = to_text(typename)
+        if typename not in _EDITABLE_TYPES:
             raise ValueError('variable lock needs a supported primitive fingerprint')
         new_size = self._size(
             entry['_key'], entry['_display_key'], expected, typename)
