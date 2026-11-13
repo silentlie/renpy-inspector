@@ -75,6 +75,10 @@ def main():
             })
         bridge = InspectorBridge(controller, str(ROOT / 'web' / 'dist'))
         bridge.configure_favourites_directory(temp)
+        # Test-only developer opt-in from the fixture's trusted process,
+        # never from a browser request or gameplay value.
+        bridge.configure_variable_editing(
+            os.environ.get('RENPY_INSPECTOR_E2E_ENABLE_EDITS') == '1')
         scriptdir = Path(temp) / 'game'
         scriptdir.mkdir()
         (scriptdir / 'script.rpy').write_text(
