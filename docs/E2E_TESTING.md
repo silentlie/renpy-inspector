@@ -298,3 +298,24 @@ and that normal game-script assignments remain unaffected. Browser E2E covers
 the contextual lock/unlock controls, tree padlock state and unchanged game
 generation. Real Ren'Py 7/8 E2E confirms default-deny behavior and packaging
 includes the lock manager in both closed-manifest engine installers.
+
+
+## Edit safety and shared-session consistency (PR #32, v0.7.14)
+
+Python 2/3 tests cover fingerprint/type baselines, sticky stale status, explicit
+refresh/unlock, unsupported or missing targets, bounded rotating monitoring
+(8 of at most 128 locks per snapshot publish), and accurate memory accounting.
+HTTP tests verify fresh current-target conflict payloads, stable conflict codes,
+stale-lock Edit/Undo rejection, history preservation until an actual value
+conflict, and refresh without advancing gameplay generation. Concurrency tests
+queue independent same-generation writes and lock/edit races on the same game
+thread, proving that at most one conflicting operation applies. Repeated
+load/rollback invalidations clear both locks and edit history.
+
+Playwright starts two independent browser contexts against one synthetic bridge,
+races edits from the same captured generation, and verifies one write plus one
+409 conflict, one history record, and convergence of both clients. Browser E2E
+also changes a locked value through the fixture, waits for bounded background
+detection, refreshes the lock, and verifies the editor receives the current
+primitive. Real Ren'Py 7/8 graphical suites continue to validate default-deny
+editing and release packaging.
