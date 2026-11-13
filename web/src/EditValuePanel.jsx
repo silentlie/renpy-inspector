@@ -170,7 +170,7 @@ export default function EditValuePanel({
                 ? 'Variable editing has been disabled by the game.'
                 : 'Lock request failed (HTTP ' + response.status + ')');
       }
-      if (data.generation !== target.generation || data.locked !== (action === 'lock') ||
+      if (data.generation !== target.generation || data.locked !== (action !== 'unlock') ||
           !Array.isArray(data.locks?.entries)) {
         throw new Error('Lock confirmation was invalid. Refresh the variable before retrying.');
       }
