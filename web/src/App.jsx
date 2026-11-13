@@ -12,7 +12,7 @@ import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
   integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
   readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
-  staleSample, formatTypedPath, lockIdentity,
+  staleSample, formatTypedPath, lockIdentity, preserveNewerLockSnapshot,
 } from './tree.js';
 import {
   collectWatchedPages, combineScopedWatches, nextEligibleWatchBatch,
@@ -514,7 +514,7 @@ export default function App() {
             }
           }
           publishChanges();
-          setSnapshot(data);
+          setSnapshot((current) => preserveNewerLockSnapshot(data, current));
           setTreePages((prior) => {
             const next = mergeRootSnapshot(prior, data);
             treePagesRef.current = next;
