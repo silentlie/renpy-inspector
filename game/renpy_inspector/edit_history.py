@@ -45,6 +45,7 @@ class PrimitiveEditHistory(object):
         self.next_id = 0
         self.bytes_used = 0
         self.total_recorded = 0
+        self.revision = 0
         self.last_reset_reason = 'bridge_start'
 
     @staticmethod
@@ -86,6 +87,7 @@ class PrimitiveEditHistory(object):
         self.undo_stack.append(entry)
         self.bytes_used += size
         self.total_recorded += 1
+        self.revision += 1
         while (len(self.entries) > MAX_EDIT_HISTORY_ENTRIES or
                self.bytes_used > MAX_EDIT_HISTORY_BYTES):
             removed = self.entries.pop(0)
@@ -124,6 +126,7 @@ class PrimitiveEditHistory(object):
             # remain eligible for reversal.
             stack.pop()
             entry['status'] = 'conflicted'
+            self.revision += 1
             raise EditConflict('Recorded variable no longer matches; edit retired')
         stack.pop()
         if action == 'undo':
@@ -132,6 +135,7 @@ class PrimitiveEditHistory(object):
         else:
             entry['status'] = 'applied'
             self.undo_stack.append(entry)
+        self.revision += 1
         return {'applied': True, 'action': action, 'entry_id': entry_id}
 
     def reset(self, reason='game_state_changed'):
@@ -140,6 +144,7 @@ class PrimitiveEditHistory(object):
         self.undo_stack = []
         self.redo_stack = []
         self.bytes_used = 0
+        self.revision += 1
         self.last_reset_reason = reason
 
     def snapshot(self, generation):
@@ -154,7 +159,7 @@ class PrimitiveEditHistory(object):
                 'created_at': entry['created_at'], 'status': entry['status'],
             })
         return {
-            'protocol': 1, 'generation': generation,
+            'protocol': 1, 'generation': generation, 'revision': self.revision,
             'limit': MAX_EDIT_HISTORY_ENTRIES,
             'byte_limit': MAX_EDIT_HISTORY_BYTES,
             'bytes_used': self.bytes_used,
