@@ -228,6 +228,10 @@ class VariableLocksHTTPTests(unittest.TestCase):
         self.bridge.publish()  # Background monitoring runs on the game thread.
         cached = json.loads(self.bridge.cached_bytes.decode('ascii'))
         self.assertTrue(cached['locks']['entries'][0]['stale'])
+        self.assertEqual(cached['diagnostics']['lock_checks'], 1)
+        self.assertLessEqual(cached['diagnostics']['lock_checks'],
+                             cached['diagnostics']['lock_check_limit'])
+        self.assertGreaterEqual(cached['diagnostics']['lock_check_ms'], 0)
         fresh = self.target()
         self.assertTrue(fresh['locked'])
         self.assertTrue(fresh['lock_stale'])
