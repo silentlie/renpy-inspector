@@ -2,6 +2,24 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
+## Milestone: PR #29 — Variable Editing MVP (v0.7.11 experimental)
+
+- Default read-only, no browser-controlled enablement. Trusted game init may
+  opt in via `bridge.configure_variable_editing(True)`, with clear warnings.
+- Replace only existing Store module variables or built-in dict/list elements
+  containing exact built-in primitive types. Same-type, bounded Unicode,
+  boolean, integer or finite float literals only; never eval or arbitrary
+  game object accessors.
+- Authenticate every read/write; validate typed paths, exact previous value
+  fingerprint and generation on the game interaction thread. Every confirmed
+  write increments generation and invalidates old queued work and browser
+  caches. No writes on HTTP worker threads.
+- No Persistent, custom object/descriptor, immutable container, set membership
+  editing, undo/redo, locks, guessed rollback safety, or automatic writes.
+- Unit tests for Python 2/3 and security/conflict cases; end-to-end bridge/UI
+  test of explicit approval, exact-value races and disabled-by-default state.
+- Graphical Ren'Py 7/8 E2E and closed-manifest v0.7.11 preview packaging gate.
+
 ## Milestone: PR #7 — external Ant Design foundation (v0.6.0 experimental)
 
 **Goal:** Ship the optional separate browser-based inspector without breaking the native F8 overlay or Ren'Py 7/8 drop-in installation.
