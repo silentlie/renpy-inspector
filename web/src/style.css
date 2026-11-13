@@ -314,3 +314,9 @@ html, body { overscroll-behavior: none; }
   .edit-history-list { padding-left:10px;padding-right:10px; }
   .edit-history-values { grid-template-columns:minmax(0,1fr);gap:7px; }
 }
+
+
+.variable-lock-indicator { display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 auto;margin-left:2px;color:#e3bd73;font-size:11px; }
+.detail-lock-controls { margin:10px 0 6px; }
+.detail-lock-note { display:block;font-size:11px;line-height:1.5;margin-bottom:8px; }
