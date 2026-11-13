@@ -1,4 +1,4 @@
-# Release and upgrade acceptance (PR #30, v0.7.12)
+# Release and upgrade acceptance (PR #31, v0.7.13)
 
 This remains a **prerelease**. Passing tests, packaging checks and SDK lint
 does not certify that F8, rollback or rendering works in every Ren'Py game.
@@ -7,7 +7,7 @@ performance regression is visible.
 
 ## Automated checks (run before publishing)
 
-1. Python 2.7 compatibility tests; Python 3.9/3.13 unit tests.
+1. Python 2.7 compatibility tests; Python 3.9/3.13 unit tests, including lock lifecycle and inspector-only enforcement.
 2. Official SDK lint on Ren'Py 7.4.11, 7.8.7, 8.4.1, and 8.5.3.
 3. Ant Design UI unit tests and a production Vite build.
 4. Build both engine-labelled ZIP files, calculate SHA256 checksums, then
@@ -21,8 +21,8 @@ To verify downloaded archives from a source checkout:
 
 ```sh
 python scripts/verify_release.py \
-  dist/renpy-inspector-v0.7.12-renpy7.zip \
-  dist/renpy-inspector-v0.7.12-renpy8.zip
+  dist/renpy-inspector-v0.7.13-renpy7.zip \
+  dist/renpy-inspector-v0.7.13-renpy8.zip
 ```
 
 Keep each `.zip.sha256` file alongside its corresponding ZIP. Different
@@ -39,8 +39,8 @@ native-screen modules into the release archive.
 
 1. Back up the **whole** game directory and existing save directory first.
    Choose a game you have permission to inspect or a disposable test project.
-2. Obtain `renpy-inspector-v0.7.12-renpy7.zip` or
-   `renpy-inspector-v0.7.12-renpy8.zip` from the PR preview. If downloaded
+2. Obtain `renpy-inspector-v0.7.13-renpy7.zip` or
+   `renpy-inspector-v0.7.13-renpy8.zip` from the PR preview. If downloaded
    from GitHub Actions, extract the **outer artifact ZIP** before selecting
    the one correct engine installer.
 3. Extract that **inner** archive into the installation root (the directory
