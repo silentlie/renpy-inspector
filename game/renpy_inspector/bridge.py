@@ -275,6 +275,7 @@ class InspectorBridge(object):
         self.error = ''
         self.generation = 0
         self.runtime_history = RuntimeTimeline()
+        self._legacy_rollback_active = False
         self.pending_pages = []
         self.last_publish = 0.0
         # Primitive counters only. Diagnostics never retain inspected objects.
@@ -340,6 +341,7 @@ class InspectorBridge(object):
             self.thread.start()
             self.error = ''
             self.runtime_history = RuntimeTimeline()
+            self._legacy_rollback_active = False
             self.publish()
         except (IOError, OSError, RuntimeError) as exc:
             self.error = 'External UI unavailable: ' + type(exc).__name__
