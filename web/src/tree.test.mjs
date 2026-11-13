@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites, formatTypedPath } from './tree.js';
+import { flatten, filteredTree, keysOf, readBridgeFragment, safeFavourites, formatTypedPath, lockIdentity } from './tree.js';
 
 const sample = [
   { key: 'a', name: 'player', path: 'store.player', type: 'dict', preview: '2 items', children: [
@@ -479,4 +479,15 @@ test('typed member paths decode and format distinctly from dictionary keys or li
   assert.equal(decodeTreeKey(JSON.stringify(['store', [
     ['attribute', 'flags'], ['member', 9007199254740992],
   ]])), null);
+});
+
+test('lock identity follows Python dictionary boolean/integer key equivalence', () => {
+  const key = (value, kind = 'key') => JSON.stringify(['store', [
+    ['attribute', 'flags'], [kind, value],
+  ]]);
+  assert.equal(lockIdentity(key(true)), lockIdentity(key(1)));
+  assert.equal(lockIdentity(key(false)), lockIdentity(key(0)));
+  assert.notEqual(lockIdentity(key(true)), lockIdentity(key(0)));
+  assert.notEqual(lockIdentity(key(true)), lockIdentity(1, 'index'));
+  assert.equal(lockIdentity('invalid path'), 'invalid path');
 });
