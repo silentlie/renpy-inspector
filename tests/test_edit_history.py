@@ -33,6 +33,7 @@ class PrimitiveEditHistoryTests(unittest.TestCase):
     def test_undo_redo_round_trip_and_status(self):
         history = PrimitiveEditHistory()
         entry_id = self.edit('score', '7', history)
+        self.assertEqual(history.snapshot(0)['revision'], 1)
         self.assertEqual(self.store.score, 7)
         self.assertTrue(history.snapshot(0)['can_undo'])
         self.assertTrue(history.apply(self.providers, 'undo', entry_id)['applied'])
@@ -41,6 +42,7 @@ class PrimitiveEditHistoryTests(unittest.TestCase):
         self.assertFalse(snapshot['can_undo'])
         self.assertTrue(snapshot['can_redo'])
         self.assertEqual(snapshot['entries'][0]['status'], 'undone')
+        self.assertEqual(snapshot['revision'], 2)
         self.assertTrue(history.apply(self.providers, 'redo', entry_id)['applied'])
         self.assertEqual(self.store.score, 7)
         snapshot = history.snapshot(2)
