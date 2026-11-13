@@ -81,8 +81,9 @@ export default function EditHistoryPane({
   };
 
   const entries = Array.isArray(history?.entries) ? [...history.entries].reverse() : [];
-  const canUndo = enabled && Boolean(history?.can_undo && history?.undo_entry_id);
-  const canRedo = enabled && Boolean(history?.can_redo && history?.redo_entry_id);
+  const historyCurrent = Number.isSafeInteger(generation) && history?.generation === generation;
+  const canUndo = enabled && historyCurrent && Boolean(history?.can_undo && history?.undo_entry_id);
+  const canRedo = enabled && historyCurrent && Boolean(history?.can_redo && history?.redo_entry_id);
 
   return <section className="edit-history-workspace" aria-label="Inspector edit history">
     <div className="edit-history-toolbar">
@@ -106,6 +107,9 @@ export default function EditHistoryPane({
         </Checkbox>
       </div>
     </div>
+    {!historyCurrent && <Text type="warning" role="status">
+      Game state changed in another browser or during gameplay. Waiting for the current edit history before enabling Undo/Redo.
+    </Text>}
     {error && <Text type="danger" role="alert">{error}</Text>}
     <div className="edit-history-list" role="region" aria-label="Explicit edit records">
       {entries.length ? entries.map((entry) => {
