@@ -25,7 +25,10 @@ export default function EditValuePanel({
   const lockedFromSnapshot = Array.isArray(locks?.entries)
     ? locks.entries.some((entry) => entry.key === selectedLockKey)
     : undefined;
-  const isLocked = lockedFromSnapshot ?? (target?.locked === true);
+  const targetLockIsNewer = Number.isSafeInteger(target?.lock_revision) &&
+    Number.isSafeInteger(locks?.revision) && target.lock_revision > locks.revision;
+  const isLocked = targetLockIsNewer ? target?.locked === true
+    : lockedFromSnapshot ?? (target?.locked === true);
 
   useEffect(() => () => controller.current?.abort(), []);
   if (!enabled || selection?.scope !== 'store') return null;
