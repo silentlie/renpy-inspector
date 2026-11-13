@@ -39,6 +39,8 @@ from .runtime_history import RuntimeTimeline
 from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
                           inspect_edit_target, apply_primitive_edit,
                           EditConflict, EditUnsupported)
+from .edit_history import (PrimitiveEditHistory, MAX_HISTORY_REQUEST_BYTES,
+                           validate_edit_history_request)
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -94,7 +96,7 @@ class _Handler(BaseHTTPRequestHandler):
                 '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
                 '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source',
                 '/api/v1/source-search', '/api/v1/edit-target',
-                '/api/v1/edit') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/edit', '/api/v1/edit-history') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -137,6 +139,41 @@ class _Handler(BaseHTTPRequestHandler):
         status, response = job['response']
         self._send(status, response, 'application/json; charset=utf-8', origin=origin)
 
+    def _write_edit_history(self, origin):
+        # Queue a bounded undo/redo action; never inspect game state here.
+        bridge = self.server.bridge
+        if not self.headers.get('X-Inspector-Token') or self.headers.get('X-Inspector-Token') != bridge.token:
+            self._send(401, b'Unauthorized', origin=origin)
+            return
+        with bridge.lock:
+            if not bridge.editing_enabled:
+                self._send(403, b'Primitive editing is not enabled in game config', origin=origin)
+                return
+        try:
+            raw_size = self.headers.get('Content-Length', '')
+            if not raw_size.isdigit():
+                raise ValueError('missing request size')
+            size = int(raw_size)
+            if size < 1 or size > MAX_HISTORY_REQUEST_BYTES:
+                raise ValueError('edit history request exceeds size limit')
+            if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
+                raise ValueError('edit history actions require JSON')
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            arguments = validate_edit_history_request(payload)
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+            self._send(400, b'Invalid edit history action', origin=origin)
+            return
+        job = bridge.enqueue_tree_page(arguments, kind='edit_history')
+        if job is None:
+            self._send(429, b'Inspector queue is busy', origin=origin)
+            return
+        if not job['event'].wait(3.0):
+            bridge.cancel_tree_page(job)
+            self._send(503, b'Game interaction paused; inspect current state before retrying', origin=origin)
+            return
+        status, response = job['response']
+        self._send(status, response, 'application/json; charset=utf-8', origin=origin)
+
     def do_PUT(self):
         """Inspector preferences OR game-config-enabled primitive writes."""
         if not self._allowed_origin():
@@ -145,6 +182,9 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if urlsplit(self.path).path == '/api/v1/edit':
             self._write_edit(origin)
+            return
+        if urlsplit(self.path).path == '/api/v1/edit-history':
+            self._write_edit_history(origin)
             return
         if urlsplit(self.path).path != '/api/v1/favourites':
             self._send(405, origin=origin)
@@ -319,6 +359,7 @@ class InspectorBridge(object):
         self.favourites_store = None
         # Must be explicitly enabled in trusted game init code, never by HTTP.
         self.editing_enabled = False
+        self.edit_history = PrimitiveEditHistory()
         self.script_runtime = None
         self.script_game_dir = None
         self.error = ''
@@ -338,6 +379,7 @@ class InspectorBridge(object):
                                              'counts': {}, 'truncated': {},
                                              'root_pages': {}, 'game': {},
                                              'capabilities': {'primitive_edits': False},
+                                             'edit_history': self.edit_history.snapshot(0),
                                              'runtime': self.runtime_history.snapshot()})
 
     def configure_variable_editing(self, enabled=False):
@@ -346,6 +388,8 @@ class InspectorBridge(object):
             raise ValueError('editing opt-in must be a boolean')
         with self.lock:
             self.editing_enabled = enabled
+            if not enabled:
+                self.edit_history.reset('editing_disabled')
         # Advertise current capability on the next game-thread snapshot.
 
     def configure_game_directory(self, directory):
@@ -399,6 +443,7 @@ class InspectorBridge(object):
             self.thread.start()
             self.error = ''
             self.runtime_history = RuntimeTimeline()
+            self.edit_history.reset('bridge_started')
             self._legacy_rollback_active = False
             self.publish()
         except (IOError, OSError, RuntimeError) as exc:
@@ -461,7 +506,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit'):
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -494,7 +539,7 @@ class InspectorBridge(object):
                     status, result = 409, {'error': 'Game state changed'}
                 else:
                     status = 200
-                    if job['kind'] in ('edit_target', 'edit') and not self.editing_enabled:
+                    if job['kind'] in ('edit_target', 'edit', 'edit_history') and not self.editing_enabled:
                         status, result = 403, {'error': 'Primitive editing disabled'}
                     elif job['kind'] == 'edit_target':
                         result = inspect_edit_target(self.inspector._providers, *job['args'])
@@ -506,12 +551,26 @@ class InspectorBridge(object):
                             raise EditConflict('Game state generation changed')
                         result = apply_primitive_edit(
                             self.inspector._providers, scope, path, expected, typename, text)
-                        # Invalidate stale reads and queued writes after successful
-                        # mutation. This is an inspector edit, NOT a rollback event.
+                        self.edit_history.record(
+                            scope, path, typename, result['before'], result['after'], time.time())
+                        # Invalidate stale reads and queued writes after successful mutation.
                         self.invalidate(reason='edit')
                         self.publish()
                         job['generation'] = self.generation
                         result['captured_at'] = time.time()
+                        result['edit_history'] = self.edit_history.snapshot(self.generation)
+                        status = 200
+                    elif job['kind'] == 'edit_history':
+                        action, expected_generation, entry_id = job['args']
+                        if expected_generation != self.generation:
+                            raise EditConflict('Game state generation changed')
+                        result = self.edit_history.apply(
+                            self.inspector._providers, action, entry_id)
+                        self.invalidate(reason=action)
+                        self.publish()
+                        job['generation'] = self.generation
+                        result['captured_at'] = time.time()
+                        result['edit_history'] = self.edit_history.snapshot(self.generation)
                         status = 200
                     elif job['kind'] == 'full_value':
                         result = build_full_value(self.inspector._providers, *job['args'])
@@ -533,7 +592,10 @@ class InspectorBridge(object):
                     # Clients use this to discard delayed overlapping samples.
                     result['captured_at'] = time.time()
             except EditConflict:
-                status, result = 409, {'error': 'Variable or game generation changed'}
+                status = 409
+                result = {'error': 'Variable, generation or edit history changed'}
+                if job['kind'] == 'edit_history':
+                    result['edit_history'] = self.edit_history.snapshot(self.generation)
             except EditUnsupported:
                 status, result = 422, {'error': 'Variable not editable'}
             except ValueError:
@@ -566,6 +628,8 @@ class InspectorBridge(object):
         """Invalidate caches; retain bounded, evidence-labelled callback history."""
         with self.lock:
             self.generation += 1
+            if reason not in ('edit', 'undo', 'redo'):
+                self.edit_history.reset(reason)
             if self.running:
                 self.runtime_history.restoration(reason, self.generation, time.time())
             # Queue diagnostics reflect the current game-state epoch.
@@ -590,6 +654,7 @@ class InspectorBridge(object):
                 'counts': {}, 'truncated': {},
                 'root_pages': {}, 'game': {},
                 'capabilities': {'primitive_edits': self.editing_enabled},
+                'edit_history': self.edit_history.snapshot(self.generation),
                 'runtime': self.runtime_history.snapshot()})
 
     def publish(self):
@@ -605,6 +670,7 @@ class InspectorBridge(object):
             with self.lock:
                 data['generation'] = self.generation
                 data['capabilities'] = {'primitive_edits': self.editing_enabled}
+                data['edit_history'] = self.edit_history.snapshot(self.generation)
                 self.runtime_history.observe(info, self.generation, data['captured_at'])
                 data['runtime'] = self.runtime_history.snapshot()
                 # A snapshot of the queue, not exact real-time HTTP latency.

@@ -213,4 +213,5 @@ def apply_primitive_edit(providers, scope, path, expected, typename, text):
         list.__setitem__(owner, key, candidate)
     else:
         raise EditUnsupported('Target is not a writable built-in container')
-    return {'protocol': 1, 'applied': True, 'type': typename}
+    return {'protocol': 1, 'applied': True, 'type': typename,
+            'before': old_text, 'after': candidate_scalar[1]}

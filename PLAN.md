@@ -2,23 +2,35 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #29 — Variable Editing MVP (v0.7.11 experimental)
+## Milestone: PR #30 — Undo/Redo & Edit History (v0.7.12 experimental)
 
-- Default read-only, no browser-controlled enablement. Trusted game init may
-  opt in via `bridge.configure_variable_editing(True)`, with clear warnings.
-- Replace only existing Store module variables or built-in dict/list elements
-  containing exact built-in primitive types. Same-type, bounded Unicode,
-  boolean, integer or finite float literals only; never eval or arbitrary
-  game object accessors.
-- Authenticate every read/write; validate typed paths, exact previous value
-  fingerprint and generation on the game interaction thread. Every confirmed
-  write increments generation and invalidates old queued work and browser
-  caches. No writes on HTTP worker threads.
-- No Persistent, custom object/descriptor, immutable container, set membership
-  editing, undo/redo, locks, guessed rollback safety, or automatic writes.
-- Unit tests for Python 2/3 and security/conflict cases; end-to-end bridge/UI
-  test of explicit approval, exact-value races and disabled-by-default state.
-- Graphical Ren'Py 7/8 E2E and closed-manifest v0.7.11 preview packaging gate.
+- Build on PR #29's trusted game-init opt-in. Keep editing and reversal disabled
+  by default; no browser endpoint can enable either capability.
+- Record only successful explicit Store primitive writes. Retain exact bounded
+  before/after text, type and typed path; never retain game-object references.
+- Keep at most 50 records / 64 KiB in bridge-session memory. Do not write edit
+  history into Ren'Py saves, browser storage or the inspector preferences file.
+- Provide separately confirmed Undo and Redo actions through the authenticated
+  loopback bridge. Resolve and mutate only on the Ren'Py interaction thread.
+- Revalidate current generation, target path, exact current scalar fingerprint
+  and unchanged built-in type for every reversal. Retire conflicting records
+  without overwriting a game-side change. A new edit after Undo discards redo.
+- Clear reversal stacks on load, rollback, editing disablement, bridge restart,
+  or any unclassified state-generation invalidation. Explicit edit/undo/redo
+  events are labelled as inspector invalidations, never Ren'Py rollback turns.
+- Test Python 2/3 compatibility, bounded retention, exact round trips, conflicts,
+  redo branching, auth, thread ownership, stale generations, browser confirmation
+  and real Ren'Py default-deny behaviour.
+- Graphical Ren'Py 7/8 E2E and closed-manifest v0.7.12 preview packaging gate.
+- **Deferred:** variable locks, durable history, arbitrary object writes, and
+  attempts to emulate Ren'Py rollback for inspector-side changes.
+
+## Previous milestone: PR #29 — Variable Editing MVP (v0.7.11 experimental)
+
+- Trusted game init only; primitive Store edits remain disabled by default.
+- Existing same-type built-in primitives only, with bounded literal parsing.
+- Game-thread writes, exact-value fingerprint and generation checks.
+- No Persistent writes, custom accessors, eval/exec, object mutation or key creation.
 
 ## Milestone: PR #7 — external Ant Design foundation (v0.6.0 experimental)
 

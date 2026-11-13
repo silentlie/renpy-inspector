@@ -126,7 +126,7 @@ export default function EditValuePanel({
       <Text type="secondary" className="detail-edit-warning">
         This changes the running game. Saves and rollback may be affected.
         Existing Store primitives only, with exact-value and generation checks.
-        No automatic undo or change history is provided.
+        Successful edits can be reversed from the session-only Edits tab, provided the recorded value still matches.
       </Text>
       {busy && <Text type="secondary">Processing game-thread request…</Text>}
       {target && !target.editable && <Text type="secondary" role="status">

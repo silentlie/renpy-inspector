@@ -283,3 +283,34 @@ html, body { overscroll-behavior: none; }
 .detail-edit-panel textarea { font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
   white-space:pre-wrap; overflow-wrap:anywhere; }
 .detail-edit-panel .ant-btn-primary { align-self:flex-start; }
+
+
+/* Explicit edit history is separate from sampled Compare and remains bounded. */
+.edit-history-workspace { display:flex;flex:1 1 auto;flex-direction:column;min-height:0;
+  min-width:0;overflow:hidden; }
+.edit-history-toolbar { display:flex;flex:0 0 auto;align-items:flex-start;
+  justify-content:space-between;flex-wrap:wrap;gap:12px;padding:10px 14px;
+  border-bottom:1px solid #29394f; }
+.edit-history-description { display:flex;flex-direction:column;gap:4px;max-width:680px; }
+.edit-history-description .ant-typography { font-size:11px;line-height:1.5; }
+.edit-history-actions { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.edit-history-actions .ant-checkbox-wrapper { font-size:11px;color:#aebed2; }
+.edit-history-list { flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;
+  overscroll-behavior:contain;padding:0 14px 14px; }
+.edit-history-entry { border-bottom:1px solid #28394e;padding:12px 0 10px; }
+.edit-history-entry-heading { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.edit-history-path { min-width:0;overflow-wrap:anywhere;
+  font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:#dce9f8; }
+.edit-history-time { display:block;margin:3px 0 8px;font-size:11px; }
+.edit-history-values { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px; }
+.edit-history-values pre { min-height:34px;max-height:120px;overflow:auto;margin:4px 0 0;
+  padding:8px;background:#101a2a;border:1px solid #293b53;border-radius:5px;
+  color:#c0d7f4;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+  white-space:pre-wrap;overflow-wrap:anywhere; }
+.edit-history-empty { padding:42px 14px;text-align:center; }
+@media (max-width:680px) {
+  .edit-history-toolbar { padding:9px 10px; }
+  .edit-history-actions { width:100%; }
+  .edit-history-list { padding-left:10px;padding-right:10px; }
+  .edit-history-values { grid-template-columns:minmax(0,1fr);gap:7px; }
+}

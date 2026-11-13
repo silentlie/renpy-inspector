@@ -45,6 +45,7 @@ test('primitive writes are disabled on the unconfigured bridge', async ({ page, 
     headers: { 'X-Inspector-Token': game.token },
   })).json();
   expect(snapshot.capabilities.primitive_edits).toBe(false);
+  await expect(page.getByRole('tab', { name: /Edits \(/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Inspect score' }).click();
   await expect(page.getByRole('button', { name: 'Open primitive editor' })).toHaveCount(0);
   const disabledWrite = await page.request.put(game.origin + '/api/v1/edit', {
@@ -114,6 +115,95 @@ test('explicit game opt-in permits a confirmed primitive edit and rejects stale 
         expected: target.expected, text: '300' },
     });
     expect(stale.status()).toBe(409);
+  } finally { await game.stop(); }
+});
+
+test('explicit edit history performs confirmed undo and redo without mixing with Compare', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const headers = { 'X-Inspector-Token': game.token };
+    const params = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'score']]),
+    });
+    const targetResponse = await page.request.get(game.origin + '/api/v1/edit-target?' + params, {
+      headers,
+    });
+    expect(targetResponse.status()).toBe(200);
+    const target = await targetResponse.json();
+    const edit = await page.request.put(game.origin + '/api/v1/edit', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'score']],
+        generation: target.generation, expected: target.expected,
+        type: target.type, text: '17' },
+    });
+    expect(edit.status()).toBe(200);
+    const edited = await edit.json();
+    expect(edited.edit_history.entries).toHaveLength(1);
+
+    const tab = page.getByRole('tab', { name: /Edits \(1\)/ });
+    await expect(tab).toBeVisible({ timeout: 12000 });
+    await tab.click();
+    const history = page.getByRole('region', { name: 'Inspector edit history' });
+    await expect(history).toContainText('store.score');
+    await expect(history).toContainText('Before');
+    await expect(history).toContainText('17');
+
+    const confirm = history.getByRole('checkbox', {
+      name: 'I understand Undo/Redo writes to the running game',
+    });
+    await confirm.check();
+    await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
+    await expect(history).toContainText('Undone');
+    await expect.poll(async () => {
+      const snapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+        headers,
+      })).json();
+      return snapshot.scopes.store.find((item) => item.name === 'score')?.preview;
+    }).toBe('2');
+
+    await confirm.check();
+    await history.getByRole('button', { name: 'Redo last inspector edit' }).click();
+    await expect(history).toContainText('Applied');
+    await expect.poll(async () => {
+      const snapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+        headers,
+      })).json();
+      return snapshot.scopes.store.find((item) => item.name === 'score')?.preview;
+    }).toBe('17');
+
+    // A new edit after Undo starts a new branch and removes the old Redo action.
+    await confirm.check();
+    await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
+    await expect(history).toContainText('Undone');
+    const undoneSnapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json();
+    const nextTarget = await (await page.request.get(
+      game.origin + '/api/v1/edit-target?' + params, { headers })).json();
+    const replacement = await page.request.put(game.origin + '/api/v1/edit', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'score']],
+        generation: nextTarget.generation, expected: nextTarget.expected,
+        type: nextTarget.type, text: '23' },
+    });
+    expect(replacement.status()).toBe(200);
+    const latest = await replacement.json();
+    expect(latest.edit_history.can_redo).toBe(false);
+    expect(latest.edit_history.entries.find((entry) =>
+      entry.id === edited.edit_history.entries[0].id)?.status).toBe('superseded');
+    expect(undoneSnapshot.edit_history.can_redo).toBe(true);
+    await expect(history.getByRole('button', { name: 'Redo last inspector edit' })).toBeDisabled();
+
+    // Same-generation game-side changes are not overwritten by Undo.
+    await game.command('set_score', { value: 99 });
+    await confirm.check();
+    await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
+    await expect(history).toContainText('Conflict');
+    const currentTarget = await (await page.request.get(
+      game.origin + '/api/v1/edit-target?' + params, { headers })).json();
+    expect(currentTarget.text).toBe('99');
+
   } finally { await game.stop(); }
 });
 

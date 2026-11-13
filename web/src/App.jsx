@@ -24,6 +24,7 @@ import ScriptPane from './ScriptPane.jsx';
 import RuntimePane from './RuntimePane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
 import EditValuePanel from './EditValuePanel.jsx';
+import EditHistoryPane from './EditHistoryPane.jsx';
 import { parseExactPath } from './exact-path.js';
 import { sourceTargetForContext } from './scripts.js';
 import { valuePresentation } from './value-format.js';
@@ -346,6 +347,11 @@ export default function App() {
   const [error, setError] = useState('');
   const [section, setSection] = useState('variables');
   const [scope, setScope] = useState('store');
+  useEffect(() => {
+    if (scope === 'edits' && snapshot?.capabilities?.primitive_edits !== true) {
+      setScope('store');
+    }
+  }, [scope, snapshot?.capabilities?.primitive_edits]);
   const [lastTreeScope, setLastTreeScope] = useState('store');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -933,13 +939,20 @@ export default function App() {
             </Popover>}
             items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
               { key: 'favourites', label: `Favourites (${favourites.length})` },
-              { key: 'compare', label: `Compare (${changes.length})` }]} />
+              { key: 'compare', label: `Compare (${changes.length})` },
+              ...(snapshot?.capabilities?.primitive_edits === true
+                ? [{ key: 'edits', label: `Edits (${snapshot?.edit_history?.entries?.length ?? 0})` }]
+                : [])]} />
           {scope === 'compare'
             ? <ComparePane changes={changes} favourites={favourites}
                 focusedKey={comparisonFocus} onResetFocus={() => setComparisonFocus(null)}
                 onClear={clearHistory} onInspect={inspectChange}
                 onReveal={revealResult} onOpenSource={openSourceContext} />
-            : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
+            : scope === 'edits' && snapshot?.capabilities?.primitive_edits === true
+              ? <EditHistoryPane value={snapshot?.edit_history}
+                  generation={treePages?.generation} enabled={true}
+                  bridge={bridge} token={token} />
+              : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
                 expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
@@ -958,7 +971,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.11 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.12 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
