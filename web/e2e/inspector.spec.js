@@ -51,14 +51,14 @@ test('Runtime shows bounded observations without inventing rollback turns', asyn
   await expect(page.getByRole('region', { name: 'Observed runtime timeline' }))
     .toContainText('Inspector state invalidated');
   await page.getByRole('combobox', { name: 'Filter runtime observations' }).click();
-  await page.getByText('Restoration signals', { exact: true }).last().click();
+  await page.getByText('Inspector invalidations', { exact: true }).last().click();
   await expect(page.locator('.runtime-event')).toHaveCount(1);
   const response = await page.request.get(game.origin + '/api/v1/snapshot', {
     headers: { 'X-Inspector-Token': game.token },
   });
   const runtime = (await response.json()).runtime;
   expect(runtime.events.length).toBeLessThanOrEqual(64);
-  expect(runtime.events.some((entry) => entry.kind === 'restoration' && entry.signal === 'unspecified'))
+  expect(runtime.events.some((entry) => entry.kind === 'invalidation' && entry.signal === 'unspecified'))
     .toBeTruthy();
 });
 
