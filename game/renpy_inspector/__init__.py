@@ -44,14 +44,18 @@ def observe_legacy_rollback(renpy_api):
 
     The modern after-default callback handles rollback directly. Ren'Py 7.4
     may not expose it, so consult in_rollback() on new interactions instead.
-    Repeated invalidations in rollback replay are safe; missing APIs are not
-    guessed or silently replaced by gameplay writes.
+    A sustained true indicator is one observed phase, not an event on every
+    interaction. Missing APIs are not replaced by gameplay writes.
     """
     try:
         rolling = renpy_api.in_rollback()
     except Exception:
         return
-    if rolling:
+    if type(rolling) is not bool:
+        return
+    was_rolling = bridge._legacy_rollback_active
+    bridge._legacy_rollback_active = rolling
+    if rolling and not was_rolling:
         reset_lifecycle('legacy_rollback')
 
 
