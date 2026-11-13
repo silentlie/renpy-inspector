@@ -50,7 +50,8 @@ class PrimitiveEditHistory(object):
 
     @staticmethod
     def _size(entry):
-        key = entry['key']
+        key = json.dumps([entry['scope'], entry['path']],
+                         ensure_ascii=True, separators=(',', ':'))
         before = entry['before']
         after = entry['after']
         return (len(key.encode('utf-8')) + len(before.encode('utf-8')) +
@@ -72,11 +73,10 @@ class PrimitiveEditHistory(object):
             entry['status'] = 'superseded'
         self.redo_stack = []
         self.next_id += 1
-        key = json.dumps([scope, path], ensure_ascii=True, separators=(',', ':'))
         entry = {
             'id': self.next_id, 'scope': scope,
             'path': [[kind, value] for kind, value in path],
-            'key': key, 'type': typename, 'before': before, 'after': after,
+            'type': typename, 'before': before, 'after': after,
             'created_at': captured_at, 'status': 'applied',
         }
         size = self._size(entry)
@@ -154,7 +154,9 @@ class PrimitiveEditHistory(object):
             visible.append({
                 'id': entry['id'], 'scope': entry['scope'],
                 'path': [list(segment) for segment in entry['path']],
-                'key': entry['key'], 'type': entry['type'],
+                'key': json.dumps([entry['scope'], entry['path']],
+                                  ensure_ascii=True, separators=(',', ':')),
+                'type': entry['type'],
                 'before': entry['before'], 'after': entry['after'],
                 'created_at': entry['created_at'], 'status': entry['status'],
             })
