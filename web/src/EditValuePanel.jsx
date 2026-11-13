@@ -21,9 +21,9 @@ export default function EditValuePanel({
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
   const controller = useRef(null);
-  const selectedLockKey = JSON.stringify([selection?.scope, decodeTreeKey(selection?.key)?.path]);
+  const selectedLockKey = selection?.key;
   const lockedFromSnapshot = Array.isArray(locks?.entries)
-    ? locks.entries.some((entry) => JSON.stringify([entry.scope, entry.path]) === selectedLockKey)
+    ? locks.entries.some((entry) => entry.key === selectedLockKey)
     : undefined;
   const isLocked = lockedFromSnapshot ?? (target?.locked === true);
 
