@@ -780,6 +780,10 @@ export default function App() {
   const openSourceContext = useCallback((context) => {
     const target = sourceTargetForContext(context);
     if (!target) return;
+    // Only one pending navigation intent may be replayed when Scripts mounts.
+    // Otherwise an old Find References request overrides (or is overridden by)
+    // a newer source request on the next tab switch.
+    setFindRequest(null);
     setSourceRequest({ ...target, name: "Observed script location",
       id: ++sourceRequestIdRef.current, generation: treePagesRef.current?.generation });
     setSelected(null);
@@ -794,6 +798,7 @@ export default function App() {
       (kind === 'attribute' || kind === 'key') &&
       typeof value === 'string' && value.length >= 2);
     if (!candidate) return;
+    setSourceRequest(null);
     setFindRequest({ id: Date.now(), term: candidate[1].slice(0, 64) });
     setSelected(null);
     setSection('scripts');
