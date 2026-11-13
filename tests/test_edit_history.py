@@ -99,7 +99,19 @@ class PrimitiveEditHistoryTests(unittest.TestCase):
         self.assertEqual(snapshot['entries'][-1]['id'], 60)
         self.assertEqual(len(history.undo_stack), MAX_EDIT_HISTORY_ENTRIES)
 
+    def test_utf8_byte_budget_trims_before_record_count_limit(self):
+        history = PrimitiveEditHistory()
+        path = (('attribute', 'memo'),)
+        for index in range(20):
+            history.record('store', path, 'unicode', u'☃' * 1024,
+                           u'雪' * 1024, float(index))
+        snapshot = history.snapshot(20)
+        self.assertLess(len(snapshot['entries']), MAX_EDIT_HISTORY_ENTRIES)
+        self.assertLessEqual(snapshot['bytes_used'], MAX_EDIT_HISTORY_BYTES)
+        self.assertGreater(snapshot['entries'][0]['id'], 1)
+
     def test_load_or_rollback_reset_drops_all_reversals(self):
+
         history = PrimitiveEditHistory()
         self.edit('score', '7', history)
         history.reset('after_load')
