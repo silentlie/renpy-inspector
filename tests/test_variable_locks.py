@@ -5,7 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'game'))
 from renpy_inspector.variable_locks import (
-    MAX_VARIABLE_LOCKS, MAX_VARIABLE_LOCKS_BYTES, VariableLockLimit,
+    MAX_LOCK_CHECKS_PER_PUBLISH, MAX_VARIABLE_LOCKS, MAX_VARIABLE_LOCKS_BYTES,
+    VariableLockLimit,
     VariableLocks, validate_variable_lock_request,
 )
 
@@ -128,6 +129,19 @@ class VariableLocksTests(unittest.TestCase):
         self.assertNotEqual(first, second)
         locks.observe('store', first[0][1], {'editable': False}, 11.0)
         self.assertNotIn(first[0], locks.next_check_batch(10))
+
+    def test_full_lock_set_is_checked_in_sixteen_bounded_batches(self):
+        locks = VariableLocks()
+        for index in range(MAX_VARIABLE_LOCKS):
+            path = (('attribute', 'variable_{}'.format(index)),)
+            locks.lock('store', path, float(index), 'a' * 64, 'int')
+        batches = [locks.next_check_batch() for unused in range(
+            MAX_VARIABLE_LOCKS // MAX_LOCK_CHECKS_PER_PUBLISH)]
+        self.assertTrue(all(len(batch) <= MAX_LOCK_CHECKS_PER_PUBLISH
+                            for batch in batches))
+        checked = [path for batch in batches for unused_scope, path in batch]
+        self.assertEqual(len(checked), MAX_VARIABLE_LOCKS)
+        self.assertEqual(len(set(checked)), MAX_VARIABLE_LOCKS)
 
     def test_refresh_requires_an_existing_lock(self):
         from renpy_inspector.variable_locks import VariableLockMissing
