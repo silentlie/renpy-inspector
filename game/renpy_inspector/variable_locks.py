@@ -48,15 +48,30 @@ class VariableLocks(object):
         self.last_reset_reason = 'bridge_start'
 
     @staticmethod
-    def _key(scope, path):
+    def _display_key(scope, path):
         return json.dumps(
             [scope, [[kind, value] for kind, value in path]],
             ensure_ascii=True, separators=(',', ':'))
 
     @staticmethod
-    def _size(key):
-        # The snapshot retains both the canonical key and a JSON-safe path copy.
-        return 2 * len(key.encode('utf-8')) + 160
+    def _key(scope, path):
+        # Python dictionaries treat True/1 and False/0 as the same key.
+        # Canonicalise those aliases so a differently typed JSON path cannot
+        # bypass an Inspector lock on the same underlying dictionary entry.
+        canonical = []
+        for kind, value in path:
+            if kind == 'key' and type(value) is bool:
+                value = 1 if value else 0
+            canonical.append([kind, value])
+        return json.dumps(
+            [scope, canonical], ensure_ascii=True, separators=(',', ':'))
+
+    @staticmethod
+    def _size(key, display_key):
+        # Account conservatively for the canonical key, displayed key and
+        # copied JSON-safe path retained by the session registry/snapshot.
+        return 3 * max(len(key.encode('utf-8')),
+                       len(display_key.encode('utf-8'))) + 160
 
     def is_locked(self, scope, path):
         return self._key(scope, path) in self._by_key
@@ -65,7 +80,8 @@ class VariableLocks(object):
         key = self._key(scope, path)
         if key in self._by_key:
             return False
-        size = self._size(key)
+        display_key = self._display_key(scope, path)
+        size = self._size(key, display_key)
         if len(self.entries) >= MAX_VARIABLE_LOCKS or self.bytes_used + size > MAX_VARIABLE_LOCKS_BYTES:
             raise VariableLockLimit('variable lock capacity reached')
         entry = {
@@ -73,6 +89,7 @@ class VariableLocks(object):
             'path': [[kind, value] for kind, value in path],
             'locked_at': locked_at,
             '_key': key,
+            '_display_key': display_key,
             '_size': size,
         }
         self.entries.append(entry)
@@ -107,7 +124,7 @@ class VariableLocks(object):
             'byte_limit': MAX_VARIABLE_LOCKS_BYTES,
             'entries': [{
                 'scope': entry['scope'],
-                'key': entry['_key'],
+                'key': entry['_display_key'],
                 'path': [list(segment) for segment in entry['path']],
                 'locked_at': entry['locked_at'],
             } for entry in self.entries],
