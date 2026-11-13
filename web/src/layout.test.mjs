@@ -122,9 +122,11 @@ test('changes are derived from the existing shallow root, page and favourite sam
   assert.match(jsx, /selectedHistory/);
 });
 
-test('Compare continues observing last selected variable scope', () => {
+test('Compare, Locked and Edits continue observing the last selected tree scope', () => {
   assert.match(jsx, /lastTreeScope/);
-  assert.match(jsx, /scope === 'compare' \? lastTreeScope : scope/);
+  assert.match(jsx, /\(scope === 'compare' \|\| scope === 'edits' \|\| scope === 'locked'\) \? lastTreeScope : scope/);
+  assert.match(jsx, /scope === 'locked' && snapshot\?\.capabilities\?\.primitive_edits === true/);
+  assert.match(jsx, /<LockedVariablesPane locks=\{snapshot\?\.locks\}/);
 });
 
 
