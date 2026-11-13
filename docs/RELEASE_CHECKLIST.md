@@ -1,4 +1,4 @@
-# Release and upgrade acceptance (PR #17, v0.7.0)
+# Release and upgrade acceptance (PR #30, v0.7.12)
 
 This remains a **prerelease**. Passing tests, packaging checks and SDK lint
 does not certify that F8, rollback or rendering works in every Ren'Py game.
@@ -21,7 +21,7 @@ To verify downloaded archives from a source checkout:
 
 ```sh
 python scripts/verify_release.py \
-  dist/renpy-inspector-v0.7.11-renpy7.zip \
+  dist/renpy-inspector-v0.7.12-renpy7.zip \
   dist/renpy-inspector-v0.7.11-renpy8.zip
 ```
 
