@@ -39,6 +39,10 @@ class EditUnsupported(Exception):
     """The current location or primitive is not editable under the MVP rules."""
 
 
+class EditLocked(Exception):
+    """The exact Store path is protected from inspector-side writes."""
+
+
 def validate_edit_request(payload):
     if type(payload) is not dict or set(payload) != set((
             'scope', 'path', 'generation', 'expected', 'type', 'text')):
