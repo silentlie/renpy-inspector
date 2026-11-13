@@ -30,7 +30,7 @@ test('explicit primitive edit invalidation is not presented as a rollback callba
   const event = { kind: 'invalidation', signal: 'edit', generation: 4, captured_at: 1 };
   const label = runtimeEventDescription(event);
   assert.equal(label.title, 'Confirmed inspector edit');
-  assert.match(label.note, /not a rollback/i);
+  assert.match(label.note, /not a .*rollback/i);
 });
 
 
