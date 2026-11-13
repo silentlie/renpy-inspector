@@ -17,7 +17,7 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
     def test_unicode_typed_path_round_trip(self):
         locks = VariableLocks()
         path = (('attribute', u'player'), ('key', u'生命'))
-        self.assertTrue(locks.lock('store', path, 1.0, 'a'.repeat(64), 'int'))
+        self.assertTrue(locks.lock('store', path, 1.0, 'a' * 64, 'int'))
         entry = locks.snapshot()['entries'][0]
         self.assertEqual(entry['path'], [
             ['attribute', u'player'], ['key', u'生命']])
@@ -35,12 +35,26 @@ class VariableLocksCompatibilityTests(unittest.TestCase):
         self.assertTrue(locks.unlock('store', int_path))
         self.assertFalse(locks.is_locked('store', bool_path))
 
+    def test_stale_baseline_and_refresh_are_python2_compatible(self):
+        locks = VariableLocks()
+        path = (('attribute', u'player'), ('key', u'生命'))
+        locks.lock('store', path, 1.0, 'a' * 64, u'int')
+        state = locks.observe('store', path, {
+            'editable': True, 'type': u'int', 'expected': 'b' * 64}, 2.0)
+        self.assertTrue(state['locked'])
+        self.assertTrue(state['stale'])
+        self.assertEqual(state['stale_reason'], 'value_changed')
+        locks.refresh('store', path, 3.0, 'b' * 64, u'int')
+        self.assertFalse(locks.state('store', path)['stale'])
+
     def test_strict_generation_and_action_validation(self):
         payload = {'action': u'lock', 'scope': u'store',
                    'path': [['attribute', u'score']], 'generation': 3}
         self.assertEqual(validate_variable_lock_request(payload)[0], u'lock')
         self.assertEqual(validate_variable_lock_request(
             dict(payload, action=u'unlock'))[0], u'unlock')
+        self.assertEqual(validate_variable_lock_request(
+            dict(payload, action=u'refresh'))[0], u'refresh')
         for invalid in (dict(payload, generation=True),
                         dict(payload, generation=-1),
                         dict(payload, scope=u'persistent'),
