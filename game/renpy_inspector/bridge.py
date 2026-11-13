@@ -1,8 +1,9 @@
 """Opt-in, authenticated loopback bridge for the Ant Design inspector UI.
 
-HTTP workers never read gameplay objects. Game state is inspected only by
-Ren'Py's interaction-thread tick/publish. The only preference write permitted
-is an authenticated, bounded inspector-only JSON file, never game state.
+HTTP workers never inspect or mutate gameplay objects. Game state is read and,
+only when trusted game init explicitly enables primitive editing, mutated by
+Ren'Py's interaction-thread tick. Filesystem writes remain limited to the
+bounded, authenticated inspector-preferences file.
 """
 from __future__ import unicode_literals
 
@@ -35,6 +36,9 @@ from .browser_favourites import (BrowserFavouritesStore,
                                  MAX_PREFERENCE_BYTES, validate_favourites)
 from .compat import monotonic_time
 from .runtime_history import RuntimeTimeline
+from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
+                          inspect_edit_target, apply_primitive_edit,
+                          EditConflict, EditUnsupported)
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -89,7 +93,8 @@ class _Handler(BaseHTTPRequestHandler):
                 '/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
                 '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
                 '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source',
-                '/api/v1/source-search') and origin in ALLOWED_DEV_ORIGINS:
+                '/api/v1/source-search', '/api/v1/edit-target',
+                '/api/v1/edit') and origin in ALLOWED_DEV_ORIGINS:
             self._send(204, origin=origin)
         else:
             self._send(404)
@@ -97,12 +102,50 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self._send(405)
 
+    def _write_edit(self, origin):
+        """Authenticated HTTP payload validation; no gameplay access here."""
+        bridge = self.server.bridge
+        if not self.headers.get('X-Inspector-Token') or self.headers.get('X-Inspector-Token') != bridge.token:
+            self._send(401, b'Unauthorized', origin=origin)
+            return
+        with bridge.lock:
+            if not bridge.editing_enabled:
+                self._send(403, b'Primitive editing is not enabled in game config', origin=origin)
+                return
+        try:
+            raw_size = self.headers.get('Content-Length', '')
+            if not raw_size.isdigit():
+                raise ValueError('missing request size')
+            size = int(raw_size)
+            if size < 1 or size > MAX_EDIT_REQUEST_BYTES:
+                raise ValueError('edit request exceeds size limit')
+            if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
+                raise ValueError('editing requires JSON')
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            arguments = validate_edit_request(payload)
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+            self._send(400, b'Invalid primitive edit', origin=origin)
+            return
+        job = bridge.enqueue_tree_page(arguments, kind='edit')
+        if job is None:
+            self._send(429, b'Inspector queue is busy', origin=origin)
+            return
+        if not job['event'].wait(3.0):
+            bridge.cancel_tree_page(job)
+            self._send(503, b'Game interaction paused; verify the current value before retrying', origin=origin)
+            return
+        status, response = job['response']
+        self._send(status, response, 'application/json; charset=utf-8', origin=origin)
+
     def do_PUT(self):
-        """The ONLY HTTP write is to inspector-owned favourites metadata."""
+        """Inspector preferences OR game-config-enabled primitive writes."""
         if not self._allowed_origin():
             self._send(403)
             return
         origin = self.headers.get('Origin')
+        if urlsplit(self.path).path == '/api/v1/edit':
+            self._write_edit(origin)
+            return
         if urlsplit(self.path).path != '/api/v1/favourites':
             self._send(405, origin=origin)
             return
@@ -145,7 +188,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path in ('/api/v1/snapshot', '/api/v1/children', '/api/v1/value',
                     '/api/v1/favourites', '/api/v1/search', '/api/v1/reveal',
                     '/api/v1/full-value', '/api/v1/scripts', '/api/v1/source',
-                    '/api/v1/source-search'):
+                    '/api/v1/source-search', '/api/v1/edit-target'):
             token = self.headers.get('X-Inspector-Token')
             if not token or token != self.server.bridge.token:
                 self._send(401, b'Unauthorized', origin=origin)
@@ -210,18 +253,22 @@ class _Handler(BaseHTTPRequestHandler):
                     size = int(fields['size'][0]) if fields['size'][0].isdigit() else -1
                     arguments = validate_tree_request(fields['scope'][0], raw_path, offset, size)
                     job_kind = 'page'
-                elif path in ('/api/v1/value', '/api/v1/reveal', '/api/v1/full-value'):
+                elif path in ('/api/v1/value', '/api/v1/reveal', '/api/v1/full-value', '/api/v1/edit-target'):
                     scope, path_parts, unused_offset, unused_size = validate_tree_request(
                         fields['scope'][0], raw_path, 0, 1)
                     if not path_parts:
                         raise ValueError('inspection needs a path')
                     arguments = (scope, path_parts)
                     job_kind = ('value' if path == '/api/v1/value' else
-                                'reveal' if path == '/api/v1/reveal' else 'full_value')
+                                'reveal' if path == '/api/v1/reveal' else
+                                'edit_target' if path == '/api/v1/edit-target' else 'full_value')
             except (ValueError, TypeError, KeyError):
                 self._send(400, b'Invalid tree request', origin=origin)
                 return
             bridge = self.server.bridge
+            if job_kind == 'edit_target' and not bridge.editing_enabled:
+                self._send(403, b'Editing disabled', origin=origin)
+                return
             job = bridge.enqueue_tree_page(arguments, kind=job_kind)
             if job is None:
                 self._send(429, b'Inspector queue is busy', origin=origin)
@@ -270,6 +317,8 @@ class InspectorBridge(object):
         self.thread = None
         self.token = None
         self.favourites_store = None
+        # Must be explicitly enabled in trusted game init code, never by HTTP.
+        self.editing_enabled = False
         self.script_runtime = None
         self.script_game_dir = None
         self.error = ''
@@ -288,7 +337,16 @@ class InspectorBridge(object):
                                              'scopes': {'store': [], 'persistent': []},
                                              'counts': {}, 'truncated': {},
                                              'root_pages': {}, 'game': {},
+                                             'capabilities': {'primitive_edits': False},
                                              'runtime': self.runtime_history.snapshot()})
+
+    def configure_variable_editing(self, enabled=False):
+        """Trusted game init opt-in. Never reachable through a browser API."""
+        if type(enabled) is not bool:
+            raise ValueError('editing opt-in must be a boolean')
+        with self.lock:
+            self.editing_enabled = enabled
+        # Advertise current capability on the next game-thread snapshot.
 
     def configure_game_directory(self, directory):
         """Use Ren'Py's actual game/ location, not an import cache path.
@@ -403,7 +461,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search'):
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -419,7 +477,7 @@ class InspectorBridge(object):
                 self.pending_pages.remove(job)
 
     def tick(self):
-        """Ren'Py interaction thread: at most two page jobs per 250ms tick."""
+        """Ren'Py interaction thread: service at most two queued jobs per tick."""
         if not self.running:
             return
         with self.lock:
@@ -435,7 +493,27 @@ class InspectorBridge(object):
                 if not valid:
                     status, result = 409, {'error': 'Game state changed'}
                 else:
-                    if job['kind'] == 'full_value':
+                    status = 200
+                    if job['kind'] in ('edit_target', 'edit') and not self.editing_enabled:
+                        status, result = 403, {'error': 'Primitive editing disabled'}
+                    elif job['kind'] == 'edit_target':
+                        result = inspect_edit_target(self.inspector._providers, *job['args'])
+                        result['captured_at'] = time.time()
+                        status = 200
+                    elif job['kind'] == 'edit':
+                        scope, path, expected_generation, expected, typename, text = job['args']
+                        if expected_generation != self.generation:
+                            raise EditConflict('Game state generation changed')
+                        result = apply_primitive_edit(
+                            self.inspector._providers, scope, path, expected, typename, text)
+                        # Invalidate stale reads and queued writes after successful
+                        # mutation. This is an inspector edit, NOT a rollback event.
+                        self.invalidate(reason='edit')
+                        self.publish()
+                        job['generation'] = self.generation
+                        result['captured_at'] = time.time()
+                        status = 200
+                    elif job['kind'] == 'full_value':
                         result = build_full_value(self.inspector._providers, *job['args'])
                     elif job['kind'] == 'value':
                         result = build_tree_value(self.inspector._providers, *job['args'])
@@ -454,8 +532,14 @@ class InspectorBridge(object):
                     # Timestamp when the game-thread read actually occurred.
                     # Clients use this to discard delayed overlapping samples.
                     result['captured_at'] = time.time()
-                    status = 200
-            except (ValueError, KeyError, TypeError):
+            except EditConflict:
+                status, result = 409, {'error': 'Variable or game generation changed'}
+            except EditUnsupported:
+                status, result = 422, {'error': 'Variable not editable'}
+            except ValueError:
+                status, result = (400 if job['kind'] == 'edit' else 404), {
+                    'error': 'Invalid edit' if job['kind'] == 'edit' else 'Tree path unavailable'}
+            except (KeyError, TypeError):
                 status, result = 404, {'error': 'Tree path unavailable'}
             except Exception:
                 status, result = 500, {'error': 'Read-only inspection failed'}
@@ -505,6 +589,7 @@ class InspectorBridge(object):
                 'scopes': {'store': [], 'persistent': []},
                 'counts': {}, 'truncated': {},
                 'root_pages': {}, 'game': {},
+                'capabilities': {'primitive_edits': self.editing_enabled},
                 'runtime': self.runtime_history.snapshot()})
 
     def publish(self):
@@ -519,6 +604,7 @@ class InspectorBridge(object):
             scan_ms = round(max(0.0, monotonic_time() - started) * 1000.0, 2)
             with self.lock:
                 data['generation'] = self.generation
+                data['capabilities'] = {'primitive_edits': self.editing_enabled}
                 self.runtime_history.observe(info, self.generation, data['captured_at'])
                 data['runtime'] = self.runtime_history.snapshot()
                 # A snapshot of the queue, not exact real-time HTTP latency.

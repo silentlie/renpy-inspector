@@ -29,7 +29,7 @@ test('real bridge authentication, browser startup and navigation', async ({ page
   await page.getByRole('tab', { name: 'Overview' }).click();
   await expect(page.getByText('Playwright Fixture')).toBeVisible();
   await expect(page.getByText('Connected', { exact: true })).toBeVisible();
-  await expect(page.getByText('Read-only queue (sampled)')).toBeVisible();
+  await expect(page.getByText('Game-thread queue (sampled)')).toBeVisible();
   await page.getByRole('tab', { name: 'Variables' }).click();
   await expect(page.getByRole('button', { name: 'Inspect score' })).toBeVisible();
   // The browser UI and queue GETs must not allow writes to game variables.
@@ -37,6 +37,84 @@ test('real bridge authentication, browser startup and navigation', async ({ page
     headers: { 'X-Inspector-Token': game.token },
   });
   expect(post.status()).toBe(405);
+});
+
+test('primitive writes are disabled on the unconfigured bridge', async ({ page, game }) => {
+  await page.goto(game.url);
+  const snapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+    headers: { 'X-Inspector-Token': game.token },
+  })).json();
+  expect(snapshot.capabilities.primitive_edits).toBe(false);
+  await page.getByRole('button', { name: 'Inspect score' }).click();
+  await expect(page.getByRole('button', { name: 'Open primitive editor' })).toHaveCount(0);
+  const disabledWrite = await page.request.put(game.origin + '/api/v1/edit', {
+    headers: { 'X-Inspector-Token': game.token, 'Content-Type': 'application/json' },
+    data: { scope: 'store', path: [['attribute', 'score']], generation: 0,
+      type: 'int', text: '100', expected: 'a'.repeat(64) },
+  });
+  expect(disabledWrite.status()).toBe(403);
+  const current = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+    headers: { 'X-Inspector-Token': game.token },
+  })).json();
+  expect(current.scopes.store.find((item) => item.name === 'score')?.preview).toBe('2');
+});
+
+test('explicit game opt-in permits a confirmed primitive edit and rejects stale samples', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const headers = { 'X-Inspector-Token': game.token };
+    const snapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers,
+    })).json();
+    expect(snapshot.capabilities.primitive_edits).toBe(true);
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const editor = page.getByRole('region', { name: 'Primitive variable editing' });
+    await expect(editor).toBeVisible();
+    await editor.getByRole('button', { name: 'Open primitive editor' }).click();
+    await expect(editor.getByRole('textbox', { name: 'New literal value' })).toHaveValue('2');
+    await expect(editor.getByRole('button', { name: 'Apply primitive edit' })).toBeDisabled();
+    await editor.getByRole('textbox', { name: 'New literal value' }).fill('17');
+    await expect(editor.getByRole('button', { name: 'Apply primitive edit' })).toBeDisabled();
+    await editor.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+    await editor.getByRole('button', { name: 'Apply primitive edit' }).click();
+    await expect(page.getByRole('dialog', { name: 'Variable details' })).toHaveCount(0);
+    const scoreRow = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^score$/ }),
+    });
+    await expect(scoreRow.locator('.variable-preview')).toHaveText('17', { timeout: 12000 });
+
+    // A captured exact-value fingerprint detects changes within one generation.
+    const params = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'score']]),
+    });
+    const targetResponse = await page.request.get(game.origin + '/api/v1/edit-target?' + params, {
+      headers,
+    });
+    expect(targetResponse.status()).toBe(200);
+    const target = await targetResponse.json();
+    await game.command('set_score', { value: 18 });
+    const conflict = await page.request.put(game.origin + '/api/v1/edit', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'score']],
+        generation: target.generation, type: target.type,
+        expected: target.expected, text: '100' },
+    });
+    expect(conflict.status()).toBe(409);
+    await expect(scoreRow.locator('.variable-preview')).toHaveText('18', { timeout: 12000 });
+
+    // Stale generation is invalid even when an old exact value recurs.
+    await game.command('restore_game');
+    const stale = await page.request.put(game.origin + '/api/v1/edit', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'score']],
+        generation: target.generation, type: target.type,
+        expected: target.expected, text: '300' },
+    });
+    expect(stale.status()).toBe(409);
+  } finally { await game.stop(); }
 });
 
 test('Runtime shows bounded observations without inventing rollback turns', async ({ page, game }) => {

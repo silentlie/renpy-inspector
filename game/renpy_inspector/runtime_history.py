@@ -10,7 +10,7 @@ from .compat import string_types, integer_types
 
 MAX_RUNTIME_EVENTS = 64
 MAX_LOCATION_TEXT = 180
-RESTORE_SIGNALS = ('after_load', 'after_default', 'legacy_rollback', 'unspecified')
+RESTORE_SIGNALS = ('after_load', 'after_default', 'legacy_rollback', 'unspecified', 'edit')
 
 
 def _safe_filename(value):
@@ -57,7 +57,7 @@ class RuntimeTimeline(object):
         self.last_location = None
         self.last_rollback = None
         # Cache-only invalidations are not Ren'Py restoration callbacks.
-        kind = 'invalidation' if signal == 'unspecified' else 'restoration'
+        kind = 'invalidation' if signal in ('unspecified', 'edit') else 'restoration'
         self._append(kind, generation, captured_at, signal=signal)
 
     def observe(self, context, generation, captured_at):

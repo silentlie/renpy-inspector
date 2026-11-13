@@ -207,6 +207,24 @@ test('actual graphical RenPy SDK: F8, browser, live game state, rollback and sav
     // This is an actual running Ren'Py interpreter, not the synthetic fixture.
     const initial = await getSnapshot();
     expect(initial.game?.version).toContain(process.env.RENPY_VERSION);
+    expect(initial.capabilities?.primitive_edits).toBe(false);
+    const disabledEditPath = new URLSearchParams({
+      scope: 'store', path: JSON.stringify([['attribute', 'e2e_value']]),
+    });
+    // The real engine remains read-only unless trusted game init explicitly opts in.
+    const disabledEdit = await page.request.get(origin + '/api/v1/edit-target?' + disabledEditPath, {
+      headers, timeout: 5000,
+    });
+    expect(disabledEdit.status()).toBe(403);
+    const deniedWrite = await page.request.put(origin + '/api/v1/edit', {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { scope: 'store', path: [['attribute', 'e2e_value']],
+        generation: initial.generation, type: 'int', text: '999',
+        expected: '0'.repeat(64) },
+      timeout: 5000,
+    });
+    expect(deniedWrite.status()).toBe(403);
+
     expect(initial.scopes.store.some((node) => node.name === 'e2e_container')).toBeTruthy();
     // Real Ren'Py 7/8 game-thread scan of set values, with a typed member
     // path (not a mutable positional index or synthetic browser-only data).

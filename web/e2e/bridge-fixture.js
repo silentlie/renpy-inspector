@@ -4,11 +4,12 @@ import { resolve } from 'node:path';
 
 // Only stdout JSON emitted by the fixture is part of this process contract.
 // No debug console noise or Ren'Py SDK is needed for these browser/HTTP tests.
-export async function startBridgeFixture() {
+export async function startBridgeFixture({ editing = false } = {}) {
   const python = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
   const script = resolve(process.cwd(), '../scripts/e2e_bridge_fixture.py');
   const child = spawn(python, ['-u', script], {
     cwd: resolve(process.cwd(), '..'),
+    env: { ...process.env, RENPY_INSPECTOR_E2E_ENABLE_EDITS: editing ? '1' : '0' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let id = 0;

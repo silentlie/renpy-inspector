@@ -259,3 +259,17 @@ including syntax token elements. Graphical Ren'Py 7.8.7/8.5.3 E2E also checks
 that an actual game-owned .rpy excerpt renders highlighted source tokens.
 Full primitive values are not treated as Python source, all fragments render
 as React text nodes, and navigation is read-only.
+
+
+## Opt-in primitive editing validation (PR #29, v0.7.11)
+
+The Python 2/3 tests verify exact built-in primitive types, strict Unicode
+handling, visible path resolution, safe plain container writes, bounded numeric
+conversion, compare-and-swap conflict handling, authentication and origin
+rejection, disabled-by-default operation, interaction-thread ownership, and
+queued-write cancellation on game generation changes. The Playwright fixture
+starts **disabled unless the test process passes an explicit test-only opt-in**
+flag. Tests cover no edit UI/no HTTP mutation by default, then separately
+enable editing and exercise the full confirmation flow, same-generation
+fingerprint conflicts, stale-generation rejection and snapshot refresh.
+No game-owned Python code executes on HTTP worker threads.
