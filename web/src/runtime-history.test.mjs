@@ -19,4 +19,8 @@ test('bounded timeline renders newest first without manufacturing interactions',
   assert.equal(filteredRuntimeEvents({ events })[0].id, 80);
   assert.equal(filteredRuntimeEvents({ events }, 'location').length, 40);
   assert.deepEqual(filteredRuntimeEvents({ events: [{ kind: 'something_else' }] }), []);
+  const invalidation = { id: 81, kind: 'invalidation', signal: 'unspecified' };
+  assert.match(runtimeEventDescription(invalidation).note, /not evidence/);
+  assert.equal(filteredRuntimeEvents({ events: [invalidation] }, 'restoration').length, 0);
+  assert.equal(filteredRuntimeEvents({ events: [invalidation] }, 'invalidation').length, 1);
 });
