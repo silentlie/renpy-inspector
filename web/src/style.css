@@ -318,5 +318,6 @@ html, body { overscroll-behavior: none; }
 
 .variable-lock-indicator { display:inline-flex;align-items:center;justify-content:center;
   flex:0 0 auto;margin-left:2px;color:#e3bd73;font-size:11px; }
+.variable-lock-indicator.is-stale { color:#ed8b54; }
 .detail-lock-controls { margin:10px 0 6px; }
 .detail-lock-note { display:block;font-size:11px;line-height:1.5;margin-bottom:8px; }
