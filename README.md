@@ -20,7 +20,7 @@ On the first F8 press, the inspector starts its authenticated **127.0.0.1** serv
 
 ## What the browser provides
 
-- Top-level **Overview / Variables / Scripts / Runtime** tabs and **Store / Persistent / Favourites / Compare** scopes.
+- Top-level **Overview / Variables / Scripts / Runtime** tabs and **Store / Persistent / Favourites / Compare** scopes, plus the opt-in **Edits** scope.
 - Full-width virtualised tree with **automatic paged loading** on expansion and near the end of scrolled branches. No routine "Load more" click.
 - **PR #13: bounded global search and reveal.** Press `/` or the magnifying-glass icon to search Store and Persistent names/paths beyond the loaded tree. Click a hit to reveal its typed ancestor path and scroll directly to the result. Search results explicitly warn when the traversal budget is exhausted.
 - Automatic snapshot updates while the game is running. No refresh button or browser footer.
@@ -86,8 +86,9 @@ explicit inspector writes, but it is not a substitute for a save backup and
 cannot reverse arbitrary game-script mutations. Undo/Redo require the exact
 recorded current value; conflicting records are retired rather than forcing a
 write. Game load, rollback or other state-generation resets clear the reversal
-history. Locks protect only inspector-originated writes, not assignments made by game scripts. No durable edit log exists. A timed-out request could
-have completed on the game thread; inspect the fresh value before retrying.
+history. Locks protect only inspector-originated writes, not assignments made by
+game scripts. No durable edit log exists. A timed-out request could have
+completed on the game thread; inspect the fresh value before retrying.
 The inspector does not assert Ren'Py's rollback system will reverse these
 external edits.
 
