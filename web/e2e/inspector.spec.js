@@ -874,7 +874,7 @@ test('locked variables workspace lists, refreshes and releases active locks', as
     await expect(page.getByRole('tab', { name: /Locked \(2\)/ })).toBeVisible();
 
     await workspace.getByRole('button', { name: 'Unlock all variables' }).click();
-    await page.getByRole('button', { name: 'Unlock all' }).click();
+    await page.getByRole('button', { name: 'Unlock all', exact: true }).click();
     await expect(page.getByRole('tab', { name: /Locked \(0\)/ })).toBeVisible();
     await expect(workspace.getByText(
       'No locked variables. Lock an eligible Store primitive from its details drawer.',
