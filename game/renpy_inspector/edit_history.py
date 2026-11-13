@@ -153,7 +153,6 @@ class PrimitiveEditHistory(object):
         for entry in self.entries:
             visible.append({
                 'id': entry['id'], 'scope': entry['scope'],
-                'path': [list(segment) for segment in entry['path']],
                 'key': json.dumps([entry['scope'], entry['path']],
                                   ensure_ascii=True, separators=(',', ':')),
                 'type': entry['type'],
