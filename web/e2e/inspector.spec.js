@@ -172,6 +172,20 @@ test('variable locks protect inspector writes without freezing game state', asyn
       headers,
     })).json();
     expect(latest.locks.entries).toHaveLength(0);
+
+    // Locks also protect Undo, not just the editor's Apply button.
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const secondEditor = page.getByRole('region', { name: 'Primitive variable editing' });
+    await secondEditor.getByRole('button', { name: 'Open primitive editor' }).click();
+    await secondEditor.getByRole('button', { name: 'Lock variable' }).click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: /Edits \\(/ }).click();
+    const history = page.getByRole('region', { name: 'Inspector edit history' });
+    await history.getByRole('checkbox', {
+      name: 'I understand Undo/Redo writes to the running game',
+    }).check();
+    await history.getByRole('button', { name: 'Undo last inspector edit' }).click();
+    await expect(history).toContainText('locked against Inspector writes');
   } finally { await game.stop(); }
 });
 
