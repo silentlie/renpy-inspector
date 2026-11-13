@@ -91,12 +91,12 @@ export default function EditValuePanel({
       });
       if (!result.ok) throw new Error(result.status === 409 ?
         'Conflict: variable value or game state changed. Reopen the editor.' :
-        result.status === 422 ? 'The variable is no longer editable.' :
-          result.status === 403 ? 'Editing has been disabled by the game.' :
-            result.status === 503 ? 'Game interaction paused. Check the value before retrying.' :
-              result.status === 400 ? 'Invalid value for the existing primitive type.' :
-                'Edit failed (HTTP ' + result.status + ')');
-      if (result.status === 423) throw new Error('This variable is locked against Inspector writes. Unlock it before editing.');
+        result.status === 423 ? 'This variable is locked against Inspector writes. Unlock it before editing.' :
+          result.status === 422 ? 'The variable is no longer editable.' :
+            result.status === 403 ? 'Editing has been disabled by the game.' :
+              result.status === 503 ? 'Game interaction paused. Check the value before retrying.' :
+                result.status === 400 ? 'Invalid value for the existing primitive type.' :
+                  'Edit failed (HTTP ' + result.status + ')');
       const data = await result.json();
       if (!data.applied || !Number.isSafeInteger(data.generation) ||
           data.generation <= generation) {
