@@ -30,3 +30,10 @@ export function appendScriptLabels(existing, incoming) {
   }
   return list;
 }
+
+/** Keep source navigation scoped to the existing read-only .rpy endpoint. */
+export function sourceTargetForContext(info) {
+  const file = normaliseGameScriptFile(info?.file ?? info?.filename);
+  const line = safeScriptLine(info?.line);
+  return file && line ? { file, line } : null;
+}
