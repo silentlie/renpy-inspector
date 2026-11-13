@@ -492,6 +492,7 @@ class InspectorBridge(object):
                 if not valid:
                     status, result = 409, {'error': 'Game state changed'}
                 else:
+                    status = 200
                     if job['kind'] in ('edit_target', 'edit') and not self.editing_enabled:
                         status, result = 403, {'error': 'Primitive editing disabled'}
                     elif job['kind'] == 'edit_target':
@@ -530,7 +531,6 @@ class InspectorBridge(object):
                     # Timestamp when the game-thread read actually occurred.
                     # Clients use this to discard delayed overlapping samples.
                     result['captured_at'] = time.time()
-                    status = 200
             except EditConflict:
                 status, result = 409, {'error': 'Variable or game generation changed'}
             except EditUnsupported:
