@@ -33,6 +33,8 @@ export default function EditValuePanel({
     : lockedFromSnapshot ?? (target?.locked === true);
   const isStale = targetLockIsNewer ? target?.lock_stale === true
     : selectedLockEntry?.stale ?? (target?.lock_stale === true);
+  const staleReason = targetLockIsNewer ? target?.lock_stale_reason
+    : selectedLockEntry?.stale_reason ?? target?.lock_stale_reason;
   const isTargetCurrent = Boolean(target && target.generation === generation);
 
   useEffect(() => () => controller.current?.abort(), []);
@@ -119,7 +121,11 @@ export default function EditValuePanel({
             lock_stale_reason: data.lock_stale_reason,
             lock_revision: data.locks?.revision ?? current.lock_revision } : current);
           throw new Error(data.lock_stale
-            ? 'The game changed this variable after it was locked. The lock remains active. Refresh the lock to the current value or unlock it.'
+            ? (data.lock_stale_reason === 'type_changed'
+              ? 'Gameplay changed the variable type after it was locked. The lock remains active; unlock it or inspect a supported value before refreshing.'
+              : data.lock_stale_reason === 'target_unavailable'
+                ? 'The locked path is no longer a supported visible primitive. The lock remains active; unlock it from this drawer.'
+                : 'Gameplay changed this variable after it was locked. The lock remains active. Refresh the lock to the current value or unlock it.')
             : 'This variable is locked against Inspector writes. Unlock it before editing.');
         }
         throw new Error(result.status === 422 ? 'The variable is no longer editable.' :
@@ -163,7 +169,9 @@ export default function EditValuePanel({
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(response.status === 409
-          ? 'Game state changed. Reopen the variable before changing its lock.'
+          ? (data.code === 'lock_missing'
+            ? 'The lock no longer exists. Reopen the variable to inspect its current state.'
+            : 'Game state changed. Reopen the variable before changing its lock.')
           : response.status === 422
             ? 'Only an existing supported Store primitive can be locked.'
             : response.status === 429
@@ -248,8 +256,12 @@ export default function EditValuePanel({
           prevent game scripts or Ren'Py from changing the variable during normal gameplay.
         </Text>
         {isStale && <Text type="warning" role="status">
-          Gameplay changed this value after the lock was created. The lock still blocks
-          Inspector writes. Refresh it to accept the current value as the new baseline, or unlock it.
+          {staleReason === 'type_changed'
+            ? 'Gameplay changed the variable type after the lock was created. The lock still blocks Inspector writes.'
+            : staleReason === 'target_unavailable'
+              ? 'This path is no longer a supported visible primitive. The lock still blocks Inspector writes; unlock it to release the path.'
+              : 'Gameplay changed this value after the lock was created. The lock still blocks Inspector writes.'}
+          {target.editable ? ' Refresh it to accept the current value as the new baseline, or unlock it.' : ''}
         </Text>}
       </>}
       {target && !isTargetCurrent && <Text type="warning" role="status">
