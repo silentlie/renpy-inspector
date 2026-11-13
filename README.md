@@ -58,9 +58,11 @@ init 1 python:
 Restart the game and press **F8**. The details drawer offers **Edit primitive**
 only while the server advertises the game-configured capability. Open it to
 capture the *current* exact value/type, enter the replacement literally, check
-the explicit confirmation box, and click **Apply edit**. There is no browser
-setting or HTTP request to enable editing, no automatic writes and no edit
-button for Persistent values.
+the explicit confirmation box, and click **Apply edit**. After a successful write, the **Edits** tab shows
+its exact before/after record. Undo and Redo each require a separate explicit
+confirmation and succeed only while the recorded current value still matches.
+There is no browser setting or HTTP request to enable editing, no automatic
+writes and no edit button for Persistent values.
 
 The server validates the pairing token, loopback Host/Origin, JSON size,
 visible typed path, exact primitive type, value length, expected generation
