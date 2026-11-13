@@ -22,7 +22,7 @@ To verify downloaded archives from a source checkout:
 ```sh
 python scripts/verify_release.py \
   dist/renpy-inspector-v0.7.12-renpy7.zip \
-  dist/renpy-inspector-v0.7.11-renpy8.zip
+  dist/renpy-inspector-v0.7.12-renpy8.zip
 ```
 
 Keep each `.zip.sha256` file alongside its corresponding ZIP. Different
@@ -39,8 +39,8 @@ native-screen modules into the release archive.
 
 1. Back up the **whole** game directory and existing save directory first.
    Choose a game you have permission to inspect or a disposable test project.
-2. Obtain `renpy-inspector-v0.7.11-renpy7.zip` or
-   `renpy-inspector-v0.7.11-renpy8.zip` from the PR preview. If downloaded
+2. Obtain `renpy-inspector-v0.7.12-renpy7.zip` or
+   `renpy-inspector-v0.7.12-renpy8.zip` from the PR preview. If downloaded
    from GitHub Actions, extract the **outer artifact ZIP** before selecting
    the one correct engine installer.
 3. Extract that **inner** archive into the installation root (the directory
