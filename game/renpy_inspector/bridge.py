@@ -422,6 +422,7 @@ class InspectorBridge(object):
                                              'root_pages': {}, 'game': {},
                                              'capabilities': {'primitive_edits': False},
                                              'edit_history': self.edit_history.snapshot(0),
+                                             'locks': self.variable_locks.snapshot(),
                                              'runtime': self.runtime_history.snapshot()})
 
     def configure_variable_editing(self, enabled=False):
