@@ -13,8 +13,11 @@ export default function RuntimePane({ snapshot }) {
   const game = snapshot?.game ?? {};
   const timeline = snapshot?.runtime ?? {};
   const events = useMemo(() => filteredRuntimeEvents(timeline, filter), [timeline, filter]);
-  const location = typeof game.filename === 'string' && Number.isSafeInteger(game.line)
-    ? `${game.filename}:${game.line}` : 'Not available';
+  // Existing bridge snapshots encode numeric context metadata as short text.
+  const line = Number(game.line);
+  const returnDepth = Number(game.return_depth);
+  const location = typeof game.filename === 'string' && Number.isSafeInteger(line) && line > 0
+    ? `${game.filename}:${line}` : 'Not available';
   const rollback = typeof game.rollback_active === 'boolean'
     ? game.rollback_active ? 'True at latest sample' : 'False at latest sample'
     : 'Not exposed by this engine';
@@ -25,7 +28,7 @@ export default function RuntimePane({ snapshot }) {
       <Text type="secondary">Read-only Ren'Py engine observations, not SugarCube turns or a complete interaction log.</Text>
       <div className="runtime-summary-grid">
         <div><Text type="secondary">Current sampled statement</Text><Text className="runtime-mono">{location}</Text></div>
-        <div><Text type="secondary">Return destinations</Text><Text>{Number.isSafeInteger(game.return_depth) ? `${game.return_depth} on stack` : 'Unavailable'}</Text></div>
+        <div><Text type="secondary">Return destinations</Text><Text>{game.return_depth != null && Number.isSafeInteger(returnDepth) && returnDepth >= 0 ? `${returnDepth} on stack` : 'Unavailable'}</Text></div>
         <div><Text type="secondary">Rollback indicator</Text><Text>{rollback}</Text></div>
         <div><Text type="secondary">Last snapshot</Text><Text>{sampledTime(snapshot?.captured_at)}</Text></div>
       </div>
