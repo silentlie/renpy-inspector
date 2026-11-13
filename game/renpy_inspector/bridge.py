@@ -506,7 +506,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history')
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
@@ -539,7 +539,7 @@ class InspectorBridge(object):
                     status, result = 409, {'error': 'Game state changed'}
                 else:
                     status = 200
-                    if job['kind'] in ('edit_target', 'edit') and not self.editing_enabled:
+                    if job['kind'] in ('edit_target', 'edit', 'edit_history') and not self.editing_enabled:
                         status, result = 403, {'error': 'Primitive editing disabled'}
                     elif job['kind'] == 'edit_target':
                         result = inspect_edit_target(self.inspector._providers, *job['args'])
@@ -551,12 +551,26 @@ class InspectorBridge(object):
                             raise EditConflict('Game state generation changed')
                         result = apply_primitive_edit(
                             self.inspector._providers, scope, path, expected, typename, text)
-                        # Invalidate stale reads and queued writes after successful
-                        # mutation. This is an inspector edit, NOT a rollback event.
+                        self.edit_history.record(
+                            scope, path, typename, result['before'], result['after'], time.time())
+                        # Invalidate stale reads and queued writes after successful mutation.
                         self.invalidate(reason='edit')
                         self.publish()
                         job['generation'] = self.generation
                         result['captured_at'] = time.time()
+                        result['edit_history'] = self.edit_history.snapshot(self.generation)
+                        status = 200
+                    elif job['kind'] == 'edit_history':
+                        action, expected_generation, entry_id = job['args']
+                        if expected_generation != self.generation:
+                            raise EditConflict('Game state generation changed')
+                        result = self.edit_history.apply(
+                            self.inspector._providers, action, entry_id)
+                        self.invalidate(reason=action)
+                        self.publish()
+                        job['generation'] = self.generation
+                        result['captured_at'] = time.time()
+                        result['edit_history'] = self.edit_history.snapshot(self.generation)
                         status = 200
                     elif job['kind'] == 'full_value':
                         result = build_full_value(self.inspector._providers, *job['args'])
@@ -578,7 +592,10 @@ class InspectorBridge(object):
                     # Clients use this to discard delayed overlapping samples.
                     result['captured_at'] = time.time()
             except EditConflict:
-                status, result = 409, {'error': 'Variable or game generation changed'}
+                status = 409
+                result = {'error': 'Variable, generation or edit history changed'}
+                if job['kind'] == 'edit_history':
+                    result['edit_history'] = self.edit_history.snapshot(self.generation)
             except EditUnsupported:
                 status, result = 422, {'error': 'Variable not editable'}
             except ValueError:
@@ -611,6 +628,8 @@ class InspectorBridge(object):
         """Invalidate caches; retain bounded, evidence-labelled callback history."""
         with self.lock:
             self.generation += 1
+            if reason not in ('edit', 'undo', 'redo'):
+                self.edit_history.reset(reason)
             if self.running:
                 self.runtime_history.restoration(reason, self.generation, time.time())
             # Queue diagnostics reflect the current game-state epoch.
