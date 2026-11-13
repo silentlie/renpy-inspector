@@ -179,7 +179,7 @@ test('variable locks protect inspector writes without freezing game state', asyn
     await secondEditor.getByRole('button', { name: 'Open primitive editor' }).click();
     await secondEditor.getByRole('button', { name: 'Lock variable' }).click();
     await page.keyboard.press('Escape');
-    await page.getByRole('tab', { name: /Edits \\(/ }).click();
+    await page.getByRole('tab', { name: /Edits/ }).click();
     const history = page.getByRole('region', { name: 'Inspector edit history' });
     await history.getByRole('checkbox', {
       name: 'I understand Undo/Redo writes to the running game',
