@@ -551,7 +551,7 @@ class InspectorBridge(object):
             if len(self.pending_pages) >= 8:
                 self.queue_rejected += 1
                 return None
-            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history', 'lock'): 
+            if kind not in ('page', 'value', 'full_value', 'search', 'reveal', 'scripts', 'source', 'source_search', 'edit_target', 'edit', 'edit_history', 'lock'):
                 return None
             job = {'kind': kind, 'args': arguments, 'generation': self.generation,
                    'event': threading.Event(), 'response': None,
