@@ -2,28 +2,39 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #30 — Undo/Redo & Edit History (v0.7.12 experimental)
+## Milestone: PR #31 — Variable Locks (v0.7.13 experimental)
 
-- Build on PR #29's trusted game-init opt-in. Keep editing and reversal disabled
-  by default; no browser endpoint can enable either capability.
-- Record only successful explicit Store primitive writes. Retain exact bounded
-  before/after text, type and typed path; never retain game-object references.
-- Keep at most 50 records / 64 KiB in bridge-session memory. Do not write edit
-  history into Ren'Py saves, browser storage or the inspector preferences file.
-- Provide separately confirmed Undo and Redo actions through the authenticated
-  loopback bridge. Resolve and mutate only on the Ren'Py interaction thread.
-- Revalidate current generation, target path, exact current scalar fingerprint
-  and unchanged built-in type for every reversal. Retire conflicting records
-  without overwriting a game-side change. A new edit after Undo discards redo.
-- Clear reversal stacks on load, rollback, editing disablement, bridge restart,
-  or any unclassified state-generation invalidation. Explicit edit/undo/redo
-  events are labelled as inspector invalidations, never Ren'Py rollback turns.
-- Test Python 2/3 compatibility, bounded retention, exact round trips, conflicts,
-  redo branching, auth, thread ownership, stale generations, browser confirmation
-  and real Ren'Py default-deny behaviour.
-- Graphical Ren'Py 7/8 E2E and closed-manifest v0.7.12 preview packaging gate.
-- **Deferred:** variable locks, durable history, arbitrary object writes, and
-  attempts to emulate Ren'Py rollback for inspector-side changes.
+- Build on PR #29's trusted game-init opt-in and PR #30's bounded edit history.
+  Locks remain unavailable when primitive editing is disabled.
+- Add session-only, exact typed-path locks for existing editable Store
+  primitives. Bound retention to 128 paths / 32 KiB; never retain game objects.
+- Add authenticated `PUT /api/v1/locks` lock/unlock actions. Validate the
+  current game generation and resolve lock targets on the Ren'Py interaction
+  thread. Lock metadata changes do not mutate variables or advance generation.
+- Enforce locks in both explicit `/api/v1/edit` and Undo/Redo paths. Reject
+  inspector writes with HTTP 423 and leave the edit history stack unchanged.
+- Locks are an inspector-only guard, not Python object locks or monkey-patches.
+  They never prevent game scripts, Ren'Py, save/load or rollback from changing
+  Store values. Existing exact-value compare-and-swap still detects such writes.
+- Clear locks on game load, rollback, any unclassified generation invalidation,
+  bridge restart and editing disablement. A new edit/undo/redo preserves locks.
+- Show lock state in the variable tree and provide contextual Lock/Unlock
+  controls in the primitive editor. Explain the game-script limitation.
+- Test Python 2/3, Unicode typed paths, bounded count/bytes, auth, queue/thread
+  ownership, lock/edit and lock/undo conflicts, lifecycle reset and real Ren'Py
+  default-deny behaviour. Include the new module in the closed installer manifest.
+- Graphical Ren'Py 7/8 E2E and closed-manifest v0.7.13 preview packaging gate.
+- **Deferred:** locks that intercept game-script assignments, object-wide locks,
+  Persistent locks, durable locks and lock ownership/lease semantics.
+
+## Previous milestone: PR #30 — Undo/Redo & Edit History (v0.7.12 experimental)
+
+- Retain at most 50 explicit Store primitive writes / 64 KiB in bridge memory.
+- Separate Edits workspace with separately confirmed Undo and Redo.
+- Revalidate generation, path, exact current scalar and built-in type before
+  every reversal. Conflicts retire the unsafe stack head without overwriting.
+- A new edit after Undo discards the redo branch. Load/rollback clears history.
+- Explicit edit, undo and redo remain inspector invalidations, not Ren'Py turns.
 
 ## Previous milestone: PR #29 — Variable Editing MVP (v0.7.11 experimental)
 
