@@ -42,7 +42,7 @@ from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
 from .edit_history import (PrimitiveEditHistory, MAX_HISTORY_REQUEST_BYTES,
                            validate_edit_history_request)
 from .variable_locks import (VariableLocks, MAX_VARIABLE_LOCK_REQUEST_BYTES,
-                             validate_variable_lock_request)
+                             VariableLockLimit, validate_variable_lock_request)
 
 LOOPBACK = '127.0.0.1'
 DEFAULT_UI_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
@@ -177,6 +177,41 @@ class _Handler(BaseHTTPRequestHandler):
         status, response = job['response']
         self._send(status, response, 'application/json; charset=utf-8', origin=origin)
 
+    def _write_variable_lock(self, origin):
+        """Queue an exact-path lock action; HTTP workers never inspect Store."""
+        bridge = self.server.bridge
+        if not self.headers.get('X-Inspector-Token') or self.headers.get('X-Inspector-Token') != bridge.token:
+            self._send(401, b'Unauthorized', origin=origin)
+            return
+        with bridge.lock:
+            if not bridge.editing_enabled:
+                self._send(403, b'Primitive editing is not enabled in game config', origin=origin)
+                return
+        try:
+            raw_size = self.headers.get('Content-Length', '')
+            if not raw_size.isdigit():
+                raise ValueError('missing request size')
+            size = int(raw_size)
+            if size < 1 or size > MAX_VARIABLE_LOCK_REQUEST_BYTES:
+                raise ValueError('variable lock request exceeds size limit')
+            if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
+                raise ValueError('variable locks require JSON')
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            arguments = validate_variable_lock_request(payload)
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+            self._send(400, b'Invalid variable lock request', origin=origin)
+            return
+        job = bridge.enqueue_tree_page(arguments, kind='lock')
+        if job is None:
+            self._send(429, b'Inspector queue is busy', origin=origin)
+            return
+        if not job['event'].wait(3.0):
+            bridge.cancel_tree_page(job)
+            self._send(503, b'Game interaction paused; inspect current lock state before retrying', origin=origin)
+            return
+        status, response = job['response']
+        self._send(status, response, 'application/json; charset=utf-8', origin=origin)
+
     def do_PUT(self):
         """Inspector preferences OR game-config-enabled primitive writes."""
         if not self._allowed_origin():
@@ -188,6 +223,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if urlsplit(self.path).path == '/api/v1/edit-history':
             self._write_edit_history(origin)
+            return
+        if urlsplit(self.path).path == '/api/v1/locks':
+            self._write_variable_lock(origin)
             return
         if urlsplit(self.path).path != '/api/v1/favourites':
             self._send(405, origin=origin)
@@ -583,6 +621,25 @@ class InspectorBridge(object):
                         result['captured_at'] = time.time()
                         result['edit_history'] = self.edit_history.snapshot(self.generation)
                         status = 200
+                    elif job['kind'] == 'lock':
+                        action, scope, path, expected_generation = job['args']
+                        if expected_generation != self.generation:
+                            raise EditConflict('Game state generation changed')
+                        if action == 'lock':
+                            target = inspect_edit_target(self.inspector._providers, scope, path)
+                            if not target.get('editable'):
+                                raise EditUnsupported('Only existing Store primitives can be locked')
+                            changed = self.variable_locks.lock(scope, path, time.time())
+                        else:
+                            changed = self.variable_locks.unlock(scope, path)
+                        self.publish()
+                        result = {
+                            'protocol': 1, 'action': action,
+                            'locked': self.variable_locks.is_locked(scope, path),
+                            'changed': changed,
+                            'locks': self.variable_locks.snapshot(),
+                        }
+                        status = 200
                     elif job['kind'] == 'full_value':
                         result = build_full_value(self.inspector._providers, *job['args'])
                     elif job['kind'] == 'value':
@@ -602,16 +659,24 @@ class InspectorBridge(object):
                     # Timestamp when the game-thread read actually occurred.
                     # Clients use this to discard delayed overlapping samples.
                     result['captured_at'] = time.time()
+            except EditLocked:
+                status = 423
+                result = {'error': 'Variable is locked against inspector writes',
+                          'locks': self.variable_locks.snapshot()}
+                if job['kind'] == 'edit_history':
+                    result['edit_history'] = self.edit_history.snapshot(self.generation)
             except EditConflict:
                 status = 409
                 result = {'error': 'Variable, generation or edit history changed'}
                 if job['kind'] == 'edit_history':
                     result['edit_history'] = self.edit_history.snapshot(self.generation)
+            except VariableLockLimit:
+                status, result = 429, {'error': 'Variable lock capacity reached'}
             except EditUnsupported:
                 status, result = 422, {'error': 'Variable not editable'}
             except ValueError:
-                status, result = (400 if job['kind'] == 'edit' else 404), {
-                    'error': 'Invalid edit' if job['kind'] == 'edit' else 'Tree path unavailable'}
+                status, result = (400 if job['kind'] in ('edit', 'lock') else 404), {
+                    'error': 'Invalid edit or lock request' if job['kind'] in ('edit', 'lock') else 'Tree path unavailable'}
             except (KeyError, TypeError):
                 status, result = 404, {'error': 'Tree path unavailable'}
             except Exception:
@@ -641,6 +706,7 @@ class InspectorBridge(object):
             self.generation += 1
             if reason not in ('edit', 'undo', 'redo'):
                 self.edit_history.reset(reason)
+                self.variable_locks.reset(reason)
             if self.running:
                 self.runtime_history.restoration(reason, self.generation, time.time())
             # Queue diagnostics reflect the current game-state epoch.
