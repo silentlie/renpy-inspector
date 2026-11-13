@@ -5,7 +5,8 @@ tick loop against synthetic providers. It is NOT the Ren'Py engine: F8,
 overlay timing and save/rollback engine callbacks require separate smoke tests.
 
 Commands come from this child process's stdin, NEVER through inspector HTTP.
-The public bridge remains read-only for game data.
+The bridge is read-only by default; a test-only process flag explicitly opts
+in to the separate primitive-edit E2E case.
 """
 from __future__ import print_function
 
