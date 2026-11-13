@@ -172,6 +172,7 @@ export default function EditValuePanel({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setConfirmed(false);
         if (response.status === 409 || response.status === 503) {
           setTarget((current) => current ? { ...current, generation: -1 } : current);
         }
