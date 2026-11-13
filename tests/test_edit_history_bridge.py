@@ -152,7 +152,7 @@ class EditHistoryHTTPTests(unittest.TestCase):
         self.assertEqual(self.request('PUT', '/api/v1/edit-history', {
             'action': 'undo', 'generation': 0, 'entry_id': 1}, token='wrong')[0], 401)
         self.assertEqual(self.request('POST', '/api/v1/edit-history', {
-            'action': 'undo', 'generation': 0, 'entry_id': 1)[0], 405)
+            'action': 'undo', 'generation': 0, 'entry_id': 1})[0], 405)
         self.assertEqual(self.request('PUT', '/api/v1/edit-history', {
             'action': 'execute', 'generation': 0, 'entry_id': 1})[0], 400)
         self.bridge.configure_variable_editing(False)
