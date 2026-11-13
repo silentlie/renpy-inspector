@@ -67,12 +67,15 @@ native-screen modules into the release archive.
 7. On one actual Ren'Py 7 and one Ren'Py 8 game, verify live root and nested
    values, paging, deep favourite paths, global popup search/reveal,
    current script navigation, default-deny editing, and the opt-in Edits tab's
-confirmed undo/redo, same-generation conflict handling, redo-branch discard,
-and load/rollback history reset.
-8. Save a game, change variables, load, then rollback two steps. Values and
-   Compare should discard old-generation state; favourites must survive as
-   paths and reconnect or show missing status. Test an overlay/menu where the
-   inspector may not receive interaction ticks.
+   confirmed undo/redo, same-generation conflict handling and redo-branch discard.
+   With editing opted in, lock a supported Store primitive, confirm the tree
+   padlock appears and Inspector Edit/Undo return HTTP 423 without changing the
+   value. Unlock it, confirm writes work again, and verify game-script assignment
+   still works while a variable is locked.
+8. Save a game, change variables, load, then rollback two steps. Values,
+   Compare, edit reversal history and locks should discard old-generation state;
+   favourites must survive as paths and reconnect or show missing status. Test
+   an overlay/menu where the inspector may not receive interaction ticks.
 9. Try a game distributing only `.rpyc`: label navigation may work, while
    missing `.rpy` source excerpts should produce an unavailable state.
 10. Exit the game and confirm the localhost service ends. Compare an ordinary
