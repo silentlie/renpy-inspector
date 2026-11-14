@@ -10,6 +10,7 @@ from __future__ import unicode_literals
 from itertools import islice
 from .compat import integer_types, string_types, iter_keys, fold_text, to_text, binary_type
 from types import ModuleType, FunctionType, BuiltinFunctionType, MethodType
+from .safe_slots import MAX_SLOT_FIELDS, read_safe_slot, safe_slot_values
 
 
 MISSING = object()
@@ -74,7 +75,9 @@ def _mapping(value):
 def _is_expandable(value):
     if isinstance(value, (dict, list, tuple)):
         return True
-    return _mapping(value) is not None
+    if _mapping(value) is not None:
+        return True
+    return bool(safe_slot_values(value)[0])
 
 
 def read_child(parent, segment):
@@ -82,9 +85,13 @@ def read_child(parent, segment):
     kind, key = segment
     if kind == "attribute":
         fields = _mapping(parent)
-        if fields is None:
-            return MISSING
-        return dict.get(fields, key, MISSING)
+        if fields is not None:
+            current = dict.get(fields, key, MISSING)
+            if current is not MISSING:
+                return current
+        # Only a native member_descriptor declared by a plain Python class
+        # __slots__ can be read, never a computed property or game getter.
+        return read_safe_slot(parent, key)
     if kind == "member" and isinstance(parent, (set, frozenset)):
         if not _safe_set_member(key):
             return MISSING
@@ -145,25 +152,36 @@ def child_descriptors(value, limit, is_store_root=False):
         return pairs, size > len(pairs)
 
     fields = _mapping(value)
-    if fields is None:
-        return [], False
+    # Slot values are read only via exact native member descriptors; discovery
+    # examines static class dictionaries, never arbitrary Python getters.
+    slots, slot_truncated = safe_slot_values(value, min(limit, MAX_SLOT_FIELDS))
+    if fields is None and not slots:
+        return [], slot_truncated
     # Key names from __dict__ are Python attributes; filter internal store names.
     names = []
     count = 0
-    for key in islice(iter_keys(fields), limit * 4):
-        if not isinstance(key, string_types) or key.startswith('_'):
-            continue
-        if is_store_root:
-            member = dict.__getitem__(fields, key)
-            if isinstance(member, _NON_EXPANDABLE):
+    if fields is not None:
+        for key in islice(iter_keys(fields), limit * 4):
+            if not isinstance(key, string_types) or key.startswith('_'):
                 continue
+            if is_store_root:
+                member = dict.__getitem__(fields, key)
+                if isinstance(member, _NON_EXPANDABLE):
+                    continue
+            count += 1
+            if len(names) < limit:
+                names.append((('attribute', key), clipped(key, 60)))
+    for name, unused_value in slots:
+        if fields is not None and dict.__contains__(fields, name):
+            continue
         count += 1
         if len(names) < limit:
-            names.append((('attribute', key), clipped(key, 60)))
+            names.append((('attribute', name), clipped(name, 60)))
     # Sorting only the bounded prefix is deliberate.  We do not sort an
     # arbitrarily large store on every poll.
     names.sort(key=lambda item: fold_text(item[0][1]))
-    return names, count > len(names) or dict.__len__(fields) > limit * 4
+    field_truncated = fields is not None and dict.__len__(fields) > limit * 4
+    return names, count > len(names) or field_truncated or slot_truncated
 
 
 def snapshot(value, is_cycle=False):
@@ -204,8 +222,15 @@ def snapshot(value, is_cycle=False):
         return ('value', name, '<module>', False, (name, id(value)))
 
     fields = _mapping(value)
-    if fields is not None:
-        size = dict.__len__(fields)
-        return ('value', name, '{} attribute{}'.format(size, '' if size == 1 else 's'), True,
-                (name, id(value), size))
+    slots, slots_limited = safe_slot_values(value)
+    if fields is not None or slots:
+        size = dict.__len__(fields) if fields is not None else 0
+        size += sum(1 for field, unused in slots
+                    if fields is None or not dict.__contains__(fields, field))
+        prefix = '{}+'.format(size) if slots_limited else str(size)
+        preview = '{} attribute{}{}'.format(
+            prefix, '' if size == 1 and not slots_limited else 's',
+            ' (bounded slots)' if slots_limited else '')
+        return ('value', name, preview, fields is not None or bool(slots),
+                (name, id(value), size, slots_limited))
     return ('value', name, '<{}>'.format(name), False, (name, id(value)))
