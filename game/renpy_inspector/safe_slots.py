@@ -106,7 +106,9 @@ def safe_instance_dict(value):
         if fields is None or '__dict__' not in fields:
             continue
         descriptor = fields['__dict__']
-        if (type(descriptor) is not GetSetDescriptorType or
+        # CPython uses getset_descriptor for regular instance dictionaries,
+        # and member_descriptor for built-ins such as SimpleNamespace.
+        if (type(descriptor) not in (GetSetDescriptorType, MemberDescriptorType) or
                 descriptor.__name__ != '__dict__' or
                 descriptor.__objclass__ is not base):
             return None
