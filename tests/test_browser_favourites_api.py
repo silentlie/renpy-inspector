@@ -114,6 +114,36 @@ class FavoriteApiTests(unittest.TestCase):
             self.assertEqual(status, 400)
         self.assertEqual(self.request('/api/v1/favourites')[1]['revision'], 0)
 
+    def test_unicode_typed_paths_are_canonical_and_survive_reload(self):
+        path = ['store', [['attribute', 'café']]]
+        raw = {'scope': 'store', 'key': json.dumps(
+            path, ensure_ascii=False, separators=(',', ':'))}
+        canonical = {'scope': 'store', 'key': json.dumps(
+            path, ensure_ascii=True, separators=(',', ':'))}
+        status, saved = self.request('/api/v1/favourites', 'PUT', {
+            'version': 1, 'revision': 0, 'favourites': [raw]})
+        self.assertEqual(status, 200)
+        self.assertEqual(saved['favourites'], [canonical])
+        self.assertEqual(self.request('/api/v1/favourites')[1]['favourites'],
+                         [canonical])
+        self.bridge.stop()
+        self.bridge.start()
+        self.base = 'http://127.0.0.1:{}'.format(self.bridge.server.server_port)
+        self.assertEqual(self.request('/api/v1/favourites')[1]['favourites'],
+                         [canonical])
+
+    def test_ascii_expansion_cannot_persist_unreadable_long_key(self):
+        raw = {'scope': 'store', 'key': json.dumps(
+            ['store', [['attribute', 'é' * 400]]],
+            ensure_ascii=False, separators=(',', ':'))}
+        self.assertLess(len(raw['key']), 2048)
+        status, unused = self.request('/api/v1/favourites', 'PUT', {
+            'version': 1, 'revision': 0, 'favourites': [raw]})
+        self.assertEqual(status, 400)
+        fresh = self.request('/api/v1/favourites')[1]
+        self.assertEqual(fresh['revision'], 0)
+        self.assertFalse(fresh['initialized'])
+
     def test_simultaneous_writes_have_single_cas_winner(self):
         results = []
         barrier = threading.Barrier(2)
