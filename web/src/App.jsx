@@ -25,6 +25,7 @@ import RuntimePane from './RuntimePane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
 import EditValuePanel from './EditValuePanel.jsx';
 import EditHistoryPane from './EditHistoryPane.jsx';
+import LockedVariablesPane from './LockedVariablesPane.jsx';
 import { parseExactPath } from './exact-path.js';
 import { sourceTargetForContext } from './scripts.js';
 import { valuePresentation } from './value-format.js';
@@ -358,7 +359,7 @@ export default function App() {
   const [section, setSection] = useState('variables');
   const [scope, setScope] = useState('store');
   useEffect(() => {
-    if (scope === 'edits' && snapshot?.capabilities?.primitive_edits !== true) {
+    if ((scope === 'edits' || scope === 'locked') && snapshot?.capabilities?.primitive_edits !== true) {
       setScope('store');
     }
   }, [scope, snapshot?.capabilities?.primitive_edits]);
@@ -654,7 +655,7 @@ export default function App() {
   // change the current watch plan, not the shared scheduler's lifetime.
   const watchJobs = useMemo(() => combineScopedWatches(
     collectWatchedPages(treePages, expanded,
-      scope === 'compare' ? lastTreeScope : scope, section, favourites),
+      (scope === 'compare' || scope === 'edits' || scope === 'locked') ? lastTreeScope : scope, section, favourites),
     favourites,
   ), [treePages, expanded, scope, lastTreeScope, section, favourites]);
   watchJobsRef.current = watchJobs;
@@ -792,6 +793,12 @@ export default function App() {
   }, [bridge, token, revealBusy]);
 
   const selectNode = useCallback((chosenScope, key) => setSelected({ scope: chosenScope, key }), []);
+  const inspectLocked = useCallback((chosenScope, key) => {
+    const decoded = decodeTreeKey(key);
+    if (!decoded || decoded.scope !== chosenScope) return;
+    setSelected({ scope: chosenScope, key });
+    requestFavouriteValue({ scope: chosenScope, key });
+  }, [requestFavouriteValue]);
   const pinVariable = useCallback((chosenScope, key) => {
     if (!SCOPES.some((item) => item.key === chosenScope)) return;
     setFavourites((before) => {
@@ -964,18 +971,25 @@ export default function App() {
               { key: 'favourites', label: `Favourites (${favourites.length})` },
               { key: 'compare', label: `Compare (${changes.length})` },
               ...(snapshot?.capabilities?.primitive_edits === true
-                ? [{ key: 'edits', label: `Edits (${snapshot?.edit_history?.entries?.length ?? 0})` }]
+                ? [
+                  { key: 'locked', label: `Locked (${snapshot?.locks?.entries?.length ?? 0})` },
+                  { key: 'edits', label: `Edits (${snapshot?.edit_history?.entries?.length ?? 0})` },
+                ]
                 : [])]} />
           {scope === 'compare'
             ? <ComparePane changes={changes} favourites={favourites}
                 focusedKey={comparisonFocus} onResetFocus={() => setComparisonFocus(null)}
                 onClear={clearHistory} onInspect={inspectChange}
                 onReveal={revealResult} onOpenSource={openSourceContext} />
-            : scope === 'edits' && snapshot?.capabilities?.primitive_edits === true
-              ? <EditHistoryPane value={snapshot?.edit_history}
-                  generation={treePages?.generation} enabled={true}
-                  bridge={bridge} token={token} />
-              : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
+            : scope === 'locked' && snapshot?.capabilities?.primitive_edits === true
+              ? <LockedVariablesPane locks={snapshot?.locks} generation={treePages?.generation}
+                  bridge={bridge} token={token} onLocksChanged={syncLocks}
+                  onInspect={inspectLocked} />
+              : scope === 'edits' && snapshot?.capabilities?.primitive_edits === true
+                ? <EditHistoryPane value={snapshot?.edit_history}
+                    generation={treePages?.generation} enabled={true}
+                    bridge={bridge} token={token} />
+                : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
                 lockedKeys={lockedKeys} staleLockKeys={staleLockKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
@@ -994,7 +1008,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.14 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.15 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
