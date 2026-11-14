@@ -12,6 +12,7 @@ const MAX_EDIT_TEXT = 1024;
  */
 export default function EditValuePanel({
   selection, generation, bridge, token, enabled, locks, onApplied, onLocksChanged,
+  compact = false, onCancel,
 }) {
   const [opened, setOpened] = useState(false);
   const [target, setTarget] = useState(null);
@@ -38,8 +39,6 @@ export default function EditValuePanel({
   const isTargetCurrent = Boolean(target && target.generation === generation);
 
   useEffect(() => () => controller.current?.abort(), []);
-  if (!enabled || selection?.scope !== 'store') return null;
-
   const decoded = decodeTreeKey(selection?.key);
   const valid = decoded?.scope === 'store' && decoded.path?.length > 0 &&
     Number.isSafeInteger(generation) && token;
@@ -84,6 +83,13 @@ export default function EditValuePanel({
       if (controller.current === request) controller.current = null;
     }
   };
+
+  // Only a user-initiated, mounted inline popover reads the exact target.
+  // Deliberately do NOT depend on game generation: if it changes while the
+  // user is typing, preserve the draft and disable Apply until manual reload.
+  useEffect(() => {
+    if (compact && enabled && valid) read();
+  }, [compact, enabled, selection?.key, selection?.scope, bridge, token]);
 
   const apply = async () => {
     if (!valid || !target?.editable || isLocked || !isTargetCurrent ||
@@ -220,6 +226,54 @@ export default function EditValuePanel({
       if (controller.current === request) controller.current = null;
     }
   };
+
+  if (!enabled || selection?.scope !== 'store') return null;
+
+  if (compact) return <section className="inline-primitive-editor"
+    aria-label="Inline primitive editing" role="region"
+    onClick={(event) => event.stopPropagation()}
+    onKeyDown={(event) => event.stopPropagation()}>
+    <div className="inline-edit-heading">
+      <Text strong>Inline primitive edit</Text>
+      <Button size="small" onClick={onCancel} disabled={busy}
+        aria-label="Cancel inline edit">Cancel</Button>
+    </div>
+    <Text type="secondary" className="inline-edit-note">
+      Store only. This writes to the running game; saves and rollback may be affected.
+      A fresh exact-value fingerprint, type and game generation are required.
+    </Text>
+    {busy && <Text type="secondary" role="status">Checking game-thread value…</Text>}
+    {target && !target.editable && <Text type="warning" role="status">
+      {target.reason || 'This path is not eligible for editing.'}
+    </Text>}
+    {target?.editable && <>
+      <Text type="secondary">Current {target.type} value:</Text>
+      <code className="inline-edit-current" aria-label="Current exact game value">{target.text}</code>
+      {isLocked && <Text type="warning" role="status">
+        Locked against Inspector writes. Unlock the variable in its details drawer.
+      </Text>}
+      {!isTargetCurrent && <Text type="warning" role="status">
+        Game state generation changed. Reload the exact value before editing.
+      </Text>}
+      <Input.TextArea aria-label="Inline new literal value" value={value}
+        disabled={busy || isLocked || !isTargetCurrent}
+        maxLength={MAX_EDIT_TEXT} autoSize={{ minRows: 1, maxRows: 5 }}
+        onChange={(event) => { setValue(event.target.value); setConfirmed(false); }} />
+      <Checkbox checked={confirmed} disabled={busy || isLocked || !isTargetCurrent}
+        onChange={(event) => setConfirmed(event.target.checked)}>
+        I understand this writes to the running game state
+      </Checkbox>
+      <Button type="primary" danger size="small" loading={busy}
+        aria-label="Apply inline primitive edit" onClick={apply}
+        disabled={!confirmed || busy || isLocked || !isTargetCurrent ||
+          value === target.text || value.length > MAX_EDIT_TEXT}>
+        Apply edit
+      </Button>
+    </>}
+    {(target || error) && <Button size="small" type="link"
+      disabled={busy} onClick={read} aria-label="Reload inline value">Reload current value</Button>}
+    {error && <Text type="danger" role="alert">{error}</Text>}
+  </section>;
 
   return <section className="detail-edit-panel" aria-label="Primitive variable editing">
     <Space wrap>

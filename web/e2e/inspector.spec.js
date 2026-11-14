@@ -1003,3 +1003,115 @@ test('captured Python value tokens render in virtual rows, details and Compare',
   const captured = await page.locator('.compare-sample').allTextContents();
   expect(captured).toContain('43');
 });
+
+
+test('inline edit action is absent in read-only mode and for Persistent values', async ({ page, game }) => {
+  await page.goto(game.url);
+  await expect(page.getByRole('button', { name: /Edit .* inline/ })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Persistent', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Edit .* inline/ })).toHaveCount(0);
+});
+
+test('opted-in inline edit reads exact current value and requires separate confirmation', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const row = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^score$/ }),
+    });
+    await row.getByRole('button', { name: 'Edit score inline' }).click();
+    const inline = page.getByRole('region', { name: 'Inline primitive editing' });
+    const input = inline.getByRole('textbox', { name: 'Inline new literal value' });
+    await expect(input).toHaveValue('2');
+    await expect(inline.getByLabel('Current exact game value')).toHaveText('2');
+    const apply = inline.getByRole('button', { name: 'Apply inline primitive edit' });
+    await expect(apply).toBeDisabled();
+    await input.fill('33');
+    await expect(apply).toBeDisabled();
+    await inline.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+    await expect(apply).toBeEnabled();
+    await apply.click();
+    await expect(inline).toHaveCount(0);
+    await expect(row.locator('.variable-preview')).toHaveText('33', { timeout: 12000 });
+    const snapshot = await (await page.request.get(game.origin + '/api/v1/snapshot', {
+      headers: { 'X-Inspector-Token': game.token },
+    })).json();
+    expect(snapshot.scopes.store.find((item) => item.name === 'score')?.preview).toBe('33');
+
+    await page.getByRole('tab', { name: /Edits \(/ }).click();
+    await expect(page.getByRole('region', { name: 'Inspector edit history' }))
+      .toContainText('33');
+    await page.getByRole('tab', { name: 'Persistent', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Edit .* inline/ })).toHaveCount(0);
+  } finally { await game.stop(); }
+});
+
+test('switching Store scope retires the inline editor instead of silently reopening it', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const button = page.getByRole('button', { name: 'Edit score inline' });
+    await button.click();
+    const inline = page.getByRole('region', { name: 'Inline primitive editing' });
+    const draft = inline.getByRole('textbox', { name: 'Inline new literal value' });
+    await expect(draft).toHaveValue('2');
+    await draft.fill('777');
+    await page.getByRole('tab', { name: 'Persistent', exact: true }).click();
+    await expect(inline).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Store', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit score inline' }))
+      .toHaveAttribute('aria-expanded', 'false');
+    await expect(inline).toHaveCount(0);
+    await page.getByRole('button', { name: 'Edit score inline' }).click();
+    await expect(draft).toHaveValue('2');
+  } finally { await game.stop(); }
+});
+
+test('inline conflicts keep drafts but require re-confirmation and exact-value rebasing', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const row = page.locator('.variable-row').filter({
+      has: page.locator('.variable-key', { hasText: /^score$/ }),
+    });
+    await row.getByRole('button', { name: 'Edit score inline' }).click();
+    const inline = page.getByRole('region', { name: 'Inline primitive editing' });
+    const input = inline.getByRole('textbox', { name: 'Inline new literal value' });
+    const apply = inline.getByRole('button', { name: 'Apply inline primitive edit' });
+    await expect(input).toHaveValue('2');
+    await input.fill('55');
+    await inline.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+
+    await game.command('set_score', { value: 19 });
+    await expect(row.locator('.variable-preview')).toHaveText('19', { timeout: 12000 });
+    await apply.click();
+    await expect(inline.getByRole('alert')).toContainText('game changed this variable');
+    await expect(input).toHaveValue('55');
+    await expect(inline.getByLabel('Current exact game value')).toHaveText('19');
+    await expect(apply).toBeDisabled();
+    await inline.getByRole('checkbox', {
+      name: 'I understand this writes to the running game state',
+    }).check();
+    await apply.click();
+    await expect(row.locator('.variable-preview')).toHaveText('55', { timeout: 12000 });
+  } finally { await game.stop(); }
+});
+
+test('inline editor is unavailable when the Store variable is inspector-locked', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    await page.getByRole('button', { name: 'Inspect score' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Variable details' });
+    const editor = drawer.getByRole('region', { name: 'Primitive variable editing' });
+    await editor.getByRole('button', { name: 'Open primitive editor' }).click();
+    await editor.getByRole('button', { name: 'Lock variable' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Edit score inline' })).toHaveCount(0);
+    await expect(page.locator('.variable-lock-indicator')).toBeVisible();
+  } finally { await game.stop(); }
+});

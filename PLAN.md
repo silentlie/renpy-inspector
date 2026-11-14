@@ -2,7 +2,29 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #36 — Python Value Syntax Highlighting (v0.7.18 experimental)
+## Milestone: PR #37 — Optional Inline Primitive Editing UX (v0.7.19 experimental)
+
+- Match SugarCube's quick in-tree edit affordance without copying its
+  unrestricted JavaScript mutation model: expose a small pencil action
+  only for unlocked, primitive-typed Store rows when the trusted game
+  configuration advertises `primitive_edits: true`. No Persistent writes.
+- Open an anchored, compact popover only on deliberate click. Reuse the
+  existing EditValuePanel exact-target GET, fingerprint/type/generation
+  validation, confirmed edit PUT, lock handling, bounded literal input,
+  conflict detection and undo/redo recording. No new bridge operation.
+- Preserve the user's draft on a same-generation value conflict and reset
+  confirmation. On generation invalidation require manual fresh read.
+  Reject locked, missing, unsupported, stale and read-only targets.
+- Keep details-drawer editing available for larger values, full value
+  inspection and lock management. Avoid expanding each virtual row or
+  adding global controls; only one row editor is open at once.
+- Test the disabled/default path, Persistent exclusion, explicit user
+  confirmation, successful write plus history, stale-value CAS conflict,
+  preserved draft and re-confirmation, and lock-based suppression.
+- Run frontend unit/build, browser/bridge integration, dual Ren'Py 7/8
+  graphical E2E, Python 2/3 compatibility, SDK lint and preview packaging.
+
+## Previous milestone: PR #36 — Python Value Syntax Highlighting (v0.7.18 experimental)
 
 - Borrow SugarCube's token-level preview legibility, but use a small,
   bounded, browser-only Python repr/literal lexer rather than JavaScript Prism.

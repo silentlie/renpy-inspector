@@ -8,6 +8,7 @@ const valueSyntax = readFileSync(new URL('./python-value-syntax.js', import.meta
 const valueSyntaxComponent = readFileSync(new URL('./PythonValueSyntax.jsx', import.meta.url), 'utf8');
 const pinnedHistory = readFileSync(new URL('./FavouriteHistoryPane.jsx', import.meta.url), 'utf8');
 const preferenceHook = readFileSync(new URL('./useFavouritePreferences.js', import.meta.url), 'utf8');
+const primitiveEditor = readFileSync(new URL('./EditValuePanel.jsx', import.meta.url), 'utf8');
 
 test('SugarCube-style top-level and nested variable scope navigation', () => {
   for (const key of ["key: 'overview'", "key: 'variables'", "key: 'scripts'", "key: 'store'", "key: 'persistent'", "key: 'favourites'"]) {
@@ -184,4 +185,19 @@ test('Python token highlighting is client-only, bounded and does not change UI g
   assert.doesNotMatch(valueSyntax, /eval\(|new Function|fetch\(|setInterval\(/);
   assert.match(css, /\.value-token-string/);
   assert.match(css, /\.value-token-number/);
+});
+
+test('PR #37 compact editor reuses safe primitive controls without background writes', () => {
+  for (const fragment of [
+    'EditOutlined', 'Edit ${node.name} inline',
+    'editingEnabled={snapshot?.capabilities?.primitive_edits === true}',
+    "originScope === 'store'", '!locked', '<EditValuePanel compact',
+  ]) assert.ok(jsx.includes(fragment), 'Missing row safety gate: ' + fragment);
+  for (const fragment of [
+    '/api/v1/edit-target', '/api/v1/edit', 'expected: target.expected',
+    'target.generation', '!confirmed', 'isLocked', '!isTargetCurrent',
+    'onCancel', 'compact && enabled && valid',
+  ]) assert.ok(primitiveEditor.includes(fragment), 'Missing edit control: ' + fragment);
+  assert.ok(css.includes('.inline-primitive-editor'));
+  assert.doesNotMatch(jsx, /new WebSocket|new EventSource/);
 });
