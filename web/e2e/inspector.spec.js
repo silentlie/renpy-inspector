@@ -1126,16 +1126,16 @@ test('namedtuple shows safe field labels in virtual tree and independent favouri
   await tupleRow.locator('.variable-label-expandable').click();
 
   const health = page.locator('.variable-row').filter({
-    has: page.locator('.variable-key', { hasText: /^\\[0\\] health$/ }),
+    has: page.locator('.variable-key', { hasText: '[0] health' }),
   });
   await expect(health.locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
   const mana = page.locator('.variable-row').filter({
-    has: page.locator('.variable-key', { hasText: /^\\[1\\] mana$/ }),
+    has: page.locator('.variable-key', { hasText: '[1] mana' }),
   });
   await expect(mana.locator('.variable-preview')).toHaveText('7');
   await health.getByRole('button', { name: 'Add [0] health to favourites' }).click();
   await page.getByRole('tab', { name: 'Favourites (1)' }).click();
   await expect(page.locator('.variable-row').filter({
-    has: page.locator('.variable-key', { hasText: /^\\[0\\] health$/ }),
+    has: page.locator('.variable-key', { hasText: '[0] health' }),
   }).locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
 });
