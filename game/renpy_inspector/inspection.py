@@ -62,7 +62,7 @@ def _has_builtin_base(value, classes):
 def _instance_dict(value):
     """Direct instance storage only. Never follow a property or __getattr__."""
     try:
-        data = object.__getattribute__(value, "__dict__")
+        data = object.__getattribute__(value, str("__dict__"))
         return data if _has_builtin_base(data, dict) else None
     except (AttributeError, TypeError):
         return None
