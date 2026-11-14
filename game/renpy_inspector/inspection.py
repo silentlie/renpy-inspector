@@ -10,7 +10,7 @@ from __future__ import unicode_literals
 from itertools import islice
 from .compat import integer_types, string_types, iter_keys, fold_text, to_text, binary_type
 from types import ModuleType, FunctionType, BuiltinFunctionType, MethodType
-from .safe_slots import MAX_SLOT_FIELDS, read_safe_slot, safe_slot_values
+from .safe_slots import MAX_SLOT_FIELDS, read_safe_slot, safe_slot_values, safe_instance_dict
 
 
 MISSING = object()
@@ -60,18 +60,18 @@ def _has_builtin_base(value, classes):
 
 
 def _instance_dict(value):
-    """Direct instance storage only. Never follow a property or __getattr__."""
-    try:
-        data = object.__getattribute__(value, str("__dict__"))
-        return data if _has_builtin_base(data, dict) else None
-    except (AttributeError, TypeError):
-        return None
+    """Direct instance storage, bypassing custom __dict__ properties."""
+    return safe_instance_dict(value)
 
 
 def _mapping(value):
     if _has_builtin_base(value, ModuleType):
-        # A normal module's namespace, including Ren'Py's default store.
-        return vars(value)
+        # Call the native module dictionary descriptor directly. vars(module)
+        # can dispatch an overridden __getattribute__ on a module subclass.
+        try:
+            return ModuleType.__dict__['__dict__'].__get__(value, ModuleType)
+        except (AttributeError, TypeError, KeyError):
+            return None
     if _has_builtin_base(value, _NON_EXPANDABLE):
         return None
     return _instance_dict(value)
