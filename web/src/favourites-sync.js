@@ -23,13 +23,15 @@ export function applyFavouriteAction(favourites, action) {
     return [...current, entry];
   }
   if (action?.kind === 'unpin') {
-    return current.filter((x) =>
-      !(x.scope === action.entry?.scope && x.key === action.entry?.key));
+    const entry = safeFavourites([action.entry])[0];
+    if (!entry) return current;
+    return current.filter((x) => !(x.scope === entry.scope && x.key === entry.key));
   }
   if (action?.kind === 'clear') {
     // Delete only the paths present when Clear All was confirmed. A new pin
     // added concurrently in another tab must not silently disappear.
-    const keys = new Set((action.entries ?? []).map((x) => JSON.stringify([x.scope, x.key])));
+    const keys = new Set(safeFavourites(action.entries ?? [])
+      .map((x) => JSON.stringify([x.scope, x.key])));
     return current.filter((x) => !keys.has(JSON.stringify([x.scope, x.key])));
   }
   throw new Error('Invalid favourites operation');
