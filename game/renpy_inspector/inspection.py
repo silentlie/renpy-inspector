@@ -66,12 +66,11 @@ def _instance_dict(value):
 
 def _mapping(value):
     if _has_builtin_base(value, ModuleType):
-        # Call the native module dictionary descriptor directly. vars(module)
-        # can dispatch an overridden __getattribute__ on a module subclass.
-        try:
-            return ModuleType.__dict__['__dict__'].__get__(value, ModuleType)
-        except (AttributeError, TypeError, KeyError):
-            return None
+        # Preserve Ren'Py's live Store module namespace. Its engine-owned
+        # module wrapper may expose the current rollback-aware dictionary via
+        # __dict__, unlike a plain module's native storage. This is the
+        # existing trusted provider path, not a general object getter.
+        return vars(value)
     if _has_builtin_base(value, _NON_EXPANDABLE):
         return None
     return _instance_dict(value)
