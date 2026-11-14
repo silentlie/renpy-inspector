@@ -46,7 +46,7 @@ class NamedtuplePython2Tests(unittest.TestCase):
 
     def test_paging_and_pinning_preserve_field_label_and_index_path(self):
         Hero = namedtuple('Hero', 'hp mp')
-        store = ModuleType('store')
+        store = ModuleType(str('store'))
         store.hero = Hero(42, 4)
         providers = {'store': lambda: store, 'persistent': lambda: {}}
         parent = (('attribute', 'hero'),)
