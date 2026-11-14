@@ -116,7 +116,10 @@ def safe_instance_dict(value):
             data = descriptor.__get__(value, type(value))
         except (AttributeError, TypeError):
             return None
-        return data if type(data) is dict else None
+        # Ren'Py's StoreModule installs a rollback-aware StoreDict subclass
+        # as its actual native instance dictionary. Bypass custom dictionary
+        # methods by consuming it only via builtin dict operations.
+        return data if issubclass(type(data), dict) else None
     return None
 
 
