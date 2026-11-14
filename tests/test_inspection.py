@@ -72,12 +72,146 @@ class TestCore(unittest.TestCase):
         self.assertEqual(snapshot(MISSING)[0], 'missing')
         self.assertEqual(snapshot(None)[0], 'value')
 
-    def test_slots_are_not_invoked(self):
+    def test_initialized_slots_are_visible_without_invoking_object_hooks(self):
         class Slotted:
-            __slots__ = ('danger',)
+            __slots__ = ('safe', '_private')
             def __init__(self):
-                self.danger = 8
-        self.assertFalse(snapshot(Slotted())[3])
+                object.__setattr__(self, 'safe', {'hp': 8})
+                object.__setattr__(self, '_private', 999)
+            def __repr__(self):
+                raise AssertionError('repr must not run')
+            def __getattribute__(self, name):
+                raise AssertionError('__getattribute__ must not run')
+            def __getattr__(self, name):
+                raise AssertionError('__getattr__ must not run')
+            @property
+            def computed(self):
+                raise AssertionError('property must not run')
+        obj = Slotted()
+        self.assertTrue(snapshot(obj)[3])
+        nodes, truncated = child_descriptors(obj, 80)
+        self.assertFalse(truncated)
+        self.assertEqual(nodes, [(('attribute', 'safe'), 'safe')])
+        self.assertEqual(read_child(obj, ('attribute', 'safe')), {'hp': 8})
+        self.assertIs(read_child(obj, ('attribute', '_private')), MISSING)
+        self.assertIs(read_child(obj, ('attribute', 'computed')), MISSING)
+        self.assertIs(read_child(obj, ('attribute', 'not_here')), MISSING)
+
+    def test_inherited_slots_mixed_with_instance_dict_and_unset_slots(self):
+        class Parent(object):
+            __slots__ = ('first', 'unused')
+        class Child(Parent):
+            __slots__ = ('second', '__dict__')
+        obj = Child()
+        obj.first = 3
+        obj.second = [4]
+        obj.other = 5
+        nodes, capped = child_descriptors(obj, 80)
+        self.assertEqual([entry[0][1] for entry in nodes], ['first', 'other', 'second'])
+        self.assertFalse(capped)
+        self.assertEqual(snapshot(obj)[2], '3 attributes')
+        self.assertEqual(read_child(obj, ('attribute', 'first')), 3)
+        self.assertEqual(read_child(obj, ('attribute', 'second')), [4])
+        self.assertIs(read_child(obj, ('attribute', 'unused')), MISSING)
+
+    def test_derived_property_does_not_expose_an_inherited_slot(self):
+        class Parent(object):
+            __slots__ = ('secret',)
+        class Child(Parent):
+            __slots__ = ()
+            @property
+            def secret(self):
+                raise AssertionError('shadowing property must never run')
+        obj = Child()
+        # Populate the underlying slot directly; the derived property hides it.
+        Parent.__dict__['secret'].__set__(obj, 'hidden')
+        nodes, capped = child_descriptors(obj, 80)
+        self.assertEqual(nodes, [])
+        self.assertFalse(capped)
+        self.assertIs(read_child(obj, ('attribute', 'secret')), MISSING)
+
+    def test_native_slot_alias_cannot_expose_a_private_base_field(self):
+        class Parent(object):
+            __slots__ = ('safe', '_private')
+        class Child(Parent):
+            __slots__ = ('alias',)
+        obj = Child()
+        obj.safe = 17
+        Parent.__dict__['_private'].__set__(obj, 'secret')
+        # A writable class dictionary allows swapping a native slot
+        # descriptor after class creation. The alias must not expose it.
+        Child.alias = Parent.__dict__['_private']
+        self.assertEqual(child_descriptors(obj, 80)[0],
+                         [(('attribute', 'safe'), 'safe')])
+        self.assertIs(read_child(obj, ('attribute', 'alias')), MISSING)
+        self.assertIs(read_child(obj, ('attribute', '_private')), MISSING)
+
+    def test_custom_instance_dict_properties_never_run(self):
+        class CustomDict(object):
+            def __init__(self):
+                self.public = 2
+            @property
+            def __dict__(self):
+                raise AssertionError('custom __dict__ getter invoked')
+        obj = CustomDict()
+        self.assertFalse(snapshot(obj)[3])
+        self.assertEqual(child_descriptors(obj, 80), ([], False))
+        self.assertIs(read_child(obj, ('attribute', 'public')), MISSING)
+
+    def test_engine_module_namespace_remains_visible(self):
+        # Ren'Py's Store module exposes live game state through its module
+        # namespace. A native descriptor can return the wrong dictionary.
+        class StoreWrapper(ModuleType):
+            @property
+            def __dict__(self):
+                return {'score': 5}
+        mod = StoreWrapper('store')
+        self.assertEqual(child_descriptors(mod, 40, True)[0],
+                         [(('attribute', 'score'), 'score')])
+        self.assertEqual(read_child(mod, ('attribute', 'score')), 5)
+
+    def test_renpy_style_store_uses_native_rollback_aware_dict_subclass(self):
+        class StoreDict(dict):
+            def __iter__(self):
+                raise AssertionError('custom StoreDict iterator invoked')
+            def __getitem__(self, key):
+                raise AssertionError('custom StoreDict getter invoked')
+        class StoreModule(object):
+            def __init__(self, data):
+                object.__setattr__(self, '__dict__', data)
+            def __getattribute__(self, key):
+                raise AssertionError('custom StoreModule getter invoked')
+        store = StoreModule(StoreDict(e2e_value=1, inventory={'hp': 5}))
+        nodes, capped = child_descriptors(store, 80, is_store_root=True)
+        self.assertFalse(capped)
+        self.assertEqual([n[0][1] for n in nodes], ['e2e_value', 'inventory'])
+        self.assertEqual(read_child(store, ('attribute', 'e2e_value')), 1)
+        self.assertEqual(read_child(store, ('attribute', 'inventory')), {'hp': 5})
+        self.assertTrue(snapshot(store)[3])
+
+    def test_slot_enumeration_is_bounded_and_hidden_items_are_not_accessible(self):
+        class ManySlots(object):
+            __slots__ = tuple('item_{}'.format(i) for i in range(150))
+        obj = ManySlots()
+        for i in range(150):
+            object.__setattr__(obj, 'item_{}'.format(i), i)
+        nodes, capped = child_descriptors(obj, 80)
+        self.assertEqual(len(nodes), 48)
+        self.assertTrue(capped)
+        self.assertIn('bounded slots', snapshot(obj)[2])
+        self.assertEqual(read_child(obj, ('attribute', 'item_0')), 0)
+        self.assertIs(read_child(obj, ('attribute', 'item_90')), MISSING)
+
+    def test_uninitialized_slot_and_untrusted_descriptor_not_enumerated(self):
+        class Untrusted(object):
+            __slots__ = ('unused',)
+            @property
+            def dangerous(self):
+                raise AssertionError('property executed')
+        obj = Untrusted()
+        self.assertFalse(snapshot(obj)[3])
+        self.assertEqual(child_descriptors(obj, 40), ([], False))
+        self.assertIs(read_child(obj, ('attribute', 'unused')), MISSING)
 
 
 class TestController(unittest.TestCase):
@@ -187,16 +321,17 @@ class TestController(unittest.TestCase):
         ins.toggle_node((('attribute', 'game'),))
         self.assertEqual(ins.rows[1].preview, '100')
 
-    def test_per_node_errors_isolated(self):
+    def test_unsafe_instance_dict_property_is_not_called(self):
         class Broken:
             @property
             def __dict__(self):
-                raise RuntimeError('blocked')
+                raise AssertionError('custom dictionary getter invoked')
         ins, state, _ = self.make_inspector()
         state['store'].game = Broken()
         ins.refresh()
         self.assertEqual(len(ins.rows), 1)
-        self.assertEqual(ins.rows[0].state, 'error')
+        self.assertEqual(ins.rows[0].state, 'value')
+        self.assertFalse(ins.rows[0].expandable)
 
     def test_many_children_capped(self):
         ins, state, _ = self.make_inspector()

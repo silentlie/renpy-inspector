@@ -14,6 +14,7 @@ REQUIRED_FILES = (
     'game/renpy_inspector/__init__.py',
     'game/renpy_inspector/controller.py',
     'game/renpy_inspector/inspection.py',
+    'game/renpy_inspector/safe_slots.py',
     'game/renpy_inspector/favorites.py',
     'game/renpy_inspector/settings.py',
     'game/renpy_inspector/search.py',

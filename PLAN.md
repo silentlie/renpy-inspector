@@ -2,7 +2,30 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #37 — Optional Inline Primitive Editing UX (v0.7.19 experimental)
+## Milestone: PR #38 — Safe Structured Introspection (v0.7.20 experimental)
+
+- Extend read-only structured browsing to ordinary Python model objects
+  whose state lives in `__slots__`, including inherited slots and mixed
+  instance dictionaries, while preserving existing built-in collection
+  enumeration, cycle detection, root paging, search/reveal and favourites.
+- Discover fields strictly from built-in str/tuple/list `__slots__`
+  declarations and exact CPython `member_descriptor` objects reached
+  through static class dictionaries. Never invoke Python getters, property
+  accessors, custom descriptors, user `__repr__` or arbitrary iterables.
+- Skip private/unset fields; honour derived-class shadowing. Cap class
+  hierarchy depth at 12, per-class declarations at 96 names and visible
+  slot fields at 48 per object, reporting partial coverage explicitly.
+- Make no mutation to live game objects, no HTTP route, no extra scheduler,
+  no recursion beyond the existing typed-path, queue and paging limits.
+  Game-thread-only collection remains mandatory.
+- Test Python 2/3 native slot descriptors, inherited/mixed instances,
+  hostile user hooks, property shadowing, truncated/uninitialised slots,
+  deep nested values, search, reveal, favourite paths, cyclic references
+  and large collections; pass both real Ren'Py engine E2E suites.
+- Caveat: static reflection over hostile native extension types is not a
+  sandbox; non-standard extension classes remain out of scope.
+
+## Previous milestone: PR #37 — Optional Inline Primitive Editing UX (v0.7.19 experimental)
 
 - Match SugarCube's quick in-tree edit affordance without copying its
   unrestricted JavaScript mutation model: expose a small pencil action

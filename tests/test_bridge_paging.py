@@ -65,6 +65,61 @@ class PagingTests(unittest.TestCase):
         self.assertFalse(any(item['name'] == 'danger' for item in result['items']))
         self.assertTrue(all('danger' not in item['preview'] for item in result['items']))
 
+    def test_slotted_models_support_bounded_pages_direct_paths_and_nested_values(self):
+        from renpy_inspector.bridge_paging import build_tree_value
+        from renpy_inspector.bridge_search import build_search_results, build_reveal_chain
+
+        class Inventory(object):
+            __slots__ = ('health', 'items', '_secret')
+            @property
+            def dangerous(self):
+                raise AssertionError('computed property must never execute')
+            def __getattribute__(self, name):
+                raise AssertionError('overridden getter must never execute')
+            def __repr__(self):
+                raise AssertionError('repr must never execute')
+
+        model = Inventory()
+        object.__setattr__(model, 'health', 33)
+        object.__setattr__(model, 'items', {'potion': 2})
+        object.__setattr__(model, '_secret', 'private')
+        self.store.model = model
+
+        path = (('attribute', 'model'),)
+        page = build_tree_page(self.providers, 'store', path, 0, PAGE_SIZE)
+        self.assertEqual([x['name'] for x in page['items']], ['health', 'items'])
+        self.assertEqual(page['items'][0]['preview'], '33')
+        self.assertEqual(page['items'][1]['expandable'], True)
+
+        nested = path + (('attribute', 'items'), ('key', 'potion'))
+        self.assertEqual(build_tree_value(self.providers, 'store', nested)['node']['preview'], '2')
+        self.assertEqual(build_reveal_chain(self.providers, 'store', nested)['chain'][-1]['preview'], '2')
+        results = build_search_results(self.providers, 'store', 'health')
+        self.assertTrue(any(node['path'] == 'store.model.health'
+                            for node in results['results']))
+        self.assertFalse(any('dangerous' in node['path'] or '_secret' in node['path']
+                             for node in results['results']))
+        with self.assertRaises(ValueError):
+            build_tree_page(self.providers, 'store', path + (('attribute', '_secret'),), 0, 1)
+        with self.assertRaises(ValueError):
+            build_tree_page(self.providers, 'store', path + (('attribute', 'dangerous'),), 0, 1)
+
+    def test_slotted_cycle_and_many_fields_are_bounded(self):
+        class Slotted(object):
+            __slots__ = ('self_ref', 'values')
+        self.store.slotted = Slotted()
+        self.store.slotted.self_ref = self.store.slotted
+        self.store.slotted.values = list(range(1200))
+        parent = (('attribute', 'slotted'),)
+        page = build_tree_page(self.providers, 'store', parent, 0, PAGE_SIZE)
+        self.assertEqual([x['name'] for x in page['items']], ['self_ref', 'values'])
+        self.assertEqual(page['items'][0]['state'], 'cycle')
+        self.assertFalse(page['items'][0]['expandable'])
+        list_page = build_tree_page(self.providers, 'store',
+                                    parent + (('attribute', 'values'),), 960, PAGE_SIZE)
+        self.assertEqual(len(list_page['items']), 40)
+        self.assertTrue(list_page['capped'])
+
     def test_invalid_paths_scopes_and_pagination(self):
         bad = [
             ('system', [], 0, PAGE_SIZE),
