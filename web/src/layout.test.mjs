@@ -97,11 +97,11 @@ test('SugarCube-style subscriptions use one bounded shared scheduler', () => {
 
 test('browser preferences use authenticated inspector-only storage', () => {
   assert.match(jsx, /useFavouritePreferences/);
-  assert.match(preferenceHook, /api\\/v1\\/favourites/);
+  assert.match(preferenceHook, /api\/v1\/favourites/);
   assert.match(preferenceHook, /method: 'PUT'/);
   assert.match(preferenceHook, /revision, favourites: entries/);
   assert.match(jsx, /Clear all favourites/);
-  assert.match(jsx, /api\\/v1\\/value/);
+  assert.match(jsx, /api\/v1\/value/);
   assert.match(jsx, /requestFavouriteValue/);
   assert.match(jsx, /combineScopedWatches/);
   assert.match(jsx, /Favourite storage/);
