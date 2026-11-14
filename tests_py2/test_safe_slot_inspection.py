@@ -79,6 +79,23 @@ class SlotCompatibilityTests(unittest.TestCase):
         self.assertFalse(snapshot(invalid)[3])
         self.assertIs(read_child(invalid, ('attribute', 'foo')), MISSING)
 
+    def test_store_module_native_dictionary_may_be_a_dict_subclass(self):
+        class StoreDict(dict):
+            def __iter__(self):
+                raise AssertionError('custom dict iterator invoked')
+            def __getitem__(self, name):
+                raise AssertionError('custom dict getter invoked')
+        class StoreModule(object):
+            def __init__(self, values):
+                object.__setattr__(self, '__dict__', values)
+            def __getattribute__(self, name):
+                raise AssertionError('custom object getter invoked')
+        value = StoreModule(StoreDict(e2e_value=1))
+        self.assertEqual(child_descriptors(value, 80, True)[0],
+                         [(('attribute', 'e2e_value'), 'e2e_value')])
+        self.assertEqual(read_child(value, ('attribute', 'e2e_value')), 1)
+        self.assertTrue(snapshot(value)[3])
+
     def test_slot_count_is_independent_of_caller_page_size(self):
         class Many(object):
             __slots__ = tuple('field{}'.format(i) for i in range(100))
