@@ -180,8 +180,8 @@ test('Python token highlighting is client-only, bounded and does not change UI g
   assert.match(valueSyntaxComponent, /tokenizePythonValue/);
   assert.match(valueSyntax, /MAX_VALUE_SYNTAX_CHARS = 1024/);
   assert.match(valueSyntax, /MAX_VALUE_SYNTAX_TOKENS = 96/);
-  assert.doesNotMatch(valueSyntaxComponent, /dangerouslySetInnerHTML|innerHTML|eval\\(/);
-  assert.doesNotMatch(valueSyntax, /eval\\(|new Function|fetch\\(|setInterval\\(/);
-  assert.match(css, /\\.value-token-string/);
-  assert.match(css, /\\.value-token-number/);
+  assert.doesNotMatch(valueSyntaxComponent, /dangerouslySetInnerHTML|innerHTML|eval\(/);
+  assert.doesNotMatch(valueSyntax, /eval\(|new Function|fetch\(|setInterval\(/);
+  assert.match(css, /\.value-token-string/);
+  assert.match(css, /\.value-token-number/);
 });
