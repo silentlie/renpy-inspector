@@ -121,7 +121,7 @@ test('non-ASCII typed pins use Python JSON identity for confirmation and unpin',
     });
   assert.equal(count, 1);
   assert.deepEqual(saved.favourites, [canonical]);
-  assert.deepEqual(readFavouriteSnapshot(saved).favourites, [canonical]);
+  assert.deepEqual(readFavouriteSnapshot(server).favourites, [canonical]);
 });
 
 test('favourite canonicalization rejects over-budget ASCII-expanded keys', async () => {
