@@ -12,7 +12,7 @@ import tempfile
 import threading
 
 from .bridge_paging import validate_tree_request
-from .compat import atomic_replace, string_types
+from .compat import atomic_replace, string_types, integer_types
 
 MAX_FAVOURITES = 100
 MAX_PREFERENCE_BYTES = 64 * 1024
@@ -71,7 +71,7 @@ class BrowserFavouritesStore(object):
             if not isinstance(value, dict) or value.get('version') != 1:
                 raise ValueError('invalid preference version')
             revision = value.get('revision', 0)  # Legacy v0.7.16 files.
-            if type(revision) is not int or not 0 <= revision <= MAX_REVISION:
+            if type(revision) not in integer_types or not 0 <= revision <= MAX_REVISION:
                 raise ValueError('invalid preference revision')
             favourites = validate_favourites(value.get('favourites'))
             return {'version': 1, 'revision': revision, 'initialized': True,
@@ -87,7 +87,7 @@ class BrowserFavouritesStore(object):
     def save(self, favourites, expected_revision=None):
         parsed = validate_favourites(favourites)
         if expected_revision is not None and (
-                type(expected_revision) is not int or
+                type(expected_revision) not in integer_types or
                 not 0 <= expected_revision <= MAX_REVISION):
             raise ValueError('invalid expected revision')
         with self.lock:
