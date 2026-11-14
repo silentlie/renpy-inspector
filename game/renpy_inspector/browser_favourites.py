@@ -48,6 +48,10 @@ def validate_favourites(payload):
             raise ValueError('favourite cannot be the scope root')
         canonical = json.dumps([scope, decoded[1]], ensure_ascii=True,
                                separators=(',', ':'))
+        # The persisted form can be much longer than the submitted UTF-8
+        # spelling. Reject keys that could not be loaded back later.
+        if len(canonical) > 2048:
+            raise ValueError('canonical favourite key too long')
         if canonical in seen:
             continue
         seen.add(canonical)
