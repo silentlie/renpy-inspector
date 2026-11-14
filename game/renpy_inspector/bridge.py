@@ -34,7 +34,7 @@ from .bridge_scripts import (list_labels, source_excerpt, search_source_text,
                              validate_source_search_request)
 from .browser_favourites import (BrowserFavouritesStore,
                                  MAX_PREFERENCE_BYTES, FavouritesConflict, validate_favourites)
-from .compat import monotonic_time
+from .compat import monotonic_time, integer_types
 from .runtime_history import RuntimeTimeline
 from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
                           inspect_edit_target, apply_primitive_edit,
@@ -256,7 +256,7 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError('invalid preference payload')
             expected_revision = payload.get('revision')
             if 'revision' in payload and (
-                    type(expected_revision) is not int or
+                    type(expected_revision) not in integer_types or
                     not 0 <= expected_revision < 2 ** 53):
                 raise ValueError('invalid preference revision')
             validated = validate_favourites(payload['favourites'])
