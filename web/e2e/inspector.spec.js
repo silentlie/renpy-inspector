@@ -1140,5 +1140,5 @@ test('namedtuple shows safe field labels in virtual tree and independent favouri
   const favouriteRow = page.locator('.variable-pane:visible .variable-row').filter({
     has: page.locator('.variable-key', { hasText: '[0] health' }),
   });
-  await expect(favouriteRow.locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
+  await expect(favouriteRow.last().locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
 });
