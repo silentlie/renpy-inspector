@@ -105,6 +105,9 @@ test('non-ASCII typed pins use Python JSON identity for confirmation and unpin',
   assert.deepEqual(applyFavouriteAction([], { kind: 'pin', entry: emoji }),
     [{ scope: 'store', key: emojiBridge }]);
   assert.deepEqual(applyFavouriteAction([canonical], { kind: 'unpin', entry: canonical }), []);
+  assert.deepEqual(applyFavouriteAction([canonical], { kind: 'unpin', entry: unescaped }), []);
+  assert.deepEqual(applyFavouriteAction([canonical, score],
+    { kind: 'clear', entries: [unescaped] }), [score]);
 
   let server = snapshot(0, []);
   let count = 0;
