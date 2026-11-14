@@ -67,6 +67,20 @@ html, body { overscroll-behavior: none; }
 .row-icon-button .pinned-star { color: #e4bd66; }
 .empty-variables { margin: 60px 0; }
 
+/* PR #37: contextual row edit popover. The virtual tree keeps its dimensions. */
+.inline-primitive-editor { display:flex;flex-direction:column;gap:8px;
+  width:min(350px,calc(100vw - 44px));max-height:min(70vh,520px);
+  overflow:auto;min-width:0;padding:4px 0; }
+.inline-edit-heading { display:flex;align-items:center;justify-content:space-between;gap:10px; }
+.inline-edit-note { font-size:11px;line-height:1.5; }
+.inline-edit-current { display:block;max-height:90px;overflow:auto;white-space:pre-wrap;
+  overflow-wrap:anywhere;background:#101a2a;padding:7px;border-radius:4px;
+  font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.inline-primitive-editor .ant-checkbox-wrapper { font-size:12px;align-items:flex-start; }
+.inline-primitive-editor .ant-btn-primary { align-self:flex-start; }
+.inline-primitive-editor .ant-typography { overflow-wrap:anywhere; }
+
+
 .overview-connection { display:inline-flex;align-items:center;gap:7px; }
 .search-trigger { height:28px;width:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center; }
 .search-trigger-active { color:#78baff!important;background:#1e3451!important; }
