@@ -178,6 +178,13 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
   const [height, setHeight] = useState(450);
   const [editing, setEditing] = useState(null);
 
+  // A row editor is an explicitly opened transient action, not a persistent
+  // selection. A tab/filter switch may unmount its virtualised row; never
+  // reopen that editor (and re-read Store) when the row becomes visible again.
+  useEffect(() => {
+    setEditing(null);
+  }, [scope, query]);
+
   useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
