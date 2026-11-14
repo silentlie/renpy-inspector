@@ -5,6 +5,7 @@ import { comparisonText, filterChanges, MAX_FAVOURITE_CHANGES,
 import { formatTypedPath } from './tree.js';
 import { sourceTargetForContext } from './scripts.js';
 import { valuePresentation } from './value-format.js';
+import PythonValueSyntax from './PythonValueSyntax.jsx';
 
 const { Text } = Typography;
 
@@ -96,7 +97,9 @@ export default function FavouriteHistoryPane({
                 <Text type="secondary">{label} · {value.precision === 'exact'
                   ? 'exact sampled primitive' : 'preview/status'}</Text>
                 <pre className={'pin-history-sample value-tone-' +
-                  valuePresentation(value.type, value.kind).tone}>{comparisonText(value)}</pre>
+                  valuePresentation(value.type, value.kind).tone}><PythonValueSyntax
+                      text={comparisonText(value)} type={value.type}
+                      source={value.precision === 'exact' ? 'exact' : 'preview'} state={value.kind} /></pre>
               </div>)}
           </div>
           <div className="pin-history-actions">
