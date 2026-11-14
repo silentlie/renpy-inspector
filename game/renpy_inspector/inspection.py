@@ -61,7 +61,7 @@ def _has_builtin_base(value, classes):
     return issubclass(type(value), classes)
 
 MAX_NAMEDTUPLE_FIELDS = 128
-_NAMEDTUPLE_FIELD_NAME = re.compile('^[A-Za-z_][A-Za-z_0-9]{0,63}
+_NAMEDTUPLE_FIELD_NAME = re.compile('^[A-Za-z_][A-Za-z_0-9]*')
 
 
 def _namedtuple_fields(value, size):
@@ -88,7 +88,7 @@ def _namedtuple_fields(value, size):
         declared = fields['_fields']
         if type(declared) is not tuple or len(declared) != size:
             return None
-        if any(type(name) not in string_types or
+        if any(type(name) not in string_types or len(name) > 64 or
                _NAMEDTUPLE_FIELD_NAME.match(name) is None or
                _NAMEDTUPLE_FIELD_NAME.match(name).end() != len(name)
                for name in declared):
