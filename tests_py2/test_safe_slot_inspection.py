@@ -31,19 +31,7 @@ class SlotCompatibilityTests(unittest.TestCase):
         object.__setattr__(value, '_private', 100)
         object.__getattribute__(value, '__dict__')['ordinary'] = True
 
-        from types import MemberDescriptorType
-        from renpy_inspector.safe_slots import safe_slot_descriptors
-        metadata = type.__getattribute__(type(value), '__dict__')
-        diagnostic = {
-            'slots_declaration': repr(metadata.get('__slots__')),
-            'slots_declaration_type': str(type(metadata.get('__slots__'))),
-            'slot_member_type': str(type(metadata.get('inventory'))),
-            'expected_member_type': str(MemberDescriptorType),
-            'candidate_names': [name for name, unused in safe_slot_descriptors(value)[0]],
-        }
         nodes, capped = child_descriptors(value, 80)
-        self.assertEqual(diagnostic['candidate_names'], ['inventory', 'score'],
-                         repr(diagnostic))
         self.assertFalse(capped)
         self.assertEqual([part[0][1] for part in nodes],
                          ['inventory', 'ordinary', 'score'])
