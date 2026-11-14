@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   CheckCircleFilled, CopyOutlined, DisconnectOutlined, LockOutlined,
-  EyeOutlined, RightOutlined, DownOutlined, SearchOutlined,
+  EyeOutlined, EditOutlined, RightOutlined, DownOutlined, SearchOutlined,
   StarFilled, StarOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import {
@@ -98,7 +98,8 @@ function AutoPageSentinel({ scope, offset, loading, error, requestPage }) {
   </span>;
 }
 
-function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle, onDetails, onFavourite }) {
+function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle,
+  onDetails, onFavourite, inlineEdit, editingActive, onEditingChange }) {
   const canExpand = Boolean(node.expandable || node.children?.length) && typeof onToggle === 'function';
   const displayedType = valuePresentation(node.type, node.state);
   return <span className={`variable-row${isActive ? ' variable-row-active' : ''}`}>
@@ -131,6 +132,21 @@ function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle,
       title={`${node.type} · ${node.preview}`}><PythonValueSyntax
         text={node.preview} type={node.type} state={node.state} /></span>
     <span className="variable-actions">
+      {inlineEdit && <Popover trigger="click" placement="bottomRight"
+        open={editingActive} onOpenChange={onEditingChange}
+        destroyOnHidden content={editingActive && <EditValuePanel compact
+          selection={inlineEdit.selection} generation={inlineEdit.generation}
+          bridge={inlineEdit.bridge} token={inlineEdit.token} enabled={true}
+          locks={inlineEdit.locks} onLocksChanged={inlineEdit.onLocksChanged}
+          onApplied={() => onEditingChange(false)}
+          onCancel={() => onEditingChange(false)} />}>
+        <button type="button" className="row-icon-button"
+          aria-label={`Edit ${node.name} inline`} aria-expanded={editingActive}
+          title="Edit this Store primitive inline (explicit confirmation required)"
+          onClick={(event) => event.stopPropagation()}>
+          <EditOutlined />
+        </button>
+      </Popover>}
       <Tooltip title="Inspect path and value">
         <button type="button" className="row-icon-button" aria-label={`Inspect ${node.name}`}
           onClick={(event) => { event.stopPropagation(); onDetails(); }}>
@@ -149,10 +165,12 @@ function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle,
 }
 
 function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite, onClearFavourites,
-  lockedKeys, staleLockKeys, expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
+  lockedKeys, staleLockKeys, expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget,
+  editingEnabled, bridge, token, locks, onLocksChanged }) {
   const viewportRef = useRef(null);
   const treeRef = useRef(null);
   const [height, setHeight] = useState(450);
+  const [editing, setEditing] = useState(null);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -225,9 +243,15 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
           const originScope = scope === 'favourites' ? node.favouriteScope : scope;
           const sourceKey = node.sourceKey ?? node.key;
           const pinned = favKeys.has(`${originScope}:${sourceKey}`);
+          const locked = originScope === 'store' && lockedKeys?.has(lockIdentity(sourceKey));
+          const decoded = decodeTreeKey(sourceKey);
+          const canEdit = editingEnabled && Boolean(token) && !locked &&
+            originScope === 'store' && decoded?.scope === 'store' &&
+            decoded.path.length > 0 && node.state === 'value' &&
+            ['str', 'unicode', 'int', 'long', 'float', 'bool'].includes(node.type);
           return <TreeRow node={{ ...node, expanded: expandedSet.has(node.key) }}
             isFavourite={pinned}
-            isLocked={originScope === 'store' && lockedKeys?.has(lockIdentity(sourceKey))}
+            isLocked={locked}
             isLockStale={originScope === 'store' && staleLockKeys?.has(lockIdentity(sourceKey))}
             isActive={(selected?.scope === originScope && selected?.key === sourceKey) ||
               (revealTarget?.scope === originScope && revealTarget?.key === sourceKey)}
@@ -241,7 +265,13 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
               }
             }}
             onDetails={() => onSelect(originScope, sourceKey)}
-            onFavourite={() => onFavourite(originScope, sourceKey)} />;
+            onFavourite={() => onFavourite(originScope, sourceKey)}
+            inlineEdit={canEdit ? {
+              selection: { scope: originScope, key: sourceKey },
+              generation: treePages?.generation, bridge, token, locks, onLocksChanged,
+            } : null}
+            editingActive={Boolean(editing && editing.scope === originScope && editing.key === sourceKey)}
+            onEditingChange={(open) => setEditing(open ? { scope: originScope, key: sourceKey } : null)} />;
         }} /> :
         <Empty className="empty-variables" description={hasQuery ? 'No captured variables match this search' :
           scope === 'favourites' ? 'Pin variables using the star on a tree row' : 'No variables captured'} />}
@@ -970,6 +1000,9 @@ export default function App() {
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
                 onClearFavourites={clearAllFavourites}
+                editingEnabled={snapshot?.capabilities?.primitive_edits === true}
+                bridge={bridge} token={token} locks={snapshot?.locks}
+                onLocksChanged={syncLocks}
                 lockedKeys={lockedKeys} staleLockKeys={staleLockKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
                 loadingPages={loadingPages} pageErrors={pageErrors}
                 revealTarget={revealTarget} />}
