@@ -122,11 +122,13 @@ test('changes are derived from the existing shallow root, page and favourite sam
   assert.match(jsx, /selectedHistory/);
 });
 
-test('Compare, Locked and Edits continue observing the last selected tree scope', () => {
+test('auxiliary Compare, Locked, Edits and Pin history reuse the last tree scope', () => {
   assert.match(jsx, /lastTreeScope/);
-  assert.match(jsx, /\(scope === 'compare' \|\| scope === 'edits' \|\| scope === 'locked'\) \? lastTreeScope : scope/);
+  assert.match(jsx, /scope === 'compare' \|\| scope === 'edits' \|\| scope === 'locked' \|\|/);
+  assert.match(jsx, /scope === 'pin-history'/);
   assert.match(jsx, /scope === 'locked' && snapshot\?\.capabilities\?\.primitive_edits === true/);
   assert.match(jsx, /<LockedVariablesPane locks=\{snapshot\?\.locks\}/);
+  assert.match(jsx, /<FavouriteHistoryPane favourites=\{favourites\}/);
 });
 
 
@@ -151,4 +153,16 @@ test('Scripts tab provides independent label navigation and read-only source vie
   assert.match(css, /\.script-label-list \{ flex:1 1 auto;/);
   assert.match(css, /\.script-source-pane \{ min-width:0;min-height:0;/);
   assert.match(css, /@media \(max-width:670px\)/);
+});
+
+test('pin history reuses the existing comparison samples and does not grow the permanent chrome', () => {
+  assert.match(jsx, /key: 'pin-history', label: `Pin history/);
+  assert.match(jsx, /trackerRef\.current\.setFavourites\(favourites\)/);
+  assert.match(jsx, /trackerRef\.current\.getFavouriteChanges\(\)/);
+  assert.match(jsx, /trackerRef\.current\.getFavouriteBaselineKeys\(\)/);
+  assert.match(jsx, /trackerRef\.current\.clearFavouriteHistory\(\)/);
+  assert.match(jsx, /View pinned variable history/);
+  assert.match(css, /\.pin-history-workspace \{ display:flex;/);
+  assert.match(css, /\.pin-history-list \{ flex:1 1 auto;/);
+  assert.doesNotMatch(jsx, /new WebSocket|EventSource|new SetInterval/);
 });

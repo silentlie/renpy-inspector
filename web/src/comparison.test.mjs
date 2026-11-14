@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChangeTracker, comparisonText, filterChanges, MAX_CHANGES } from './comparison.js';
+import { createChangeTracker, comparisonText, filterChanges, MAX_CHANGES,
+  MAX_FAVOURITE_CHANGES, MAX_FAVOURITE_CHANGES_PER_PATH } from './comparison.js';
 
 const key = (path) => JSON.stringify(['store', [['attribute', path]]]);
 const node = (name, preview, type = 'int') => ({
@@ -204,4 +205,131 @@ test('exact sample guards against untrusted oversized metadata', () => {
   const change = tracker.getChanges()[0];
   assert.equal(change.before.precision, 'preview');
   assert.equal(change.after.precision, 'preview');
+});
+
+const pin = (name, scope = 'store') => ({
+  scope, key: JSON.stringify([scope, [['attribute', name]]]),
+});
+
+test('favourite monitoring starts from the first post-pin observation, not earlier Compare state', () => {
+  const tracker = createChangeTracker();
+  tracker.observeValue(direct(node('hp', 1), 1));
+  tracker.setFavourites([pin('hp')]);
+  tracker.observeValue(direct(node('hp', 3), 2));
+  assert.equal(tracker.getChanges().length, 1);
+  assert.deepEqual(tracker.getFavouriteChanges(), []);
+  assert.deepEqual(tracker.getFavouriteBaselineKeys(), [key('hp')]);
+  tracker.observeValue(direct(node('hp', 4), 3));
+  const [observed] = tracker.getFavouriteChanges();
+  assert.equal(observed.kind, 'changed');
+  assert.equal(observed.before.preview, '3');
+  assert.equal(observed.after.preview, '4');
+  assert.deepEqual(observed.context, { filename: 'script.rpy', line: 42 });
+  assert.equal('turn' in observed, false);
+});
+
+test('favourite observations ignore unpinned variables, stale HTTP replies and repeated samples', () => {
+  const tracker = createChangeTracker();
+  tracker.setFavourites([pin('hp')]);
+  tracker.observePage(page([node('hp', 2), node('xp', 1)], 10));
+  tracker.observeValue(direct(node('hp', 4), 12));
+  tracker.observePage(page([node('hp', 3), node('xp', 7)], 11));
+  tracker.observeValue(direct(node('hp', 4), 13));
+  assert.equal(tracker.getFavouriteChanges().length, 1);
+  assert.equal(tracker.getFavouriteChanges()[0].path, 'store.hp');
+  assert.equal(tracker.getFavouriteChanges()[0].after.preview, '4');
+});
+
+test('favourite events include missing and recovery but not unsupported object previews', () => {
+  const tracker = createChangeTracker();
+  tracker.setFavourites([pin('hp'), pin('inventory')]);
+  tracker.observeValue(direct(node('hp', 2), 1));
+  tracker.observeValue(direct({ ...node('hp', 2), state: 'missing' }, 2));
+  tracker.observeValue(direct(node('hp', 9), 3));
+  tracker.observeValue(direct(node('inventory', '4 items', 'dict'), 3));
+  tracker.observeValue(direct(node('inventory', '5 items', 'dict'), 4));
+  assert.deepEqual(tracker.getFavouriteChanges().map(e => e.kind), ['added', 'removed']);
+  assert.equal(tracker.getFavouriteChanges().every(e => e.key === key('hp')), true);
+});
+
+test('unpin purges its history and re-pin cannot inherit the previous baseline', () => {
+  const tracker = createChangeTracker();
+  tracker.setFavourites([pin('hp')]);
+  tracker.observeValue(direct(node('hp', 1), 1));
+  tracker.observeValue(direct(node('hp', 2), 2));
+  assert.equal(tracker.getFavouriteChanges().length, 1);
+  tracker.setFavourites([pin('xp')]);
+  assert.deepEqual(tracker.getFavouriteChanges(), []);
+  assert.deepEqual(tracker.getFavouriteBaselineKeys(), []);
+  tracker.setFavourites([pin('hp'), pin('xp')]);
+  tracker.observeValue(direct(node('hp', 3), 3));
+  assert.equal(tracker.getFavouriteChanges().length, 0);
+  tracker.observeValue(direct(node('hp', 4), 4));
+  assert.equal(tracker.getFavouriteChanges()[0].before.preview, '3');
+});
+
+test('generation invalidation clears pinned history but keeps eligible subscriptions', () => {
+  const tracker = createChangeTracker();
+  tracker.setFavourites([pin('hp')]);
+  tracker.observeValue(direct(node('hp', 1), 1));
+  tracker.observeValue(direct(node('hp', 2), 2));
+  tracker.beginGeneration(2);
+  assert.equal(tracker.getFavouriteChanges().length, 0);
+  assert.deepEqual(tracker.getFavouriteBaselineKeys(), []);
+  tracker.observeValue(direct(node('hp', 60), 3, { generation: 2 }));
+  assert.equal(tracker.getFavouriteChanges().length, 0);
+  tracker.observeValue(direct(node('hp', 59), 4, { generation: 2 }));
+  assert.equal(tracker.getFavouriteChanges().length, 1);
+  assert.equal(tracker.getFavouriteChanges()[0].before.preview, '60');
+  tracker.observeValue(direct(node('hp', 1), 2, { generation: 1 }));
+  assert.equal(tracker.getFavouriteChanges().length, 1);
+});
+
+test('favourite clear is independent of Compare and preserves monitoring baselines', () => {
+  const tracker = createChangeTracker();
+  tracker.setFavourites([pin('hp')]);
+  tracker.observeValue(direct(node('hp', 1), 1));
+  tracker.observeValue(direct(node('hp', 2), 2));
+  tracker.clearFavouriteHistory();
+  assert.equal(tracker.getFavouriteChanges().length, 0);
+  assert.equal(tracker.getChanges().length, 1);
+  tracker.observeValue(direct(node('hp', 2), 3));
+  assert.equal(tracker.getFavouriteChanges().length, 0);
+  tracker.observeValue(direct(node('hp', 3), 4));
+  assert.equal(tracker.getFavouriteChanges()[0].before.preview, '2');
+  tracker.clear();
+  assert.equal(tracker.getFavouriteChanges().length, 1);
+  assert.equal(tracker.getChanges().length, 0);
+});
+
+test('pinned history survives Compare eviction and is capped per path and globally', () => {
+  const tracker = createChangeTracker();
+  const names = Array.from({ length: 10 }, (_, i) => 'pin' + i);
+  tracker.setFavourites(names.map(name => pin(name)));
+  for (const name of names) tracker.observeValue(direct(node(name, 0), 0));
+  for (let value = 1; value <= MAX_FAVOURITE_CHANGES_PER_PATH + 5; value++) {
+    for (const name of names) tracker.observeValue(direct(node(name, value), value));
+  }
+  assert.equal(tracker.getChanges().length, MAX_CHANGES);
+  assert.equal(tracker.getFavouriteChanges().length, MAX_FAVOURITE_CHANGES);
+  assert.ok(tracker.getFavouriteChanges().every(entry =>
+    tracker.getFavouriteChanges().filter(x => x.key === entry.key).length <=
+    MAX_FAVOURITE_CHANGES_PER_PATH));
+});
+
+test('favourite history retains exact samples and only accepts valid typed pins', () => {
+  const tracker = createChangeTracker();
+  tracker.setFavourites([
+    pin('memo'), { scope: 'persistent', key: key('hp') },
+    { scope: 'store', key: '__synthetic__' }, pin('memo'),
+  ]);
+  const memo = (value) => ({
+    ...node('memo', 'same preview', 'str'), compare_sample: { text: value },
+  });
+  tracker.observeValue(direct(memo('before'), 1));
+  tracker.observeValue(direct(memo('after'), 2));
+  assert.deepEqual(tracker.getFavouriteBaselineKeys(), [key('memo')]);
+  assert.equal(tracker.getFavouriteChanges().length, 1);
+  assert.equal(tracker.getFavouriteChanges()[0].after.precision, 'exact');
+  assert.equal(comparisonText(tracker.getFavouriteChanges()[0].after), 'after');
 });

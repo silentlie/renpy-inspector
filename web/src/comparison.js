@@ -7,10 +7,13 @@
  * state and the browser never mutates gameplay.
  */
 import { classifyGeneration } from './lifecycle.js';
+import { decodeTreeKey } from './tree.js';
 
 export const MAX_CHANGES = 100;
 export const MAX_SAMPLES = 6000;
 export const MAX_PAGE_BASELINES = 96;
+export const MAX_FAVOURITE_CHANGES = 200;
+export const MAX_FAVOURITE_CHANGES_PER_PATH = 30;
 
 const SCOPES = new Set(['store', 'persistent']);
 const PRIMITIVES = new Set(['bool', 'int', 'long', 'float', 'str', 'unicode', 'NoneType']);
@@ -72,6 +75,54 @@ export function createChangeTracker({
   let events = [];
   const last = new Map();
   const pages = new Map();
+  // Favourite history is independent of Compare's 100-event FIFO, but reads
+  // the very same validated observations. No additional game requests.
+  let pinned = new Map();
+  const pinnedLast = new Map();
+  let favouriteEvents = [];
+  let nextFavouriteId = 0;
+
+  function setFavourites(favourites) {
+    const next = new Map();
+    for (const entry of (Array.isArray(favourites) ? favourites : []).slice(0, 100)) {
+      if (!SCOPES.has(entry?.scope) || typeof entry.key !== 'string' ||
+          entry.key.length > 2048) continue;
+      const decoded = decodeTreeKey(entry.key);
+      if (decoded?.scope === entry.scope && decoded.path.length) {
+        next.set(entry.key, entry.scope);
+      }
+    }
+    // Losing a pin loses its history and baseline. Re-pinning starts over;
+    // we never mislabel an older Compare observation as a pinned event.
+    for (const key of pinned.keys()) {
+      if (!next.has(key)) pinnedLast.delete(key);
+    }
+    favouriteEvents = favouriteEvents.filter((event) => next.has(event.key));
+    pinned = next;
+  }
+
+  function observeFavourite(scope, node, sampled, timestamp, game) {
+    const key = node.key;
+    if (pinned.get(key) !== scope) return false;
+    const previous = pinnedLast.get(key);
+    if (previous && timestamp < previous.timestamp) return false;
+    pinnedLast.set(key, { sample: sampled, timestamp });
+    if (!previous || sameValue(previous.sample, sampled) ||
+        (previous.sample.kind !== 'value' && sampled.kind !== 'value')) return false;
+    const record = {
+      id: 'fav-' + String(nextFavouriteId++), key, scope, path: node.path,
+      kind: eventKind(previous.sample, sampled),
+      before: previous.sample, after: sampled,
+      capturedAt: timestamp, context: safeContext(game),
+    };
+    let perPath = 0;
+    favouriteEvents = [record, ...favouriteEvents].filter((entry) => {
+      if (entry.key !== key) return true;
+      perPath += 1;
+      return perPath <= MAX_FAVOURITE_CHANGES_PER_PATH;
+    }).slice(0, MAX_FAVOURITE_CHANGES);
+    return true;
+  }
 
   function adoptGeneration(incoming) {
     const transition = classifyGeneration(generation, incoming);
@@ -81,6 +132,8 @@ export function createChangeTracker({
       events = []; // a game load/rollback generation is a new comparison epoch
       last.clear();
       pages.clear();
+      pinnedLast.clear();
+      favouriteEvents = [];
     }
     return true;
   }
@@ -96,8 +149,9 @@ export function createChangeTracker({
     last.delete(key);
     last.set(key, { sample: sampled, timestamp });
     if (last.size > sampleLimit) last.delete(last.keys().next().value);
+    const favouriteChanged = observeFavourite(scope, node, sampled, timestamp, game);
     if (!before || sameValue(before, sampled) ||
-        (before.kind !== 'value' && sampled.kind !== 'value')) return false;
+        (before.kind !== 'value' && sampled.kind !== 'value')) return favouriteChanged;
     // Precision is recorded independently on each side of a transition. A
     // later re-read cannot reconstruct the full earlier value.
     events = [{
@@ -152,12 +206,16 @@ export function createChangeTracker({
 
   return {
     beginGeneration: adoptGeneration,
-    observeValue, observePage,
+    observeValue, observePage, setFavourites,
     getChanges: () => events,
+    getFavouriteChanges: () => favouriteEvents,
+    getFavouriteBaselineKeys: () => [...pinnedLast.keys()],
+    clearFavouriteHistory: () => { favouriteEvents = []; },
     getGeneration: () => generation,
     historyFor: (key, max = 20) => events.filter((e) => e.key === key).slice(0, max),
     clear: () => { events = []; }, // retain baselines, prevent false next-poll adds
-    reset: () => { generation = null; events = []; last.clear(); pages.clear(); },
+    reset: () => { generation = null; events = []; last.clear(); pages.clear();
+      favouriteEvents = []; pinnedLast.clear(); },
   };
 }
 

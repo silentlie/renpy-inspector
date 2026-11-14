@@ -25,6 +25,7 @@ import RuntimePane from './RuntimePane.jsx';
 import FullValuePanel from './FullValuePanel.jsx';
 import EditValuePanel from './EditValuePanel.jsx';
 import EditHistoryPane from './EditHistoryPane.jsx';
+import FavouriteHistoryPane from './FavouriteHistoryPane.jsx';
 import LockedVariablesPane from './LockedVariablesPane.jsx';
 import { parseExactPath } from './exact-path.js';
 import { sourceTargetForContext } from './scripts.js';
@@ -403,10 +404,21 @@ export default function App() {
   const trackerRef = useRef(createChangeTracker());
   const gameContextRef = useRef({});
   const [changes, setChanges] = useState([]);
+  const [favouriteChanges, setFavouriteChanges] = useState([]);
+  const [favouriteBaselineKeys, setFavouriteBaselineKeys] = useState([]);
+  const [favouriteHistoryFocus, setFavouriteHistoryFocus] = useState(null);
   const [comparisonFocus, setComparisonFocus] = useState(null);
   const publishChanges = useCallback(() => {
     setChanges(trackerRef.current.getChanges());
+    setFavouriteChanges(trackerRef.current.getFavouriteChanges());
+    setFavouriteBaselineKeys(trackerRef.current.getFavouriteBaselineKeys());
   }, []);
+  // Pin membership changes immediately, independent of any game-thread poll.
+  // A newly pinned path takes its *next* observed sample as a fresh baseline.
+  useEffect(() => {
+    trackerRef.current.setFavourites(favourites);
+    publishChanges();
+  }, [favourites, publishChanges]);
   const requestCounter = useRef(0);
 
   useEffect(() => {
@@ -655,7 +667,8 @@ export default function App() {
   // change the current watch plan, not the shared scheduler's lifetime.
   const watchJobs = useMemo(() => combineScopedWatches(
     collectWatchedPages(treePages, expanded,
-      (scope === 'compare' || scope === 'edits' || scope === 'locked') ? lastTreeScope : scope, section, favourites),
+      (scope === 'compare' || scope === 'edits' || scope === 'locked' ||
+       scope === 'pin-history') ? lastTreeScope : scope, section, favourites),
     favourites,
   ), [treePages, expanded, scope, lastTreeScope, section, favourites]);
   watchJobsRef.current = watchJobs;
@@ -863,6 +876,16 @@ export default function App() {
     trackerRef.current.clear();
     publishChanges();
   }, [publishChanges]);
+  const clearFavouriteHistory = useCallback(() => {
+    trackerRef.current.clearFavouriteHistory();
+    publishChanges();
+  }, [publishChanges]);
+  const viewSelectedFavouriteHistory = useCallback(() => {
+    if (!selected || !selectedPinned) return;
+    setFavouriteHistoryFocus(selected.key);
+    setSelected(null);
+    setScope('pin-history');
+  }, [selected, selectedPinned]);
   const activeGame = snapshot?.game ?? {};
   const online = connection === 'online';
   useEffect(() => {
@@ -969,6 +992,7 @@ export default function App() {
             </Popover>}
             items={[{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' },
               { key: 'favourites', label: `Favourites (${favourites.length})` },
+              { key: 'pin-history', label: `Pin history (${favouriteChanges.length})` },
               { key: 'compare', label: `Compare (${changes.length})` },
               ...(snapshot?.capabilities?.primitive_edits === true
                 ? [
@@ -976,8 +1000,14 @@ export default function App() {
                   { key: 'edits', label: `Edits (${snapshot?.edit_history?.entries?.length ?? 0})` },
                 ]
                 : [])]} />
-          {scope === 'compare'
-            ? <ComparePane changes={changes} favourites={favourites}
+          {scope === 'pin-history'
+            ? <FavouriteHistoryPane favourites={favourites} changes={favouriteChanges}
+                baselineKeys={favouriteBaselineKeys} focusKey={favouriteHistoryFocus}
+                onFocusChange={setFavouriteHistoryFocus} onClear={clearFavouriteHistory}
+                onInspect={inspectChange} onReveal={revealResult}
+                onOpenSource={openSourceContext} />
+            : scope === 'compare'
+              ? <ComparePane changes={changes} favourites={favourites}
                 focusedKey={comparisonFocus} onResetFocus={() => setComparisonFocus(null)}
                 onClear={clearHistory} onInspect={inspectChange}
                 onReveal={revealResult} onOpenSource={openSourceContext} />
@@ -1008,7 +1038,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.15 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.16 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :
@@ -1041,6 +1071,8 @@ export default function App() {
                 'Independent path watches · read-only values · persisted inspector settings' },
               { key: 'compare', label: 'Compare', children:
                 'Last 100 sampled transitions · exact small built-in scalar values, otherwise previews · resets after game load' },
+              { key: 'pin_history', label: 'Pin history', children:
+                'Independent session-only pinned-path history · up to 200 observations, 30 per path · begins after first pinned sample' },
               { key: 'budget', label: 'Capture limits', children:
                 '80 per page · up to 1,000 per branch · 8 levels · 6,000 loaded nodes per browser' },
               { key: 'coverage', label: 'Coverage', children: snapshot?.truncated?.store || snapshot?.truncated?.persistent ?
@@ -1059,11 +1091,15 @@ export default function App() {
           <div className="detail-heading">
             <div><Text type="secondary">{selected.scope.toUpperCase()}</Text>
               <Title level={4}>{activeNode?.name || 'Variable unavailable'}</Title></div>
-            <Button icon={selectedPinned ? <StarFilled /> : <StarOutlined />}
-              aria-label={selectedPinned ? 'Remove favourite' : 'Add favourite'}
-              onClick={() => pinVariable(selected.scope, selected.key)}>
-              {selectedPinned ? 'Pinned' : 'Pin'}
-            </Button>
+            <div className="detail-pin-actions">
+              {selectedPinned && <Button size="small" onClick={viewSelectedFavouriteHistory}
+                aria-label="View pinned variable history">Pin history</Button>}
+              <Button icon={selectedPinned ? <StarFilled /> : <StarOutlined />}
+                aria-label={selectedPinned ? 'Remove favourite' : 'Add favourite'}
+                onClick={() => pinVariable(selected.scope, selected.key)}>
+                {selectedPinned ? 'Pinned' : 'Pin'}
+              </Button>
+            </div>
           </div>
           <Descriptions column={1} size="small" bordered items={[
             { key: 'path', label: 'Path', children: <Text copyable={{ text: activeNode?.path ?? '' }} className="path-monospace">{activeNode?.path || 'Not in latest snapshot'}</Text> },

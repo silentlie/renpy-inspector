@@ -1,8 +1,33 @@
-# Current delivery plan (13 November 2026)
+# Current delivery plan (14 November 2026)
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #33 — Locked Variables workspace (v0.7.15 experimental)
+## Milestone: PR #34 — Favourite History (v0.7.16 experimental)
+
+- Reuse PR #25 Compare's existing bounded Store/Persistent observations and
+  PR #11's independent favourite path watches. Do not add a new polling loop,
+  game-thread request, HTTP endpoint or gameplay mutation.
+- Record pinned-path history separately from the global 100-event Compare
+  FIFO, limited to 200 observations overall and 30 per pinned typed path.
+  Baseline only the **first actual observation after pinning**; never
+  backfill earlier Compare entries or treat initial pinning as a change.
+- Preserve same-typed small exact primitive values and explicitly labelled
+  preview/status values, plus best-effort observed source context. Never
+  invent Ren'Py turns, mutation causality, complete coverage or past values
+  by re-reading the current game.
+- Add a full-height **Pin history** scope within the existing second tab row.
+  Filter by pinned path, event kind and path text; inspect/reveal observed
+  paths, open sampled source, and clear pin history without clearing Compare.
+  The selected variable drawer links directly to that pinned path's history.
+- Unpinning drops the corresponding private baseline/events. Re-pinning
+  starts a new baseline. Load/rollback generation changes clear the bounded
+  history but retain saved favourite subscriptions.
+- Unit and browser E2E coverage: delayed samples, direct watches, exact small
+  primitives, missing/recovery, unpin/re-pin, separate clear semantics,
+  bounded memory, source navigation and generation reset. Retain dual-engine
+  CI, SDK lint and preview-package validation.
+
+## Previous milestone: PR #33 — Locked Variables workspace (v0.7.15 experimental)
 
 - Add a dedicated **Locked** scope beside Store, Persistent, Favourites and
   Compare, visible only while trusted game init enables primitive editing.
