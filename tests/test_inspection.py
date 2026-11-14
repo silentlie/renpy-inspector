@@ -130,6 +130,45 @@ class TestCore(unittest.TestCase):
         self.assertFalse(capped)
         self.assertIs(read_child(obj, ('attribute', 'secret')), MISSING)
 
+    def test_native_slot_alias_cannot_expose_a_private_base_field(self):
+        class Parent(object):
+            __slots__ = ('safe', '_private')
+        class Child(Parent):
+            __slots__ = ('alias',)
+        obj = Child()
+        obj.safe = 17
+        Parent.__dict__['_private'].__set__(obj, 'secret')
+        # A writable class dictionary allows swapping a native slot
+        # descriptor after class creation. The alias must not expose it.
+        Child.alias = Parent.__dict__['_private']
+        self.assertEqual(child_descriptors(obj, 80)[0],
+                         [(('attribute', 'safe'), 'safe')])
+        self.assertIs(read_child(obj, ('attribute', 'alias')), MISSING)
+        self.assertIs(read_child(obj, ('attribute', '_private')), MISSING)
+
+    def test_custom_dict_properties_and_module_getters_never_run(self):
+        class CustomDict(object):
+            def __init__(self):
+                self.public = 2
+            @property
+            def __dict__(self):
+                raise AssertionError('custom __dict__ getter invoked')
+        obj = CustomDict()
+        self.assertFalse(snapshot(obj)[3])
+        self.assertEqual(child_descriptors(obj, 80), ([], False))
+        self.assertIs(read_child(obj, ('attribute', 'public')), MISSING)
+
+        class SpecialModule(ModuleType):
+            def __getattribute__(self, key):
+                if key == '__dict__':
+                    raise AssertionError('custom module __dict__ read invoked')
+                return ModuleType.__getattribute__(self, key)
+        mod = SpecialModule('store')
+        ModuleType.__dict__['__dict__'].__get__(mod, ModuleType)['score'] = 5
+        self.assertEqual(child_descriptors(mod, 40, True)[0],
+                         [(('attribute', 'score'), 'score')])
+        self.assertEqual(read_child(mod, ('attribute', 'score')), 5)
+
     def test_slot_enumeration_is_bounded_and_hidden_items_are_not_accessible(self):
         class ManySlots(object):
             __slots__ = tuple('item_{}'.format(i) for i in range(150))
@@ -262,16 +301,17 @@ class TestController(unittest.TestCase):
         ins.toggle_node((('attribute', 'game'),))
         self.assertEqual(ins.rows[1].preview, '100')
 
-    def test_per_node_errors_isolated(self):
+    def test_unsafe_instance_dict_property_is_not_called(self):
         class Broken:
             @property
             def __dict__(self):
-                raise RuntimeError('blocked')
+                raise AssertionError('custom dictionary getter invoked')
         ins, state, _ = self.make_inspector()
         state['store'].game = Broken()
         ins.refresh()
         self.assertEqual(len(ins.rows), 1)
-        self.assertEqual(ins.rows[0].state, 'error')
+        self.assertEqual(ins.rows[0].state, 'value')
+        self.assertFalse(ins.rows[0].expandable)
 
     def test_many_children_capped(self):
         ins, state, _ = self.make_inspector()
