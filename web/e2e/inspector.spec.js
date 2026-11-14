@@ -889,3 +889,67 @@ test('locked variables workspace lists, refreshes and releases active locks', as
     expect(latest.locks.entries).toHaveLength(0);
   } finally { await game.stop(); }
 });
+
+test('pin history only records post-pin observations and keeps Compare independent', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Add score to favourites' }).click();
+  await page.getByRole('button', { name: 'Add memo to favourites' }).click();
+  await page.getByRole('tab', { name: /Pin history \(0\)/ }).click();
+  const workspace = page.getByRole('region', { name: 'Favourite change history' });
+  const records = workspace.locator('.pin-history-entry');
+  await expect(workspace).toContainText('2 / 2 pins have a captured baseline',
+    { timeout: 12000 });
+
+  await game.command('set_score', { value: 17 });
+  await game.command('change_memo', { value: 'after' });
+  await expect(records).toHaveCount(2, { timeout: 12000 });
+  await expect(records.filter({ hasText: 'store.score' }).locator('.pin-history-sample').last())
+    .toHaveText('17');
+  await expect(records.filter({ hasText: 'store.memo' }).locator('.pin-history-sample').last())
+    .toHaveText('A'.repeat(110) + 'after');
+  await workspace.getByRole('textbox', { name: 'Filter pinned history paths' }).fill('memo');
+  await expect(records).toHaveCount(1);
+  await workspace.getByRole('textbox', { name: 'Filter pinned history paths' }).fill('');
+
+  await records.filter({ hasText: 'store.memo' })
+    .getByRole('button', { name: 'Inspect variable' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Variable details' });
+  await expect(drawer.getByRole('button', { name: 'View pinned variable history' }))
+    .toBeVisible();
+  await drawer.getByRole('button', { name: 'View pinned variable history' }).click();
+  await expect(page.getByRole('tab', { name: /Pin history \(2\)/ }))
+    .toHaveAttribute('aria-selected', 'true');
+  await expect(records).toHaveCount(1);
+  await expect(records.first()).toContainText('store.memo');
+
+  await workspace.getByRole('button', { name: 'Clear pinned history' }).click();
+  await expect(records).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /Compare \(2\)/ })).toBeVisible();
+
+  await game.command('change_memo', { value: 'later' });
+  await expect(records).toHaveCount(1, { timeout: 12000 });
+  await expect(records.first().locator('.pin-history-sample').first())
+    .toHaveText('A'.repeat(110) + 'after');
+  await game.command('restore_game');
+  await expect(page.getByRole('tab', { name: 'Pin history (0)' }))
+    .toBeVisible({ timeout: 12000 });
+  await expect(records).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Favourites (2)' })).toBeVisible();
+});
+
+test('unpinning discards favourite history without erasing Compare history', async ({ page, game }) => {
+  await page.goto(game.url);
+  await page.getByRole('button', { name: 'Add score to favourites' }).click();
+  await page.getByRole('tab', { name: /Pin history \(0\)/ }).click();
+  const workspace = page.getByRole('region', { name: 'Favourite change history' });
+  await expect(workspace).toContainText('1 / 1 pins have a captured baseline',
+    { timeout: 12000 });
+  await game.command('set_score', { value: 20 });
+  await expect(workspace.locator('.pin-history-entry')).toHaveCount(1, { timeout: 12000 });
+  await page.getByRole('tab', { name: 'Store', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove score from favourites' }).click();
+  await expect(page.getByRole('tab', { name: 'Pin history (0)' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Compare \(1\)/ })).toBeVisible();
+  await page.getByRole('tab', { name: 'Pin history (0)' }).click();
+  await expect(workspace).toContainText('Pin a Store or Persistent value to start monitoring');
+});

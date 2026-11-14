@@ -350,3 +350,38 @@ html, body { overscroll-behavior: none; }
   .locked-entry-actions .ant-btn { flex:1 1 auto; }
   .locked-filter { max-width:none; }
 }
+
+/* PR #34: pinned history uses the existing two-row tabs and same sampled values. */
+.pin-history-workspace { display:flex;flex:1 1 auto;flex-direction:column;
+  min-width:0;min-height:0;overflow:hidden; }
+.pin-history-toolbar { display:flex;flex:0 0 auto;flex-direction:column;gap:8px;
+  padding:10px 14px;border-bottom:1px solid #29394f; }
+.pin-history-description { font-size:11px;line-height:1.5;max-width:850px; }
+.pin-history-controls { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.pin-history-select { width:min(350px,100%);max-width:100%; }
+.pin-history-filter { width:min(220px,100%); }
+.pin-history-controls .ant-select { min-width:120px; }
+.pin-history-count { font-size:11px; }
+.pin-history-list { flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;
+  overscroll-behavior:contain;padding:0 14px 12px; }
+.pin-history-entry { padding:11px 0 10px;border-bottom:1px solid #28394e; }
+.pin-history-entry-title { display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap; }
+.pin-history-path { min-width:0;overflow-wrap:anywhere;
+  font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.pin-history-context { display:block;margin:4px 0 7px;font-size:11px; }
+.pin-history-values { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px; }
+.pin-history-values > div { min-width:0;display:flex;flex-direction:column;gap:4px; }
+.pin-history-sample { display:block;max-height:220px;overflow:auto;margin:0;
+  padding:7px;border-radius:4px;background:#111e30;color:#c4d9f3;
+  font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;
+  white-space:pre-wrap;overflow-wrap:anywhere; }
+.pin-history-actions { display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
+.pin-history-actions .ant-btn { padding-left:0; }
+.pin-history-empty { margin:45px 0; }
+.detail-pin-actions { display:flex;gap:7px;align-items:center;flex-wrap:wrap; }
+@media (max-width:680px) {
+  .pin-history-toolbar { padding:8px 10px; }
+  .pin-history-list { padding:0 10px 10px; }
+  .pin-history-select,.pin-history-filter { width:100%; }
+  .pin-history-values { grid-template-columns:minmax(0,1fr);gap:7px; }
+}
