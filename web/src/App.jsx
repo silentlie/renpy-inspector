@@ -30,6 +30,7 @@ import LockedVariablesPane from './LockedVariablesPane.jsx';
 import { parseExactPath } from './exact-path.js';
 import { sourceTargetForContext } from './scripts.js';
 import { valuePresentation } from './value-format.js';
+import PythonValueSyntax from './PythonValueSyntax.jsx';
 import { useFavouritePreferences } from './useFavouritePreferences.js';
 
 const { Text, Title, Paragraph } = Typography;
@@ -127,7 +128,8 @@ function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle,
       </Tooltip>}
     </span>
     <span className={`variable-preview preview-${previewKind(node.type)}`}
-      title={`${node.type} · ${node.preview}`}>{node.preview}</span>
+      title={`${node.type} · ${node.preview}`}><PythonValueSyntax
+        text={node.preview} type={node.type} state={node.state} /></span>
     <span className="variable-actions">
       <Tooltip title="Inspect path and value">
         <button type="button" className="row-icon-button" aria-label={`Inspect ${node.name}`}
@@ -325,7 +327,9 @@ function ComparePane({ changes, favourites, focusedKey, onResetFocus,
               <div key={label}>
                 <Text type="secondary">{label} · {value.precision === 'exact'
                   ? 'exact sampled scalar' : 'preview/status'}</Text>
-                <pre className={`compare-sample value-tone-${valuePresentation(value.type, value.kind).tone}`}>{comparisonText(value)}</pre>
+                <pre className={`compare-sample value-tone-${valuePresentation(value.type, value.kind).tone}`}><PythonValueSyntax
+                  text={comparisonText(value)} type={value.type}
+                  source={value.precision === 'exact' ? 'exact' : 'preview'} state={value.kind} /></pre>
               </div>)}
           </div>
           <div className="compare-actions">
@@ -1057,7 +1061,9 @@ export default function App() {
                 onClick={() => activeNode && navigator.clipboard?.writeText(activeNode.preview).catch(() => {})}>Copy preview</Button>
             </Tooltip>
           </div>
-          <pre className={`detail-value value-tone-${valuePresentation(activeNode?.type, activeNode?.state).tone}`}>{activeNode?.preview ?? '(not available)'}</pre>
+          <pre className={`detail-value value-tone-${valuePresentation(activeNode?.type, activeNode?.state).tone}`}><PythonValueSyntax
+            text={activeNode?.preview ?? '(not available)'} type={activeNode?.type}
+            state={activeNode?.state} /></pre>
           <div className="detail-source-actions">
             <Button size="small" icon={<SearchOutlined />}
               aria-label="Find references in Scripts" disabled={!canFindReferences}
@@ -1092,10 +1098,16 @@ export default function App() {
                 <div className="detail-history-samples">
                   <div><Text type="secondary">Before · {change.before.precision === 'exact'
                     ? 'exact scalar' : 'preview/status'}</Text>
-                    <pre className={`value-tone-${valuePresentation(change.before.type, change.before.kind).tone}`}>{comparisonText(change.before)}</pre></div>
+                    <pre className={`value-tone-${valuePresentation(change.before.type, change.before.kind).tone}`}><PythonValueSyntax
+                        text={comparisonText(change.before)} type={change.before.type}
+                        source={change.before.precision === 'exact' ? 'exact' : 'preview'}
+                        state={change.before.kind} /></pre></div>
                   <div><Text type="secondary">After · {change.after.precision === 'exact'
                     ? 'exact scalar' : 'preview/status'}</Text>
-                    <pre className={`value-tone-${valuePresentation(change.after.type, change.after.kind).tone}`}>{comparisonText(change.after)}</pre></div>
+                    <pre className={`value-tone-${valuePresentation(change.after.type, change.after.kind).tone}`}><PythonValueSyntax
+                        text={comparisonText(change.after)} type={change.after.type}
+                        source={change.after.precision === 'exact' ? 'exact' : 'preview'}
+                        state={change.after.kind} /></pre></div>
                 </div>
               </div>) :
               <Text type="secondary">

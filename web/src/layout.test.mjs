@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 
 const jsx = readFileSync(new URL('./App.jsx', import.meta.url), 'utf8');
 const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+const valueSyntax = readFileSync(new URL('./python-value-syntax.js', import.meta.url), 'utf8');
+const valueSyntaxComponent = readFileSync(new URL('./PythonValueSyntax.jsx', import.meta.url), 'utf8');
+const pinnedHistory = readFileSync(new URL('./FavouriteHistoryPane.jsx', import.meta.url), 'utf8');
 const preferenceHook = readFileSync(new URL('./useFavouritePreferences.js', import.meta.url), 'utf8');
 
 test('SugarCube-style top-level and nested variable scope navigation', () => {
@@ -169,4 +172,16 @@ test('pin history reuses the existing comparison samples and does not grow the p
   assert.match(css, /\.pin-history-workspace \{ display:flex;/);
   assert.match(css, /\.pin-history-list \{ flex:1 1 auto;/);
   assert.doesNotMatch(jsx, /new WebSocket|EventSource|new SetInterval/);
+});
+
+test('Python token highlighting is client-only, bounded and does not change UI geometry', () => {
+  assert.match(jsx, /<PythonValueSyntax/);
+  assert.match(pinnedHistory, /<PythonValueSyntax/);
+  assert.match(valueSyntaxComponent, /tokenizePythonValue/);
+  assert.match(valueSyntax, /MAX_VALUE_SYNTAX_CHARS = 1024/);
+  assert.match(valueSyntax, /MAX_VALUE_SYNTAX_TOKENS = 96/);
+  assert.doesNotMatch(valueSyntaxComponent, /dangerouslySetInnerHTML|innerHTML|eval\(/);
+  assert.doesNotMatch(valueSyntax, /eval\(|new Function|fetch\(|setInterval\(/);
+  assert.match(css, /\.value-token-string/);
+  assert.match(css, /\.value-token-number/);
 });

@@ -2,7 +2,28 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #35 — Favourites Management & Sync (v0.7.17 experimental)
+## Milestone: PR #36 — Python Value Syntax Highlighting (v0.7.18 experimental)
+
+- Borrow SugarCube's token-level preview legibility, but use a small,
+  bounded, browser-only Python repr/literal lexer rather than JavaScript Prism.
+- Colour short captured string, numeric, boolean, None and built-in container
+  previews in virtualised Store/Persistent/Favourites rows and details.
+  Reuse the same renderer in Compare, Pin history and selected-variable
+  observed history without changing any sample data or exactness labels.
+- Treat exact captured scalar strings as literal text, not Python source:
+  reserved words, digits, quotes, markup and escapes inside them remain one
+  string token. Unknown game objects and missing/error statuses are plain.
+- Preserve the exact original preview text, support malformed or clipped repr,
+  and bail out to plain text above 1,024 characters or 96 tokens.
+  Render only escaped React text nodes; no innerHTML, eval, game-defined repr
+  calls, game-thread reads, HTTP endpoints, timers or new backend code.
+- Keep full on-demand values and copy operations literal and untouched.
+- Cover token classification, truncated strings, escaping/markup, numeric
+  spelling, bounded fallback, and browser E2E tree/details/Compare.
+- Gate merge on frontend unit/build, real browser/bridge E2E, dual-engine
+  graphical runs, Python 2/3 tests, SDK lint and both preview packages.
+
+## Previous milestone: PR #35 — Favourites Management & Sync (v0.7.17 experimental)
 
 - Preserve inspector-only per-game storage (never embed settings in gameplay saves).
 - Add confirmed Clear all in the Favourites scope; only remove the exact

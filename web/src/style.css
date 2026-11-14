@@ -264,6 +264,15 @@ html, body { overscroll-behavior: none; }
 .source-token-literal { color:#c6a2f1; }
 .source-token-number { color:#a6d5f2; }
 .source-token-plain { color:inherit; }
+/* PR #36: token presentation only. No text is interpreted or evaluated.
+   Full raw values remain literal; token spans appear in short captures. */
+.value-token-string { color:#e4bf88; }
+.value-token-number { color:#a6d5f2; }
+.value-token-boolean { color:#89dcba; }
+.value-token-null { color:#c6a2f1; }
+.value-token-builtin { color:#87b8e4; }
+.value-token-punctuation { color:#b6c8df; }
+.value-token-plain { color:inherit; }
 /* Full raw values and sampled previews are never parsed or evaluated as Python. */
 .value-tone-string { color:#e4bf88!important; }
 .value-tone-number { color:#a6d5f2!important; }
