@@ -43,7 +43,7 @@ test('nested built-in previews keep exact original text and quote boundaries', (
 });
 
 test('escaped quotes and truncated reprs never lose text or retokenize strings', () => {
-  const source = String.raw`['abc\\' True', "xyz\\\" False", u'cut-off…`;
+  const source = String.raw`['abc\' True', "xyz\" False", u'cut-off…`;
   const t = show(source, { type: 'list' });
   assert.equal(rejoin(t), source);
   assert.equal(t.filter((x) => x.kind === 'boolean').length, 0);
