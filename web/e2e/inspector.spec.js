@@ -1048,6 +1048,27 @@ test('opted-in inline edit reads exact current value and requires separate confi
   } finally { await game.stop(); }
 });
 
+test('switching Store scope retires the inline editor instead of silently reopening it', async ({ page }) => {
+  const game = await startBridgeFixture({ editing: true });
+  try {
+    await page.goto(game.url);
+    const button = page.getByRole('button', { name: 'Edit score inline' });
+    await button.click();
+    const inline = page.getByRole('region', { name: 'Inline primitive editing' });
+    const draft = inline.getByRole('textbox', { name: 'Inline new literal value' });
+    await expect(draft).toHaveValue('2');
+    await draft.fill('777');
+    await page.getByRole('tab', { name: 'Persistent', exact: true }).click();
+    await expect(inline).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Store', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit score inline' }))
+      .toHaveAttribute('aria-expanded', 'false');
+    await expect(inline).toHaveCount(0);
+    await page.getByRole('button', { name: 'Edit score inline' }).click();
+    await expect(draft).toHaveValue('2');
+  } finally { await game.stop(); }
+});
+
 test('inline conflicts keep drafts but require re-confirmation and exact-value rebasing', async ({ page }) => {
   const game = await startBridgeFixture({ editing: true });
   try {
