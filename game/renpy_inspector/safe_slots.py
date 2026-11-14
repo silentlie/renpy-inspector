@@ -8,7 +8,7 @@ new-style objects and Python 3 are supported.
 """
 from __future__ import unicode_literals
 
-from types import MemberDescriptorType
+from types import GetSetDescriptorType, MemberDescriptorType
 
 from .compat import string_types
 
@@ -76,12 +76,46 @@ def safe_slot_descriptors(value, limit=MAX_SLOT_FIELDS):
             descriptor = fields[name] if name in fields else None
             if type(descriptor) is not MemberDescriptorType:
                 continue
+            # A class can replace a declared slot with another class's native
+            # descriptor. Never reveal a private slot aliased as a public name.
+            if descriptor.__name__ != name or descriptor.__objclass__ is not base:
+                continue
             if len(found) < limit:
                 found.append((name, descriptor))
             else:
                 truncated = True
         seen_class_dicts.append(fields)
     return found, truncated
+
+
+def safe_instance_dict(value):
+    """Only an actual native instance dictionary, not a __dict__ property.
+
+    object.__getattribute__(instance, '__dict__') still dispatches Python
+    class properties and custom descriptors. Walk static class dictionaries
+    and invoke only the exact built-in descriptor that owns the field.
+    """
+    try:
+        hierarchy = type.__getattribute__(type(value), str('__mro__'))
+    except (AttributeError, TypeError):
+        return None
+    if type(hierarchy) is not tuple:
+        return None
+    for base in hierarchy[:MAX_SLOT_MRO]:
+        fields = _static_class_dict(base)
+        if fields is None or '__dict__' not in fields:
+            continue
+        descriptor = fields['__dict__']
+        if (type(descriptor) is not GetSetDescriptorType or
+                descriptor.__name__ != '__dict__' or
+                descriptor.__objclass__ is not base):
+            return None
+        try:
+            data = descriptor.__get__(value, type(value))
+        except (AttributeError, TypeError):
+            return None
+        return data if type(data) is dict else None
+    return None
 
 
 def safe_slot_values(value, limit=MAX_SLOT_FIELDS):
