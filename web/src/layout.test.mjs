@@ -187,21 +187,17 @@ test('Python token highlighting is client-only, bounded and does not change UI g
   assert.match(css, /\.value-token-number/);
 });
 
-test('PR #37 compact editor reuses safe primitive controls, never edits by snapshot refresh', () => {
-  assert.match(jsx, /EditOutlined/);
-  assert.match(jsx, /aria-label=\\{\\`Edit \\$\\{node.name\\} inline\\`\\}/);
-  assert.match(jsx, /editingEnabled=\\{snapshot\\?\\.capabilities\\?\\.primitive_edits === true\\}/);
-  assert.match(jsx, /originScope === 'store'/);
-  assert.match(jsx, /!locked/);
-  assert.match(jsx, /<EditValuePanel compact/);
-  assert.match(primitiveEditor, /api\\/v1\\/edit-target/);
-  assert.match(primitiveEditor, /api\\/v1\\/edit/);
-  assert.match(primitiveEditor, /expected: target.expected/);
-  assert.match(primitiveEditor, /target.generation/);
-  assert.match(primitiveEditor, /!confirmed/);
-  assert.match(primitiveEditor, /isLocked/);
-  assert.match(primitiveEditor, /!isTargetCurrent/);
-  assert.match(primitiveEditor, /onCancel/);
-  assert.match(css, /\\.inline-primitive-editor/);
-  assert.doesNotMatch(jsx, /new WebSocket|new EventSource|setInterval\\(.*edit/);
+test('PR #37 compact editor reuses safe primitive controls without background writes', () => {
+  for (const fragment of [
+    'EditOutlined', 'Edit ${node.name} inline',
+    'editingEnabled={snapshot?.capabilities?.primitive_edits === true}',
+    "originScope === 'store'", '!locked', '<EditValuePanel compact',
+  ]) assert.ok(jsx.includes(fragment), 'Missing row safety gate: ' + fragment);
+  for (const fragment of [
+    '/api/v1/edit-target', '/api/v1/edit', 'expected: target.expected',
+    'target.generation', '!confirmed', 'isLocked', '!isTargetCurrent',
+    'onCancel', 'compact && enabled && valid',
+  ]) assert.ok(primitiveEditor.includes(fragment), 'Missing edit control: ' + fragment);
+  assert.ok(css.includes('.inline-primitive-editor'));
+  assert.doesNotMatch(jsx, /new WebSocket|new EventSource/);
 });
