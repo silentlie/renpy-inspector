@@ -55,6 +55,30 @@ class SlotCompatibilityTests(unittest.TestCase):
         self.assertIs(read_child(value, ('attribute', 'unset')), MISSING)
         self.assertIs(read_child(value, ('attribute', 'bad')), MISSING)
 
+    def test_private_slot_alias_and_custom_dict_property_are_not_executed(self):
+        class Parent(object):
+            __slots__ = ('_secret', 'score')
+        class Child(Parent):
+            __slots__ = ('alias',)
+        obj = Child()
+        object.__setattr__(obj, 'score', 7)
+        Parent.__dict__['_secret'].__set__(obj, 'classified')
+        Child.alias = Parent.__dict__['_secret']
+        nodes, capped = child_descriptors(obj, 80)
+        self.assertEqual([entry[0][1] for entry in nodes], ['score'])
+        self.assertFalse(capped)
+        self.assertIs(read_child(obj, ('attribute', 'alias')), MISSING)
+        self.assertIs(read_child(obj, ('attribute', '_secret')), MISSING)
+
+        class Tricky(object):
+            @property
+            def __dict__(self):
+                raise AssertionError('user dictionary descriptor called')
+        invalid = Tricky()
+        self.assertEqual(child_descriptors(invalid, 80), ([], False))
+        self.assertFalse(snapshot(invalid)[3])
+        self.assertIs(read_child(invalid, ('attribute', 'foo')), MISSING)
+
     def test_slot_count_is_independent_of_caller_page_size(self):
         class Many(object):
             __slots__ = tuple('field{}'.format(i) for i in range(100))
