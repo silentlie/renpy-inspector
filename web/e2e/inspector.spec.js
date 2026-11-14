@@ -1135,7 +1135,10 @@ test('namedtuple shows safe field labels in virtual tree and independent favouri
   await expect(mana.locator('.variable-preview')).toHaveText('7');
   await health.getByRole('button', { name: 'Add [0] health to favourites' }).click();
   await page.getByRole('tab', { name: 'Favourites (1)' }).click();
-  await expect(page.locator('.variable-row').filter({
+  // Ant keeps the prior scope mounted in an inactive tab; scope the
+  // assertion to the displayed Favourites workspace.
+  const favouriteRow = page.locator('.variable-pane:visible .variable-row').filter({
     has: page.locator('.variable-key', { hasText: '[0] health' }),
-  }).locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
+  });
+  await expect(favouriteRow.locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
 });
