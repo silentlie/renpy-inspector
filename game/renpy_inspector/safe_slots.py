@@ -90,7 +90,7 @@ def safe_slot_values(value, limit=MAX_SLOT_FIELDS):
         try:
             # Calling the *exact built-in* slot descriptor does not dispatch
             # user-defined __getattribute__, __getattr__ or properties.
-            current = MemberDescriptorType.__get__(descriptor, value, type(value))
+            current = descriptor.__get__(value, type(value))
         except (AttributeError, TypeError):
             continue
         result.append((name, current))
@@ -106,7 +106,7 @@ def read_safe_slot(value, key):
     for name, descriptor in descriptors:
         if key == name:
             try:
-                return MemberDescriptorType.__get__(descriptor, value, type(value))
+                return descriptor.__get__(value, type(value))
             except (AttributeError, TypeError):
                 return MISSING
     return MISSING
