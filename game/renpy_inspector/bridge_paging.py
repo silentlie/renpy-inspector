@@ -219,12 +219,19 @@ def build_tree_value(providers, scope, path):
     ancestors = set((id(value),))
     missing = False
     is_cycle = False
+    last_index_label = None
     for depth, segment in enumerate(path):
         descriptors, unused_truncated = child_descriptors(
             value, MAX_BRANCH, is_store_root=(depth == 0 and scope == 'store'))
-        if segment not in [pair[0] for pair in descriptors]:
+        matched_label = next((label for visible_segment, label in descriptors
+                              if visible_segment == segment), None)
+        if matched_label is None:
             missing = True
             break
+        if depth == len(path) - 1 and segment[0] == 'index':
+            # Preserve a namedtuple's field label in independently watched
+            # favourites, without switching to unsafe attribute lookups.
+            last_index_label = matched_label
         value = read_child(value, segment)
         if value is MISSING:
             missing = True
@@ -243,6 +250,8 @@ def build_tree_value(providers, scope, path):
     name = last_value if last_kind == 'attribute' else (
         '[{}]'.format(last_value) if last_kind == 'index' else
         '{' + repr(last_value) + '}' if last_kind == 'member' else repr(last_value))
+    if not missing and last_index_label is not None:
+        name = last_index_label
     node = {
         'key': json.dumps([scope, path], ensure_ascii=True, separators=(',', ':')),
         'name': _safe_text(name, 90),
