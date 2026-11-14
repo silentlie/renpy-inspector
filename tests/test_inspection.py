@@ -170,6 +170,25 @@ class TestCore(unittest.TestCase):
                          [(('attribute', 'score'), 'score')])
         self.assertEqual(read_child(mod, ('attribute', 'score')), 5)
 
+    def test_renpy_style_store_uses_native_rollback_aware_dict_subclass(self):
+        class StoreDict(dict):
+            def __iter__(self):
+                raise AssertionError('custom StoreDict iterator invoked')
+            def __getitem__(self, key):
+                raise AssertionError('custom StoreDict getter invoked')
+        class StoreModule(object):
+            def __init__(self, data):
+                object.__setattr__(self, '__dict__', data)
+            def __getattribute__(self, key):
+                raise AssertionError('custom StoreModule getter invoked')
+        store = StoreModule(StoreDict(e2e_value=1, inventory={'hp': 5}))
+        nodes, capped = child_descriptors(store, 80, is_store_root=True)
+        self.assertFalse(capped)
+        self.assertEqual([n[0][1] for n in nodes], ['e2e_value', 'inventory'])
+        self.assertEqual(read_child(store, ('attribute', 'e2e_value')), 1)
+        self.assertEqual(read_child(store, ('attribute', 'inventory')), {'hp': 5})
+        self.assertTrue(snapshot(store)[3])
+
     def test_slot_enumeration_is_bounded_and_hidden_items_are_not_accessible(self):
         class ManySlots(object):
             __slots__ = tuple('item_{}'.format(i) for i in range(150))
