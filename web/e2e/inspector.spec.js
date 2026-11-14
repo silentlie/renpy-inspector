@@ -982,3 +982,26 @@ test('favourites synchronize across tabs and confirmed Clear All is durable', as
       .toBeVisible({ timeout: 15000 });
   } finally { await other.close(); }
 });
+
+
+test('captured Python value tokens render in virtual rows, details and Compare', async ({ page, game }) => {
+  await page.goto(game.url);
+  const row = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: /^score$/ }),
+  });
+  await expect(row.locator('.variable-preview .value-token-number')).toHaveText('2');
+
+  await page.getByRole('button', { name: 'Inspect score' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Variable details' });
+  await expect(drawer.locator('.detail-value .value-token-number')).toHaveText('2');
+  await drawer.getByRole('button', { name: 'Close', exact: true }).click().catch(async () => {
+    await page.keyboard.press('Escape');
+  });
+  await game.command('set_score', { value: 43 });
+  await expect(row.locator('.variable-preview .value-token-number')).toHaveText('43', { timeout: 12000 });
+  await page.getByRole('tab', { name: /Compare \(/ }).click();
+  const samples = page.locator('.compare-sample .value-token-number');
+  await expect(samples.first()).toBeVisible({ timeout: 12000 });
+  const captured = await page.locator('.compare-sample').allTextContents();
+  expect(captured).toContain('43');
+});
