@@ -33,7 +33,7 @@ from .bridge_scripts import (list_labels, source_excerpt, search_source_text,
                              validate_label_request, validate_source_request,
                              validate_source_search_request)
 from .browser_favourites import (BrowserFavouritesStore,
-                                 MAX_PREFERENCE_BYTES, validate_favourites)
+                                 MAX_PREFERENCE_BYTES, FavouritesConflict, validate_favourites)
 from .compat import monotonic_time
 from .runtime_history import RuntimeTimeline
 from .edit_values import (MAX_EDIT_REQUEST_BYTES, validate_edit_request,
@@ -250,14 +250,25 @@ class _Handler(BaseHTTPRequestHandler):
             if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
                 raise ValueError('invalid preference type')
             payload = json.loads(self.rfile.read(size).decode('utf-8'))
-            if not isinstance(payload, dict) or set(payload) != set(('version', 'favourites')) or payload['version'] != 1:
+            if not isinstance(payload, dict) or set(payload) not in (
+                    set(('version', 'favourites')),
+                    set(('version', 'favourites', 'revision'))) or payload['version'] != 1:
                 raise ValueError('invalid preference payload')
+            expected_revision = payload.get('revision')
+            if 'revision' in payload and (
+                    type(expected_revision) is not int or
+                    not 0 <= expected_revision < 2 ** 53):
+                raise ValueError('invalid preference revision')
             validated = validate_favourites(payload['favourites'])
         except (ValueError, TypeError, UnicodeError, OverflowError):
             self._send(400, b'Invalid favourites', origin=origin)
             return
         try:
-            result = bridge.favourites_store.save(validated)
+            result = bridge.favourites_store.save(validated, expected_revision)
+        except FavouritesConflict as conflict:
+            self._send(409, encode_snapshot(conflict.current),
+                       'application/json; charset=utf-8', origin=origin)
+            return
         except (OSError, IOError, ValueError):
             self._send(503, b'Cannot save inspector preferences', origin=origin)
             return
