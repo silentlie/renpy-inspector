@@ -8,6 +8,7 @@ const valueSyntax = readFileSync(new URL('./python-value-syntax.js', import.meta
 const valueSyntaxComponent = readFileSync(new URL('./PythonValueSyntax.jsx', import.meta.url), 'utf8');
 const pinnedHistory = readFileSync(new URL('./FavouriteHistoryPane.jsx', import.meta.url), 'utf8');
 const preferenceHook = readFileSync(new URL('./useFavouritePreferences.js', import.meta.url), 'utf8');
+const primitiveEditor = readFileSync(new URL('./EditValuePanel.jsx', import.meta.url), 'utf8');
 
 test('SugarCube-style top-level and nested variable scope navigation', () => {
   for (const key of ["key: 'overview'", "key: 'variables'", "key: 'scripts'", "key: 'store'", "key: 'persistent'", "key: 'favourites'"]) {
@@ -184,4 +185,23 @@ test('Python token highlighting is client-only, bounded and does not change UI g
   assert.doesNotMatch(valueSyntax, /eval\(|new Function|fetch\(|setInterval\(/);
   assert.match(css, /\.value-token-string/);
   assert.match(css, /\.value-token-number/);
+});
+
+test('PR #37 compact editor reuses safe primitive controls, never edits by snapshot refresh', () => {
+  assert.match(jsx, /EditOutlined/);
+  assert.match(jsx, /aria-label=\\{\\`Edit \\$\\{node.name\\} inline\\`\\}/);
+  assert.match(jsx, /editingEnabled=\\{snapshot\\?\\.capabilities\\?\\.primitive_edits === true\\}/);
+  assert.match(jsx, /originScope === 'store'/);
+  assert.match(jsx, /!locked/);
+  assert.match(jsx, /<EditValuePanel compact/);
+  assert.match(primitiveEditor, /api\\/v1\\/edit-target/);
+  assert.match(primitiveEditor, /api\\/v1\\/edit/);
+  assert.match(primitiveEditor, /expected: target.expected/);
+  assert.match(primitiveEditor, /target.generation/);
+  assert.match(primitiveEditor, /!confirmed/);
+  assert.match(primitiveEditor, /isLocked/);
+  assert.match(primitiveEditor, /!isTargetCurrent/);
+  assert.match(primitiveEditor, /onCancel/);
+  assert.match(css, /\\.inline-primitive-editor/);
+  assert.doesNotMatch(jsx, /new WebSocket|new EventSource|setInterval\\(.*edit/);
 });
