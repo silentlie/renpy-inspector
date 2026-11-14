@@ -93,3 +93,39 @@ test('conflicts have bounded retries and reject a stale conflict response', asyn
     }, 3), /concurrently/);
   assert.equal(tries, 3);
 });
+
+
+test('non-ASCII typed pins use Python JSON identity for confirmation and unpin', async () => {
+  const unescaped = pin('store', 'café');
+  const bridgeKey = unescaped.key.replace('é', '\\u00e9');
+  const canonical = { scope: 'store', key: bridgeKey };
+  const emoji = pin('store', 'smile😀');
+  const emojiBridge = emoji.key.replace('😀', '\\ud83d\\ude00');
+  assert.deepEqual(applyFavouriteAction([], { kind: 'pin', entry: unescaped }), [canonical]);
+  assert.deepEqual(applyFavouriteAction([], { kind: 'pin', entry: emoji }),
+    [{ scope: 'store', key: emojiBridge }]);
+  assert.deepEqual(applyFavouriteAction([canonical], { kind: 'unpin', entry: canonical }), []);
+
+  let server = snapshot(0, []);
+  let count = 0;
+  const saved = await commitFavouriteAction(server, { kind: 'pin', entry: unescaped },
+    async (revision, favourites) => {
+      count += 1;
+      assert.equal(revision, server.revision);
+      assert.deepEqual(favourites, [canonical]);
+      server = snapshot(revision + 1, [canonical]);
+      return { status: 200, data: server };
+    });
+  assert.equal(count, 1);
+  assert.deepEqual(saved.favourites, [canonical]);
+  assert.deepEqual(readFavouriteSnapshot(saved).favourites, [canonical]);
+});
+
+test('favourite canonicalization rejects over-budget ASCII-expanded keys', async () => {
+  const { safeFavourites } = await import('./tree.js');
+  const valid = pin('store', 'é');
+  const oversized = pin('store', 'é'.repeat(400));
+  assert.deepEqual(safeFavourites([valid, oversized]), [
+    { scope: 'store', key: valid.key.replace('é', '\\u00e9') },
+  ]);
+});
