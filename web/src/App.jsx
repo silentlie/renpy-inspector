@@ -143,7 +143,13 @@ function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle,
         <button type="button" className="row-icon-button"
           aria-label={`Edit ${node.name} inline`} aria-expanded={editingActive}
           title="Edit this Store primitive inline (explicit confirmation required)"
-          onClick={(event) => event.stopPropagation()}>
+          onClick={(event) => {
+            event.stopPropagation();
+            // Ant's click trigger can be swallowed by the virtualised tree.
+            // Drive the controlled popup directly from this explicit action;
+            // onOpenChange still handles dismissal when clicking outside.
+            onEditingChange(!editingActive);
+          }}>
           <EditOutlined />
         </button>
       </Popover>}
