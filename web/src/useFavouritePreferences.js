@@ -43,7 +43,8 @@ export function useFavouritePreferences(token, bridge) {
   const toggleFavourite = useCallback((scope, key) => {
     const [entry] = safeFavourites([{ scope, key }]);
     if (!entry) return;
-    const pinned = localRef.current.some((x) => x.scope === scope && x.key === key);
+    // Compare the validated canonical path, not the caller's JSON spelling.
+    const pinned = localRef.current.some((x) => x.scope === entry.scope && x.key === entry.key);
     if (!pinned && localRef.current.length >= 100) return;
     enqueue({ kind: pinned ? 'unpin' : 'pin', entry });
   }, [enqueue]);
