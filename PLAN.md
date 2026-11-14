@@ -2,7 +2,28 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #34 — Favourite History (v0.7.16 experimental)
+## Milestone: PR #35 — Favourites Management & Sync (v0.7.17 experimental)
+
+- Preserve inspector-only per-game storage (never embed settings in gameplay saves).
+- Add confirmed Clear all in the Favourites scope; only remove the exact
+  subscriptions visible at confirmation, not pins added concurrently.
+- Include a monotonic revision in the existing version-1 preferences file,
+  loading legacy files at revision zero. Authenticated PUTs with an expected
+  revision atomically reject stale writes with HTTP 409 and the latest list.
+  Keep legacy PUT compatibility for older installed browser clients.
+- Replace implicit full-list writes on any React state change with explicit
+  serialized pin/unpin/clear operations. On a 409, rebase the action on the
+  latest server revision and retry within a small fixed budget.
+- Reconcile independent browser tabs via a lightweight preference-only GET
+  at 2.5s intervals plus same-origin local-storage notifications. Do not add
+  a game-thread request, WebSocket, unbounded queue or gameplay mutation.
+- Keep the local-only fallback when the game has no writable save directory,
+  and import old browser-local pins only when the server file is uninitialized.
+- Test concurrent CAS, stale snapshots, restart, legacy migration, clear
+  semantics, conflict retries, simultaneous browser writes and two-tab
+  convergence. Preserve Python 2.7 / 3, Ren'Py 7/8 E2E and release checks.
+
+## Previous milestone: PR #34 — Favourite History (v0.7.16 experimental)
 
 - Reuse PR #25 Compare's existing bounded Store/Persistent observations and
   PR #11's independent favourite path watches. Do not add a new polling loop,

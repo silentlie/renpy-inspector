@@ -40,15 +40,24 @@ export function readBridgeFragment(fragment) {
 export function safeFavourites(data) {
   if (!Array.isArray(data)) return [];
   const unique = new Set();
-  return data.filter((x) => {
+  const result = [];
+  for (const x of data) {
     if (!x || !['store', 'persistent'].includes(x.scope) ||
-        typeof x.key !== 'string' || x.key.length > 2048) return false;
+        typeof x.key !== 'string' || x.key.length > 2048) continue;
     const decoded = decodeTreeKey(x.key);
-    if (!decoded || decoded.scope !== x.scope || !decoded.path.length) return false;
-    if (unique.has(x.key)) return false;
-    unique.add(x.key);
-    return true;
-  }).slice(0, 100);
+    if (!decoded || decoded.scope !== x.scope || !decoded.path.length) continue;
+    // The Python bridge persists json.dumps(..., ensure_ascii=True) keys.
+    // JSON.stringify keeps non-ASCII literals, so canonicalise UTF-16 code
+    // units (including emoji surrogate pairs) before comparing/saving pins.
+    const key = JSON.stringify([decoded.scope, decoded.path]).replace(
+      /[\u007f-\uffff]/g,
+      (char) => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
+    if (key.length > 2048 || unique.has(key)) continue;
+    unique.add(key);
+    result.push({ scope: x.scope, key });
+    if (result.length === 100) break;
+  }
+  return result;
 }
 
 /** Resolve browser-local favourite paths against the current bounded snapshot.

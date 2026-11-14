@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Card, Checkbox, ConfigProvider, Descriptions, Drawer, Empty, Input, Popover,
+  Button, Card, Checkbox, ConfigProvider, Descriptions, Drawer, Empty, Input, Popconfirm, Popover,
   Select, Spin, Statistic, Tabs, Tag, Tooltip, Tree, Typography, theme,
 } from 'antd';
 import {
@@ -11,7 +11,7 @@ import {
 import {
   asVirtualTreeNodes, decodeTreeKey, flatten, filteredTree, favouriteNodes,
   integrateChildPage, integrateRevealChain, keysOf, mergeRootSnapshot,
-  readBridgeFragment, refreshWatchedPage, revealParentKeys, safeFavourites,
+  readBridgeFragment, refreshWatchedPage, revealParentKeys,
   staleSample, formatTypedPath, lockIdentity, preserveNewerLockSnapshot,
 } from './tree.js';
 import {
@@ -30,10 +30,10 @@ import LockedVariablesPane from './LockedVariablesPane.jsx';
 import { parseExactPath } from './exact-path.js';
 import { sourceTargetForContext } from './scripts.js';
 import { valuePresentation } from './value-format.js';
+import { useFavouritePreferences } from './useFavouritePreferences.js';
 
 const { Text, Title, Paragraph } = Typography;
 const initialConnection = readBridgeFragment(window.location.hash);
-const FAVORITES_KEY = 'renpy-inspector-ant-favourites-v1';
 const SNAPSHOT_REFRESH_MS = 1250;
 const CHILD_PAGE_SIZE = 80;
 const MAX_CLIENT_TREE_NODES = 6000;
@@ -53,11 +53,6 @@ function pageRequestId(scope, parent, offset, generation) {
   return JSON.stringify([generation, scope, parent, offset]);
 }
 const SCOPES = [{ key: 'store', label: 'Store' }, { key: 'persistent', label: 'Persistent' }];
-
-function loadLocalFavourites() {
-  try { return safeFavourites(JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]')); }
-  catch { return []; }
-}
 
 function captureTime(epoch) {
   if (!epoch) return 'Waiting for game snapshot';
@@ -151,7 +146,7 @@ function TreeRow({ node, isFavourite, isActive, isLocked, isLockStale, onToggle,
   </span>;
 }
 
-function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite,
+function VariablePane({ scope, treePages, watchValues, query, favourites, selected, onSelect, onFavourite, onClearFavourites,
   lockedKeys, staleLockKeys, expanded, onExpand, onRequestPage, loadingPages, pageErrors, revealTarget }) {
   const viewportRef = useRef(null);
   const treeRef = useRef(null);
@@ -195,6 +190,14 @@ function VariablePane({ scope, treePages, watchValues, query, favourites, select
   }, [revealTarget, scope, height]);
 
   return <section className="variable-pane" aria-label="Variable tree workspace">
+    {scope === 'favourites' && favourites.length > 0 && <div className="favourites-actions">
+      <Popconfirm title={'Remove all ' + favourites.length + ' favourites?'}
+        description="Remove the pins currently listed. Other tabs may add new pins concurrently."
+        okText="Clear all" okButtonProps={{ danger: true }}
+        onConfirm={onClearFavourites}>
+        <Button size="small" danger aria-label="Clear all favourites">Clear all</Button>
+      </Popconfirm>
+    </div>}
     <div ref={viewportRef} className="variable-tree-viewport">
       {treeData.length ? <Tree
         ref={treeRef} className="full-width-variable-tree" blockNode showLine={{ showLeafIcon: false }}
@@ -394,10 +397,8 @@ export default function App() {
   const [sourceRequest, setSourceRequest] = useState(null);
   const sourceRequestIdRef = useRef(0);
   const [expanded, setExpanded] = useState({ store: [], persistent: [], favourites: [] });
-  const [favourites, setFavourites] = useState(loadLocalFavourites);
-  const [favouritesReady, setFavouritesReady] = useState(false);
-  const [preferencesStatus, setPreferencesStatus] = useState('Connecting');
-  const preferenceWritesRef = useRef(Promise.resolve());
+  const { favourites, preferencesStatus, toggleFavourite, clearAllFavourites } =
+    useFavouritePreferences(token, bridge);
   const [watchValues, setWatchValues] = useState({});
   const valueLoadingRef = useRef(new Set());
   const watchCaptureRef = useRef(new Map());
@@ -420,58 +421,6 @@ export default function App() {
     publishChanges();
   }, [favourites, publishChanges]);
   const requestCounter = useRef(0);
-
-  useEffect(() => {
-    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favourites)); } catch { /* private browsing */ }
-  }, [favourites]);
-
-  // Server preferences are per game, not per localhost port. Only import the
-  // browser's old localStorage pins once if no server preference file exists.
-  useEffect(() => {
-    if (!token) { setPreferencesStatus('Not paired'); return undefined; }
-    let disposed = false;
-    const bootstrap = async () => {
-      try {
-        const response = await fetch(bridge + '/api/v1/favourites', {
-          headers: { 'X-Inspector-Token': token }, cache: 'no-store', mode: 'cors',
-        });
-        if (!response.ok) throw new Error('Inspector storage HTTP ' + response.status);
-        const data = await response.json();
-        if (!disposed) {
-          setFavourites(data.initialized
-            ? safeFavourites(data.favourites)
-            : loadLocalFavourites());
-          setFavouritesReady(true);
-          setPreferencesStatus('Inspector save directory');
-        }
-      } catch (failure) {
-        if (!disposed) setPreferencesStatus('Local only: ' + (failure.message || 'Storage unavailable'));
-      }
-    };
-    bootstrap();
-    return () => { disposed = true; };
-  }, [token, bridge]);
-
-  // Serialize/debounce preference writes to prevent a slow earlier request
-  // from overwriting a later pin/unpin. Never write gameplay variables.
-  useEffect(() => {
-    if (!favouritesReady || !token) return undefined;
-    const timer = window.setTimeout(() => {
-      const entries = safeFavourites(favourites);
-      preferenceWritesRef.current = preferenceWritesRef.current.catch(() => {}).then(async () => {
-        const response = await fetch(bridge + '/api/v1/favourites', {
-          method: 'PUT', mode: 'cors',
-          headers: { 'X-Inspector-Token': token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ version: 1, favourites: entries }),
-        });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        setPreferencesStatus('Inspector save directory');
-      }).catch((failure) => {
-        setPreferencesStatus('Local only: ' + (failure.message || 'Write failed'));
-      });
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [favourites, favouritesReady, token, bridge]);
 
   useEffect(() => {
     if (!token) { setConnection('unpaired'); return; }
@@ -812,13 +761,7 @@ export default function App() {
     setSelected({ scope: chosenScope, key });
     requestFavouriteValue({ scope: chosenScope, key });
   }, [requestFavouriteValue]);
-  const pinVariable = useCallback((chosenScope, key) => {
-    if (!SCOPES.some((item) => item.key === chosenScope)) return;
-    setFavourites((before) => {
-      const rest = before.filter((x) => !(x.scope === chosenScope && x.key === key));
-      return rest.length < before.length ? rest : [...before, { scope: chosenScope, key }].slice(0, 100);
-    });
-  }, []);
+  const pinVariable = toggleFavourite;
   const onExpanded = useCallback((chosenScope, keys) => {
     setExpanded((before) => ({ ...before, [chosenScope]: keys }));
   }, []);
@@ -1022,6 +965,7 @@ export default function App() {
                 : <VariablePane scope={scope} treePages={treePages} watchValues={watchValues}
                 query={query} favourites={favourites}
                 selected={selected} onSelect={selectNode} onFavourite={pinVariable}
+                onClearFavourites={clearAllFavourites}
                 lockedKeys={lockedKeys} staleLockKeys={staleLockKeys} expanded={expanded} onExpand={onExpanded} onRequestPage={requestPage}
                 loadingPages={loadingPages} pageErrors={pageErrors}
                 revealTarget={revealTarget} />}
@@ -1038,7 +982,7 @@ export default function App() {
             <Descriptions column={1} size="small" items={[
               { key: 'game', label: 'Game', children: activeGame.game || 'Unavailable' },
               { key: 'engine', label: "Ren'Py", children: activeGame.version || 'Unavailable' },
-              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.16 preview' },
+              { key: 'version', label: 'Inspector', children: 'External workspace · v0.7.17 preview' },
               { key: 'connection', label: 'Connection', children: <span className="overview-connection">
                 {online ? <CheckCircleFilled style={{ color: '#57d5a5' }} /> :
                   connection === 'connecting' ? <Spin size="small" /> :

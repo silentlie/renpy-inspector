@@ -385,3 +385,8 @@ html, body { overscroll-behavior: none; }
   .pin-history-select,.pin-history-filter { width:100%; }
   .pin-history-values { grid-template-columns:minmax(0,1fr);gap:7px; }
 }
+
+/* PR #35: favourite management remains inside its scope, never a global toolbar. */
+.favourites-actions { display:flex;justify-content:flex-end;align-items:center;
+  flex:0 0 auto;padding:4px 12px;border-bottom:1px solid #29394f; }
+.favourites-actions .ant-btn { min-height:24px; }

@@ -953,3 +953,32 @@ test('unpinning discards favourite history without erasing Compare history', asy
   await page.getByRole('tab', { name: 'Pin history (0)' }).click();
   await expect(workspace).toContainText('Pin a Store or Persistent value to start monitoring');
 });
+
+
+test('favourites synchronize across tabs and confirmed Clear All is durable', async ({ page, game }) => {
+  const other = await page.context().newPage();
+  try {
+    await Promise.all([page.goto(game.url), other.goto(game.url)]);
+    await Promise.all([
+      page.getByRole('button', { name: 'Add score to favourites' }).click(),
+      other.getByRole('button', { name: 'Add memo to favourites' }).click(),
+    ]);
+    await expect(page.getByRole('tab', { name: 'Favourites (2)' }))
+      .toBeVisible({ timeout: 15000 });
+    await expect(other.getByRole('tab', { name: 'Favourites (2)' }))
+      .toBeVisible({ timeout: 15000 });
+
+    await page.getByRole('tab', { name: 'Favourites (2)' }).click();
+    await page.getByRole('button', { name: 'Clear all favourites' }).click();
+    await expect(page.getByText('Remove all 2 favourites?')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear all', exact: true }).click();
+
+    await expect(page.getByRole('tab', { name: 'Favourites (0)' }))
+      .toBeVisible({ timeout: 15000 });
+    await expect(other.getByRole('tab', { name: 'Favourites (0)' }))
+      .toBeVisible({ timeout: 15000 });
+    await other.reload();
+    await expect(other.getByRole('tab', { name: 'Favourites (0)' }))
+      .toBeVisible({ timeout: 15000 });
+  } finally { await other.close(); }
+});

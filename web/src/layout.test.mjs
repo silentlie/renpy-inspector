@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const jsx = readFileSync(new URL('./App.jsx', import.meta.url), 'utf8');
 const css = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+const preferenceHook = readFileSync(new URL('./useFavouritePreferences.js', import.meta.url), 'utf8');
 
 test('SugarCube-style top-level and nested variable scope navigation', () => {
   for (const key of ["key: 'overview'", "key: 'variables'", "key: 'scripts'", "key: 'store'", "key: 'persistent'", "key: 'favourites'"]) {
@@ -95,8 +96,11 @@ test('SugarCube-style subscriptions use one bounded shared scheduler', () => {
 
 
 test('browser preferences use authenticated inspector-only storage', () => {
-  assert.match(jsx, /api\/v1\/favourites/);
-  assert.match(jsx, /method: 'PUT'/);
+  assert.match(jsx, /useFavouritePreferences/);
+  assert.match(preferenceHook, /api\/v1\/favourites/);
+  assert.match(preferenceHook, /method: 'PUT'/);
+  assert.match(preferenceHook, /revision, favourites: entries/);
+  assert.match(jsx, /Clear all favourites/);
   assert.match(jsx, /api\/v1\/value/);
   assert.match(jsx, /requestFavouriteValue/);
   assert.match(jsx, /combineScopedWatches/);
