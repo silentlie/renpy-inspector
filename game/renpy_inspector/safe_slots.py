@@ -20,8 +20,10 @@ MAX_SLOT_NAME_CHARS = 80
 
 def _static_class_dict(base):
     """Bypass metaclass overrides of __getattribute__."""
+    # Python 2's type.__getattribute__ requires a byte-string name, even
+    # when this module uses unicode_literals. ASCII str() is safe on both.
     try:
-        return type.__getattribute__(base, '__dict__')
+        return type.__getattribute__(base, str('__dict__'))
     except (AttributeError, TypeError):
         return None
 
@@ -47,7 +49,7 @@ def safe_slot_descriptors(value, limit=MAX_SLOT_FIELDS):
     if type(limit) is not int or not 1 <= limit <= MAX_SLOT_FIELDS:
         raise ValueError('invalid slot discovery limit')
     try:
-        hierarchy = type.__getattribute__(type(value), '__mro__')
+        hierarchy = type.__getattribute__(type(value), str('__mro__'))
     except (AttributeError, TypeError):
         return [], False
     if type(hierarchy) is not tuple:
