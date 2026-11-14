@@ -146,7 +146,7 @@ class TestCore(unittest.TestCase):
         self.assertIs(read_child(obj, ('attribute', 'alias')), MISSING)
         self.assertIs(read_child(obj, ('attribute', '_private')), MISSING)
 
-    def test_custom_dict_properties_and_module_getters_never_run(self):
+    def test_custom_instance_dict_properties_never_run(self):
         class CustomDict(object):
             def __init__(self):
                 self.public = 2
@@ -158,13 +158,14 @@ class TestCore(unittest.TestCase):
         self.assertEqual(child_descriptors(obj, 80), ([], False))
         self.assertIs(read_child(obj, ('attribute', 'public')), MISSING)
 
-        class SpecialModule(ModuleType):
-            def __getattribute__(self, key):
-                if key == '__dict__':
-                    raise AssertionError('custom module __dict__ read invoked')
-                return ModuleType.__getattribute__(self, key)
-        mod = SpecialModule('store')
-        ModuleType.__dict__['__dict__'].__get__(mod, ModuleType)['score'] = 5
+    def test_engine_module_namespace_remains_visible(self):
+        # Ren'Py's Store module exposes live game state through its module
+        # namespace. A native descriptor can return the wrong dictionary.
+        class StoreWrapper(ModuleType):
+            @property
+            def __dict__(self):
+                return {'score': 5}
+        mod = StoreWrapper('store')
         self.assertEqual(child_descriptors(mod, 40, True)[0],
                          [(('attribute', 'score'), 'score')])
         self.assertEqual(read_child(mod, ('attribute', 'score')), 5)
