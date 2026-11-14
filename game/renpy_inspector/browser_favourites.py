@@ -17,6 +17,14 @@ from .compat import atomic_replace, string_types
 MAX_FAVOURITES = 100
 MAX_PREFERENCE_BYTES = 64 * 1024
 PREFERENCE_FILE = 'renpy-inspector-browser-favourites.json'
+MAX_REVISION = 2 ** 53 - 1
+
+
+class FavouritesConflict(Exception):
+    """The file changed after this client's last preferences read."""
+    def __init__(self, current):
+        Exception.__init__(self, 'stale favourites revision')
+        self.current = current
 
 
 def validate_favourites(payload):
@@ -54,27 +62,46 @@ class BrowserFavouritesStore(object):
         self.path = os.path.join(savedir, PREFERENCE_FILE)
         self.lock = threading.RLock()
 
+    def _load_unlocked(self):
+        try:
+            if os.stat(self.path).st_size > MAX_PREFERENCE_BYTES:
+                raise ValueError('preference file too large')
+            with io.open(self.path, 'r', encoding='utf-8') as handle:
+                value = json.load(handle)
+            if not isinstance(value, dict) or value.get('version') != 1:
+                raise ValueError('invalid preference version')
+            revision = value.get('revision', 0)  # Legacy v0.7.16 files.
+            if type(revision) is not int or not 0 <= revision <= MAX_REVISION:
+                raise ValueError('invalid preference revision')
+            favourites = validate_favourites(value.get('favourites'))
+            return {'version': 1, 'revision': revision, 'initialized': True,
+                    'favourites': favourites}
+        except (OSError, UnicodeError, ValueError, TypeError):
+            return {'version': 1, 'revision': 0, 'initialized': False,
+                    'favourites': []}
+
     def load(self):
         with self.lock:
-            try:
-                if os.stat(self.path).st_size > MAX_PREFERENCE_BYTES:
-                    raise ValueError('preference file too large')
-                with io.open(self.path, 'r', encoding='utf-8') as handle:
-                    value = json.load(handle)
-                if not isinstance(value, dict) or value.get('version') != 1:
-                    raise ValueError('invalid preference version')
-                favourites = validate_favourites(value.get('favourites'))
-                return {'version': 1, 'initialized': True, 'favourites': favourites}
-            except (OSError, UnicodeError, ValueError, TypeError):
-                return {'version': 1, 'initialized': False, 'favourites': []}
+            return self._load_unlocked()
 
-    def save(self, favourites):
+    def save(self, favourites, expected_revision=None):
         parsed = validate_favourites(favourites)
-        payload = json.dumps({'version': 1, 'favourites': parsed}, ensure_ascii=True,
-                             separators=(',', ':')).encode('ascii')
-        if len(payload) > MAX_PREFERENCE_BYTES:
-            raise ValueError('too many favourite bytes')
+        if expected_revision is not None and (
+                type(expected_revision) is not int or
+                not 0 <= expected_revision <= MAX_REVISION):
+            raise ValueError('invalid expected revision')
         with self.lock:
+            current = self._load_unlocked()
+            if expected_revision is not None and expected_revision != current['revision']:
+                raise FavouritesConflict(current)
+            if current['revision'] >= MAX_REVISION:
+                raise ValueError('preference revision exhausted')
+            revision = current['revision'] + 1
+            payload = json.dumps({'version': 1, 'revision': revision,
+                                  'favourites': parsed}, ensure_ascii=True,
+                                 separators=(',', ':')).encode('ascii')
+            if len(payload) > MAX_PREFERENCE_BYTES:
+                raise ValueError('too many favourite bytes')
             directory = os.path.dirname(self.path)
             if not os.path.isdir(directory):
                 os.makedirs(directory)
@@ -89,4 +116,5 @@ class BrowserFavouritesStore(object):
             finally:
                 if os.path.exists(temp):
                     os.unlink(temp)
-        return {'version': 1, 'initialized': True, 'favourites': parsed}
+            return {'version': 1, 'revision': revision,
+                    'initialized': True, 'favourites': parsed}
