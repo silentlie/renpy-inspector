@@ -1115,3 +1115,30 @@ test('inline editor is unavailable when the Store variable is inspector-locked',
     await expect(page.locator('.variable-lock-indicator')).toBeVisible();
   } finally { await game.stop(); }
 });
+
+
+test('namedtuple shows safe field labels in virtual tree and independent favourites', async ({ page, game }) => {
+  await page.goto(game.url);
+  const tupleRow = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: /^hero_tuple$/ }),
+  });
+  await expect(tupleRow.locator('.variable-preview')).toHaveText('2 named fields');
+  await tupleRow.locator('.variable-label-expandable').click();
+
+  const health = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: '[0] health' }),
+  });
+  await expect(health.locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
+  const mana = page.locator('.variable-row').filter({
+    has: page.locator('.variable-key', { hasText: '[1] mana' }),
+  });
+  await expect(mana.locator('.variable-preview')).toHaveText('7');
+  await health.getByRole('button', { name: 'Add [0] health to favourites' }).click();
+  await page.getByRole('tab', { name: 'Favourites (1)' }).click();
+  // Ant keeps the prior scope mounted in an inactive tab; scope the
+  // assertion to the displayed Favourites workspace.
+  const favouriteRow = page.locator('.variable-pane:visible .variable-row').filter({
+    has: page.locator('.variable-key', { hasText: '[0] health' }),
+  });
+  await expect(favouriteRow.last().locator('.variable-preview')).toHaveText('12', { timeout: 12000 });
+});

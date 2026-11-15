@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from collections import namedtuple
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,7 @@ def main():
         store.story_text = 'Line one\nLine two: \u2603'
         store.large_text = 'L' * 17000
         store.player_stats = {'hp': 10, 'inventory': ['key', 'map']}
+        store.hero_tuple = namedtuple('HeroTuple', 'health mana')(12, 7)
         store.player_stats[3] = 'numbered key'
         store.player_stats['snow ☃'] = 'unicode key'
         store.inventory = list(range(170))

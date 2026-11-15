@@ -2,7 +2,31 @@
 
 > **Active plan.** The detailed plan below this section is the original native-only proposal and is retained for historical context. Its "not implemented", "Ren'Py 8 only", and "no external UI" statements no longer describe the repository.
 
-## Milestone: PR #38 — Safe Structured Introspection (v0.7.20 experimental)
+## Milestone: PR #39 — Namedtuple & Structured Collection Presentation (v0.7.21 experimental)
+
+- Improve read-only structured presentation for standard Python namedtuple
+  and tuple subclasses with safe static `_fields` metadata. Render
+  `[0] field_name` without converting typed **index** segments into
+  attribute/property reads. Preserve existing list, tuple, dict and set
+  semantics for all other containers.
+- Identify fields only from exact tuple metadata in a static class
+  dictionary (including inherited fields, respecting shadowing), and
+  require a one-to-one list of short unique ASCII identifiers. Cap metadata
+  at 128 fields and class hierarchy scans at the existing 12 levels.
+  Malformed/oversized metadata falls back to ordinary index labels.
+- Preview namedtuples as `N named fields`. Reuse these labels in lazy
+  children, direct favourite watches, search and reveal, without
+  evaluating `__getattribute__`, `__getattr__`, `__iter__`, properties,
+  user repr, or computed namedtuple helpers.
+- Keep original game-thread queue, virtualised tree, typed paths,
+  branch/page caps, cycle protection, search budgets and opt-in editing
+  rules. Namedtuple values remain immutable/read-only.
+- Add Python 2/3 hostile-subclass and metadata validation tests, paging
+  and direct-watch integration, plus browser E2E field label and pinning
+  checks. Require both real Ren'Py 7/8 graphical runs, SDK lint and both
+  engine preview packages to pass before merge.
+
+## Previous milestone: PR #38 — Safe Structured Introspection (v0.7.20 experimental)
 
 - Extend read-only structured browsing to ordinary Python model objects
   whose state lives in `__slots__`, including inherited slots and mixed

@@ -8,9 +8,11 @@ introspection, hostile extension types cannot be made completely safe.
 from __future__ import unicode_literals
 
 from itertools import islice
+import re
 from .compat import integer_types, string_types, iter_keys, fold_text, to_text, binary_type
 from types import ModuleType, FunctionType, BuiltinFunctionType, MethodType
-from .safe_slots import MAX_SLOT_FIELDS, read_safe_slot, safe_slot_values, safe_instance_dict
+from .safe_slots import (MAX_SLOT_FIELDS, MAX_SLOT_MRO, _static_class_dict,
+                         read_safe_slot, safe_slot_values, safe_instance_dict)
 
 
 MISSING = object()
@@ -57,6 +59,46 @@ def clipped(value, limit=110):
 def _has_builtin_base(value, classes):
     """Inspect the real type's hierarchy, not an instance-supplied __class__."""
     return issubclass(type(value), classes)
+
+MAX_NAMEDTUPLE_FIELDS = 128
+_NAMEDTUPLE_FIELD_NAME = re.compile('^[A-Za-z_][A-Za-z_0-9]*')
+
+
+def _namedtuple_fields(value, size):
+    """Return bounded static namedtuple field labels, or None.
+
+    _fields is metadata only, never a route for attribute reads. Class
+    dictionaries are obtained with type.__getattribute__ (no metaclass hooks),
+    and an overriding malformed _fields hides inherited metadata. The only
+    value read remains tuple.__getitem__ via the original typed index path.
+    """
+    cls = type(value)
+    if cls is tuple or not issubclass(cls, tuple) or size > MAX_NAMEDTUPLE_FIELDS:
+        return None
+    try:
+        hierarchy = type.__getattribute__(cls, str('__mro__'))
+    except (AttributeError, TypeError):
+        return None
+    if type(hierarchy) is not tuple:
+        return None
+    for base in hierarchy[:MAX_SLOT_MRO]:
+        fields = _static_class_dict(base)
+        if fields is None or '_fields' not in fields:
+            continue
+        declared = fields['_fields']
+        if type(declared) is not tuple or len(declared) != size:
+            return None
+        if any(type(name) not in string_types or len(name) > 64 or
+               name.startswith('_') or
+               _NAMEDTUPLE_FIELD_NAME.match(name) is None or
+               _NAMEDTUPLE_FIELD_NAME.match(name).end() != len(name)
+               for name in declared):
+            return None
+        if len(set(declared)) != size:
+            return None
+        return declared
+    return None
+
 
 
 def _instance_dict(value):
@@ -124,9 +166,12 @@ def child_descriptors(value, limit, is_store_root=False):
     Object-keyed dictionaries are deliberately omitted in this first MVP.
     """
     if _has_builtin_base(value, (list, tuple)):
-        size = list.__len__(value) if _has_builtin_base(value, list) else tuple.__len__(value)
+        is_list = _has_builtin_base(value, list)
+        size = list.__len__(value) if is_list else tuple.__len__(value)
         n = min(size, limit)
-        return [(('index', i), '[{}]'.format(i)) for i in range(n)], size > n
+        fields = None if is_list else _namedtuple_fields(value, size)
+        return [(('index', i), '[{}] {}'.format(i, fields[i]) if fields is not None
+                 else '[{}]'.format(i)) for i in range(n)], size > n
 
     if _has_builtin_base(value, (set, frozenset)):
         size = (set.__len__(value) if _has_builtin_base(value, set)
@@ -212,9 +257,13 @@ def snapshot(value, is_cycle=False):
         return ('value', name, clipped(preview), False, (name, preview))
 
     if _has_builtin_base(value, (list, tuple, dict)):
+        is_tuple = _has_builtin_base(value, tuple)
         size = (list.__len__(value) if _has_builtin_base(value, list) else
-                tuple.__len__(value) if _has_builtin_base(value, tuple) else dict.__len__(value))
-        preview = '{} item{}'.format(size, '' if size == 1 else 's')
+                tuple.__len__(value) if is_tuple else dict.__len__(value))
+        fields = _namedtuple_fields(value, size) if is_tuple else None
+        preview = ('{} named field{}'.format(size, '' if size == 1 else 's')
+                   if fields is not None
+                   else '{} item{}'.format(size, '' if size == 1 else 's'))
         return ('value', name, preview, True, (name, id(value), size))
 
     if _has_builtin_base(value, (set, frozenset)):
