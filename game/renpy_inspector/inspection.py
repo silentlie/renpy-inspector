@@ -89,6 +89,7 @@ def _namedtuple_fields(value, size):
         if type(declared) is not tuple or len(declared) != size:
             return None
         if any(type(name) not in string_types or len(name) > 64 or
+               name.startswith('_') or
                _NAMEDTUPLE_FIELD_NAME.match(name) is None or
                _NAMEDTUPLE_FIELD_NAME.match(name).end() != len(name)
                for name in declared):
