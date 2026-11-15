@@ -73,6 +73,14 @@ class NamedtuplePresentationTests(unittest.TestCase):
             _fields = ('safe', 'bad.<script>')
         self.assertEqual(child_descriptors(Invalid((1, 2)), 80)[0][0][1], '[0]')
 
+        class PrivateLabels(tuple):
+            _fields = ('_secret', 'visible')
+        private = PrivateLabels((123, 456))
+        self.assertEqual(snapshot(private)[2], '2 items')
+        self.assertEqual(child_descriptors(private, 80)[0],
+                         [(('index', 0), '[0]'), (('index', 1), '[1]')])
+        self.assertEqual(read_child(private, ('index', 0)), 123)
+
         class Overlong(tuple):
             _fields = ('x' * 65,)
         self.assertEqual(snapshot(Overlong((1,)))[2], '1 item')
