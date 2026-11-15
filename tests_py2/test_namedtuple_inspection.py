@@ -43,6 +43,13 @@ class NamedtuplePython2Tests(unittest.TestCase):
         class Broken(tuple):
             _fields = ('h<unsafe>',)
         self.assertEqual(child_descriptors(Broken((3,)), 80)[0][0][1], '[0]')
+        class Private(tuple):
+            _fields = ('_hidden', 'visible')
+        item = Private((5, 6))
+        self.assertEqual(snapshot(item)[2], '2 items')
+        self.assertEqual(child_descriptors(item, 80)[0],
+                         [(('index', 0), '[0]'), (('index', 1), '[1]')])
+        self.assertEqual(read_child(item, ('index', 0)), 5)
 
     def test_paging_and_pinning_preserve_field_label_and_index_path(self):
         Hero = namedtuple('Hero', 'hp mp')
